@@ -105,9 +105,7 @@ def test_kp_eri():
     chol_mat = np.array(chol).T.copy()
     U, sigma, Vh = np.linalg.svd(chol_mat)
     nchol = chol_mat.shape[1]
-    Sigma = np.zeros((nchol, nchol))
     eri_svd = np.einsum('Iu,u,Ju->IJ', U[:,:nchol], sigma**2.0, U[:,:nchol].conj(), optimize=True)
-    eri_norm = eri.reshape((nmo*nmo,nmo*nmo))
     print("|max error (svd)|: {:13.8e}".format(
             np.max(
                 np.abs(
@@ -118,5 +116,5 @@ def test_kp_eri():
         )
 
 if __name__ == '__main__':
-    test_cholesky()
-    # test_kp_eri()
+    # test_cholesky()
+    test_kp_eri()
