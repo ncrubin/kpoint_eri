@@ -79,7 +79,7 @@ def test_cholesky():
     chol = modified_cholesky(eri, tol=1e-5, verbose=True, cmax=30)
 
 def test_kp_eri():
-    eri = np.load('h2_full.npz')['v2']
+    eri = np.load('h2_full.npz')['v2'] # full four index tensor saved from bloch_orbital_tei (~250 MB so didn't add)
     nmo = eri.shape[0]
     # Form Hermitian matrix M_{pq,sr} = (pq|rs)
     eri_herm = eri.transpose((0,1,3,2))
