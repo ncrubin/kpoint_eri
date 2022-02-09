@@ -202,32 +202,37 @@ def main():
     test_tei_op = of.FermionOperator()
     true_tei_op = get_fermion_op(tei, ordering='chem')
     for ll in range(Ltensor.shape[0]):
+        # define U_l and V_l like in the note
         U_l = 1j * get_fermion_op(Ltensor[ll])
         V_l = of.hermitian_conjugated(get_fermion_op(Ltensor[ll]))
         U_ld = of.hermitian_conjugated(U_l)
         V_ld = of.hermitian_conjugated(V_l)
+
+        # this is Eq. A13 in note
         test_tei_op += U_l * V_l
         test_tei_op += V_l * U_l
         test_tei_op -= U_ld * V_ld
         test_tei_op -= V_ld * U_ld
-
+        # Eq. A13 repeated
         ulvl_cholesky_term = U_l * V_l \
                            + V_l * U_l \
                            - U_ld * V_ld \
                            - V_ld * U_ld
-
+        # Eq. A14
         ulvl_sumsquared = 0.5 * ( (U_l + V_l)**2 - (U_l - V_l)**2
                                 - (U_ld + V_ld)**2 + (U_ld - V_ld)**2)
         ulvl_c_Vs_ss = (ulvl_sumsquared - ulvl_cholesky_term).induced_norm()
         # print(ulvl_c_Vs_ss)
         # assert np.isclose(ulvl_c_Vs_ss, 0, atol=2.0E-6)  # I would guess that adding and subtracting small numbers is the cause of the atol being hgih.
 
+        # Eq. A17
         S_l = U_l + V_l
         S_ld = of.hermitian_conjugated(S_l)
         D_l = U_ld - V_ld
         D_ld = of.hermitian_conjugated(D_l)
 
         # This is a sum of squares of normal operators that we can DF!
+        # Eq. A18
         sldl_term = ((S_l + 1j * S_ld)**2 - (S_l - 1j * S_ld)**2 + (D_l + 1j * D_ld)**2 - (D_l - 1j * D_ld)**2)
         sldl_vs_ulvl = (ulvl_cholesky_term - (1/4) * sldl_term).induced_norm()
         print(sldl_vs_ulvl)
