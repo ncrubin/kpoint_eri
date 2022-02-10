@@ -1,5 +1,7 @@
 """Build k-point dependent Cholesky factorization using pyscf. Adapted from QMCPACK."""
+import h5py
 import numpy as np
+import time
 
 from pyscf.pbc import tools
 
@@ -59,8 +61,8 @@ def locate_max_residual(
     num_pq = residual.shape[1]
     max_k1_indx = loc_max_res // num_pq # row index
     max_pq_indx = loc_max_res % num_pq # column index
-    max_k2_indx = momentum_map[mom_trans_indx, max_kpoint_indx]
-    max_res = residual[max_kpoint_index, max_pq_indx].real
+    max_k2_indx = momentum_map[mom_trans_indx, max_k1_indx]
+    max_res = residual[max_k1_indx, max_pq_indx].real
     # max_p_indx = max_pq_indx // num_mo_per_kpoint[k1]
     # max_q_indx = max_pq_indx % num_mo_per_kpoint[k2]
     return max_res, (max_k1_indx, max_k2_indx), (max_pq_indx)
@@ -120,38 +122,79 @@ def generate_kpoint_cholesky_factorization(
         kmf,
         kpoints,
         threshold=1e-5,
-        max_chol_factor=10):
+        max_chol_factor=10,
+        verbose=True):
+    num_pq_per_kpoint = [C.shape[1]*C.shape[1] for C in kmf.mo_coeff]
     num_mo_per_kpoint = [C.shape[1] for C in kmf.mo_coeff]
     mom_trans_map = build_momentum_transfer_mapping(kmf.cell, kpoints)
+    num_kpoints = len(kpoints)
+    chol_vecs = []
     for mom_trans_indx, mom_trans in enumerate(kpoints):
+        print(" Starting Cholesky Factorization for momentum: {:d}".format(mom_trans_indx))
+        num_pq = num_pq_per_kpoint[mom_trans_indx]
         max_num_chol = max_chol_factor * num_mo_per_kpoint[mom_trans_indx]
-        chol_vecs_iq = np.zeros((max_num_chol, num_pq), dtype=np.complex128)
-        # 1. Build (pq|G) for this Q
+        chol_vecs_iq = np.zeros((max_num_chol, num_kpoints, num_pq), dtype=np.complex128)
+        # 1. Build (pq|G) for this Q [Nk,G,pq]
         rho_pq = generate_orbital_products(
                     mom_trans_indx,
                     kmf,
-                    mom_transfer_map,
+                    mom_trans_map,
                     kpoints)
         num_pq = rho_pq.shape[2]
         # 2. Build Diagonal V[(pk_p qk_q), (pk_q rk_p)] = (pk+Q q k | pk'-Q qk')
         # Recall, we are factorizing matrix M[pq,sr] = \sum_X L_(pq,X) L_(sr,X)^* = (pq|rs)
-        eri_diag = build_eri_diagonal(
+        residual = build_eri_diagonal(
                        mom_trans_indx,
                        rho_pq,
                        num_mo_per_kpoint,
-                       mom_transfer_map)
-        approx_eri_diag = np.zeros_like(eri_diag)
+                       mom_trans_map)
+        max_residual = np.max(residual)
         max_res, max_k1k2, max_pq = locate_max_residual(
-                                        eri_diag,
+                                        residual,
                                         mom_trans_indx,
                                         mom_trans_map,
                                         num_mo_per_kpoint
                                         )
         chol_vecs_iq[0] = generate_eri_column(
+                                 kmf,
+                                 rho_pq,
+                                 max_k1k2,
+                                 max_pq,
+                                 mom_trans_indx,
+                                 mom_trans_map,
+                                 kpoints
+                                 ) / max_residual**0.5
+        residual -= np.real(chol_vecs_iq[0] * chol_vecs_iq[0].conj())
+        for ichol in range(1, max_num_chol):
+            start_time_ichol = time.time()
+            max_res, max_k1k2, max_pq = locate_max_residual(
+                                            residual,
+                                            mom_trans_indx,
+                                            mom_trans_map,
+                                            num_mo_per_kpoint
+                                            )
+            # dim = [Nk, pq]
+            eri_col = generate_eri_column(
+                             kmf,
                              rho_pq,
+                             max_k1k2,
+                             max_pq,
                              mom_trans_indx,
                              mom_trans_map,
-                             max_k1k2,
-                             max_pq)
-        while max_residual > threshold:
-            pass
+                             kpoints)
+            projection = np.einsum(
+                    'XkI,X->kI',
+                    chol_vecs_iq[:ichol],
+                    chol_vecs_iq[:ichol, max_k1k2[0], max_pq].conj())
+            chol_vecs_iq[ichol] = (eri_col - projection) / max_res**0.5
+            LL_ichol = chol_vecs_iq[ichol] * chol_vecs_iq[ichol].conj()
+            residual -= LL_ichol.real
+            if max_res < threshold:
+                chol_vecs.append(chol_vecs_iq)
+                break
+            if verbose:
+                step_time = time.time() - start_time_ichol
+                info = (ichol, max_res, step_time)
+                print(" {:4d} {:13.8e} {:4f}".format(*info))
+
+    return chol_vecs

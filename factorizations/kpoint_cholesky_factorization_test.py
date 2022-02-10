@@ -7,6 +7,7 @@ from kpoint_cholesky_factorization import (
         build_momentum_transfer_mapping,
         generate_orbital_products,
         build_eri_diagonal,
+        locate_max_residual,
         generate_kpoint_cholesky_factorization,
         generate_eri_column
         )
@@ -149,7 +150,7 @@ def test_build_eri_diagonal():
                       rho_pq,
                       num_mo_per_kpoint,
                       mom_map)
-        diag = np.zeros((num_kpoints,num_pq))
+        diag = np.zeros((num_kpoints,num_pq), dtype=np.complex128)
         for kp1, kpt1 in enumerate(kpoints):
             kp2 = mom_map[mom_trans_indx, kp1]
             kpt_pqrs = [
@@ -166,6 +167,11 @@ def test_build_eri_diagonal():
             diag[kp1] = eri_pqrs.diagonal().ravel()
         assert np.max(diag) - np.max(eri_diag) < 1e-10
         assert np.linalg.norm(diag-eri_diag) < 1e-10
+        max_res, max_k1k2, max_pq = locate_max_residual(eri_diag, mom_trans_indx, mom_map, num_mo_per_kpoint)
+        print(np.max(eri_diag), np.argmax(eri_diag), eri_diag[0,0])
+        print(np.max(diag), diag[1,0], diag[0,0], np.argmax(diag))
+        print(np.unravel_index(np.argmax(diag), diag.shape))
+        print()
     assert eri_diag.shape == (num_kpoints, num_pq)
 
 def test_generate_cholesky_factorization():
@@ -183,7 +189,7 @@ def test_generate_cholesky_factorization():
     cell.unit = 'B'
     cell.verbose = 4
     cell.build()
-    kpts = cell.make_kpts([2, 1, 1])
+    kpts = cell.make_kpts([1, 1, 1])
     a = cell.lattice_vectors() / (2*np.pi)
     kpoints = kpts
     num_kpoints = len(kpoints)
@@ -195,7 +201,15 @@ def test_generate_cholesky_factorization():
     kmf.mo_coeff = kmf_dict['mo_coeff']
     nao = cell.nao_nr()
     # AO basis.
-    generate_kpoint_cholesky_factorization(kmf, kpoints)
+    LQ = generate_kpoint_cholesky_factorization(kmf, kpoints)
+    kpts_pqrs = [kpoints[0],kpoints[0],kpoints[0],kpoints[0]]
+    from pyscf.pbc.df.fft_ao2mo import get_eri
+    eri_pqrs = get_eri(
+            kmf.with_df,
+            kpts=kpts_pqrs,
+            compact=False).reshape((nao,)*4).transpose((0,1,3,2)).reshape((nao*nao,)*2)
+    eri_chol = np.einsum('ij,kl->ijkl', LQ[0][0], LQ[0][0].conj())
+    print(np.linalg.norm(eri_pqrs-eri_chol))
 
 def test_generate_eri_column():
     cell = gto.Cell()
@@ -212,7 +226,7 @@ def test_generate_eri_column():
     cell.unit = 'B'
     cell.verbose = 4
     cell.build()
-    kpts = cell.make_kpts([3, 2, 1])
+    kpts = cell.make_kpts([2, 2, 1])
     a = cell.lattice_vectors() / (2*np.pi)
     kpoints = kpts
     num_kpoints = len(kpoints)
@@ -273,4 +287,4 @@ def test_generate_eri_column():
                     mesh=kmf.cell.mesh)
         eri_pqrs = eri_pqrs.reshape((nao,)*4).transpose((0,1,3,2)).reshape((num_pq,)*2)
         eri_col_ref[kp1] = eri_pqrs[:,max_rs]
-        print("delta me: ", np.linalg.norm(eri_col[kp1]-eri_col_ref[kp1]))
+        assert np.linalg.norm(eri_col[kp1]-eri_col_ref[kp1]) < 1e-12
