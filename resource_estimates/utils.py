@@ -3,7 +3,8 @@ import numpy as np
 from pyscf import lib
 from pyscf.lib.chkfile import load, load_mol
 from pyscf.pbc.lib.chkfile import load_cell
-from pyscf.pbc import scf
+from pyscf.pbc import scf as pb_scf
+from pyscf import gto, scf, ao2mo, cc
 
 def init_from_chkfile(chkfile):
     cell = load_cell(chkfile)
@@ -12,7 +13,7 @@ def init_from_chkfile(chkfile):
     energy = np.asarray(lib.chkfile.load(chkfile, 'scf/e_tot'))
     kpts = np.asarray(lib.chkfile.load(chkfile, 'scf/kpts'))
     nkpts = len(kpts)
-    kmf = scf.KRHF(cell, kpts)
+    kmf = pb_scf.KRHF(cell, kpts)
     kmf.mo_occ = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_occ'))
     kmf.mo_coeff = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_coeff'))
     kmf.mo_energy = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_energy'))
@@ -23,25 +24,33 @@ def build_cc_object(
         eris,
         ovlp,
         nelec,
-        mo_coef,
+        mo_coeff,
+        mo_occ,
+        mo_energy,
         mo_basis=True):
     mol = gto.M()
     mol.nelectron = nelec
-    mol.verbose = 0
+    mol.verbose = 4
     mf = scf.RHF(mol)
-    if mo_basis:
+    nmo = mo_coeff.shape[1]
+    if not mo_basis:
         mf.get_hcore = lambda *args: hcore.copy()
         mf.get_ovlp = lambda *args: ovlp.copy()
         mf.mo_coeff = mo_coeff
+        mf.mo_occ = mo_occ
+        mf.mo_energy = mo_energy
     else:
         mf.mo_coeff = np.eye(nmo)
         mf.get_hcore = lambda *args : hcore
         mf.get_ovlp = lambda *args : np.eye(nmo)
+        mf.mo_occ = mo_occ
+        mf.mo_energy = mo_energy
     if eris.dtype == np.complex128:
-        mf._eri = ao2mo.restore(
-                4,
-                eris,
-                nmo)
+        mf._eri = eris
+        # mf._eri = ao2mo.restore(
+                # 4,
+                # eris,
+                # nmo)
     else:
         mf._eri = ao2mo.restore(
                 8,
