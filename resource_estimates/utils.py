@@ -1,15 +1,61 @@
 import h5py
-import numpy
+import numpy as np
 from pyscf import lib
 from pyscf.lib.chkfile import load, load_mol
 from pyscf.pbc.lib.chkfile import load_cell
+from pyscf.pbc import scf
+
+def init_from_chkfile(chkfile):
+    cell = load_cell(chkfile)
+    cell.build()
+    nao = cell.nao_nr()
+    energy = np.asarray(lib.chkfile.load(chkfile, 'scf/e_tot'))
+    kpts = np.asarray(lib.chkfile.load(chkfile, 'scf/kpts'))
+    nkpts = len(kpts)
+    kmf = scf.KRHF(cell, kpts)
+    kmf.mo_occ = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_occ'))
+    kmf.mo_coeff = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_coeff'))
+    kmf.mo_energy = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_energy'))
+    return cell, kmf
+
+def build_cc_object(
+        hcore,
+        eris,
+        ovlp,
+        nelec,
+        mo_coef,
+        mo_basis=True):
+    mol = gto.M()
+    mol.nelectron = nelec
+    mol.verbose = 0
+    mf = scf.RHF(mol)
+    if mo_basis:
+        mf.get_hcore = lambda *args: hcore.copy()
+        mf.get_ovlp = lambda *args: ovlp.copy()
+        mf.mo_coeff = mo_coeff
+    else:
+        mf.mo_coeff = np.eye(nmo)
+        mf.get_hcore = lambda *args : hcore
+        mf.get_ovlp = lambda *args : np.eye(nmo)
+    if eris.dtype == np.complex128:
+        mf._eri = ao2mo.restore(
+                4,
+                eris,
+                nmo)
+    else:
+        mf._eri = ao2mo.restore(
+                8,
+                eris,
+                nmo)
+    return cc.CCSD(mf)
+
 
 # taken from qmcpack afqmctools.hamiltonian.converter!
 def from_qmcpack_complex(data, shape=None):
     if shape is not None:
-        return data.view(numpy.complex128).ravel().reshape(shape)
+        return data.view(np.complex128).ravel().reshape(shape)
     else:
-        return data.view(numpy.complex128).ravel()
+        return data.view(np.complex128).ravel()
 
 def get_dset_simple(fh5, name):
     try:
@@ -46,12 +92,12 @@ def read_common_input(filename, get_hcore=True):
             if hcore is None:
                 try:
                     # old sparse format only for complex.
-                    hcore = fh5['Hamiltonian/H1'][:].view(numpy.complex128).ravel()
+                    hcore = fh5['Hamiltonian/H1'][:].view(np.complex128).ravel()
                     idx = fh5['Hamiltonian/H1_indx'][:]
                     row_ix = idx[::2]
                     col_ix = idx[1::2]
                     hcore = scipy.sparse.csr_matrix((hcore, (row_ix, col_ix))).toarray()
-                    hcore = numpy.tril(hcore, -1) + numpy.tril(hcore, 0).conj().T
+                    hcore = np.tril(hcore, -1) + np.tril(hcore, 0).conj().T
                 except:
                     hcore = None
                     print("Error reading Hamiltonian/hcore data set.")
@@ -73,19 +119,23 @@ def read_common_input(filename, get_hcore=True):
     return enuc, dims, hcore, real_ints
 
 def read_qmcpack_thc(filename):
-    with open(filename, 'r') as fh5:
-        hcore = fh5['Hamiltonian/hcore'][:]
-        Luv = fh5['Hamiltonian/Luv'][:]
-        Muv = np.dot(Luv, Luv.conj().T)
-        orbs_pu = fh5['Hamiltonian/Oribtals'][:]
+    with h5py.File(filename, 'r') as fh5:
+        hcore = from_qmcpack_complex(fh5['Hamiltonian/hcore'][:])
         naux = fh5['Hamiltonian/THC/dims'][:][1]
+        nmo = fh5['Hamiltonian/THC/dims'][:][0]
+        Luv = from_qmcpack_complex(
+                fh5['Hamiltonian/THC/Luv'][:],
+                shape=(naux,naux))
+        Muv = np.dot(Luv, Luv.conj().T)
+        orbs_pu = from_qmcpack_complex(
+                fh5['Hamiltonian/THC/Orbitals'][:],
+                shape=(nmo, naux))
         e0 = fh5['Hamiltonian/Energies'][0]
-        assert Muv.shape == (naux, naux)
 
     hamil = {
             'hcore': hcore,
-            'orbs_pu'; orbs_pu,
-            'Muv': Muv
+            'orbs_pu': orbs_pu,
+            'Muv': Muv,
             'enuc': e0
             }
     return hamil
@@ -100,7 +150,7 @@ def read_qmcpack_cholesky_kpoint(filename, get_chol=True):
 
     Returns
     -------
-    hcore : :class:`numpy.ndarray`
+    hcore : :class:`np.ndarray`
         One-body part of the Hamiltonian.
     chol_vecs : :class:`scipy.sparse.csr_matrix`
         Two-electron integrals. Shape: [nmo*nmo, nchol]
@@ -110,9 +160,9 @@ def read_qmcpack_cholesky_kpoint(filename, get_chol=True):
         Number of orbitals.
     nelec : tuple
         Number of electrons.
-    nmo_pk : :class:`numpy.ndarray`
+    nmo_pk : :class:`np.ndarray`
         Number of orbitals per kpoint.
-    qk_k2 : :class:`numpy.ndarray`
+    qk_k2 : :class:`np.ndarray`
         Array mapping (q,k) pair to kpoint: Q = k_i - k_k + G.
         qk_k2[iQ,ik_i] = i_kk.
     """
@@ -135,7 +185,7 @@ def read_qmcpack_cholesky_kpoint(filename, get_chol=True):
             if hk is None:
                 raise KeyError("Could not read one-body hamiltonian.")
             nmo = nmo_pk[i]
-            hcore.append(hk.view(numpy.complex128).reshape(nmo,nmo))
+            hcore.append(hk.view(np.complex128).reshape(nmo,nmo))
         chol_vecs = []
         if nmo_pk is None:
             raise KeyError("Error nmo_pk dataset does not exist.")
@@ -154,7 +204,7 @@ def read_qmcpack_cholesky_kpoint(filename, get_chol=True):
         'hcore': hcore,
         'chol': chol_vecs,
         'enuc': enuc,
-        'nelec': nelec,
+        'nelec': (nalpha, nbeta),
         'nmo': int(nmo),
         'nmo_pk': nmo_pk,
         'nchol_pk': nchol_pk,
@@ -171,12 +221,12 @@ def get_kpoint_chol(filename, nchol_pk, minus_k, i):
             if Lk is None:
                 raise KeyError
             nchol = nchol_pk[i]
-            Lk = Lk.view(numpy.complex128)[:,:,0]
+            Lk = Lk.view(np.complex128)[:,:,0]
         except KeyError:
             Lk = get_dset_simple(fh5, 'Hamiltonian/KPFactorized/L{}'.format(minus_k[i]))
             if Lk is None:
                 raise TypeError("Could not read Cholesky integrals from file.")
             nchol = nchol_pk[minus_k[i]]
             nchol_pk[i] = nchol
-            Lk = Lk.view(numpy.complex128).conj()[:,:,0]
+            Lk = Lk.view(np.complex128).conj()[:,:,0]
     return Lk
