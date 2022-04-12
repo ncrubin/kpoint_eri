@@ -123,11 +123,12 @@ class CholeskyHelper:
         self.chol = chol
         nchol_pk = [L.shape[-1] for L in chol]
         if chol_thresh is not None:
-            nchol_pk = [chol_thresh] * num_kpoints
+            nchol_pk = [chol_thresh] * len(kpoints)
         self.nchol_pk = nchol_pk
         self.kpoints = kpoints
         k1k2_q = np.zeros_like(mom_map)
         nk = len(kpoints)
+        # print(nk)
         for iq in range(nk):
             for ik1 in range(nk):
                 for ik2 in range(nk):
@@ -137,6 +138,7 @@ class CholeskyHelper:
 
     def get_eri(self, ikpts):
         ikp, ikq, ikr, iks = ikpts
+        # print(ikp, ikq, ikr, iks)
         iq = self.mom_map_12[ikp, ikq]
         iq_ = self.mom_map_12[iks, ikr]
         assert iq == iq_
@@ -221,13 +223,13 @@ class THCHelper:
         self.orbs = orbs
         self.muv = muv
 
-    def get_eri(ikpts):
+    def get_eri(self, ikpts):
         eris = np.einsum(
                 'pP,qP,PQ,rQ,sQ->pqrs',
-                orbs,
-                orbs,
-                muv,
-                orbs,
-                orbs,
+                self.orbs,
+                self.orbs,
+                self.muv,
+                self.orbs,
+                self.orbs,
                 optimize=True)
         return eris
