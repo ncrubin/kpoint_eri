@@ -56,6 +56,28 @@ def kpoint_eris(
 
     return eris
 
+class ERIHelper:
+
+    def __init__(
+            self,
+            df,
+            mo_coeffs,
+            kpoints
+            ):
+        self.mo_coeffs = mo_coeffs
+        self.kpoints = kpoints
+        self.df = df
+
+    def get_eri(self, ikpts):
+        kpt_pqrs = [self.kpoints[ik] for ik in ikpts]
+        mos_pqrs = [self.mo_coeffs[ik] for ik in ikpts]
+        mos_shape = [C.shape[1] for C in mos_pqrs]
+        eri_pqrs = self.df.ao2mo(
+                mos_pqrs,
+                kpts=kpt_pqrs,
+                compact=False).reshape(mos_shape)
+        return eri_pqrs
+
 # 3. cholesky kpoint integrals
 def kpoint_cholesky_eris(
         chol,
@@ -89,6 +111,58 @@ def kpoint_cholesky_eris(
             eris[P,Q,R,S] = eri_pqrs
 
     return eris
+
+class CholeskyHelper:
+
+    def __init__(
+            self,
+            chol,
+            mom_map,
+            kpoints,
+            chol_thresh=None):
+        self.chol = chol
+        nchol_pk = [L.shape[-1] for L in chol]
+        if chol_thresh is not None:
+            nchol_pk = [chol_thresh] * num_kpoints
+        self.nchol_pk = nchol_pk
+        self.kpoints = kpoints
+        k1k2_q = np.zeros_like(mom_map)
+        nk = len(kpoints)
+        for iq in range(nk):
+            for ik1 in range(nk):
+                for ik2 in range(nk):
+                    if mom_map[iq,ik1] == ik2:
+                        k1k2_q[ik1,ik2] = iq
+        self.mom_map_12 = k1k2_q
+
+    def get_eri(self, ikpts):
+        ikp, ikq, ikr, iks = ikpts
+        iq = self.mom_map_12[ikp, ikq]
+        iq_ = self.mom_map_12[iks, ikr]
+        assert iq == iq_
+        Lkp_minu_q = self.chol[iq][ikp,:,:,:self.nchol_pk[ikp]]
+        Lks_minu_q = self.chol[iq][iks,:,:,:self.nchol_pk[ikp]]
+        eri_pqrs = np.einsum(
+                'pqn,srn->pqrs',
+                Lkp_minu_q,
+                Lks_minu_q.conj(),
+                optimize=True)
+        # pyscf expects to divide this by nk again
+        return len(self.kpoints) * eri_pqrs
+
+def cholesky_eri_helper(
+        df,
+        ikpts,
+        kpts,
+        mo_coeffs):
+    kpt_pqrs = [kpoints[ik] for ik in [ikp,ikq,ikr,iks]]
+    mos_pqrs = [mo_coeffs[ik] for ik in [ikp,ikq,ikr,iks]]
+    mos_shape = [C.shape[1] for C in mos_pqrs]
+    eri_pqrs = df.ao2mo(
+            mos_pqrs,
+            kpts=kpt_pqrs,
+            compact=False).reshape(mos_shape) / num_kpoints
+    return eri_pqrs
 
 # 4. DF kpoint integrals
 # def kpoint_df_integrals(
@@ -137,3 +211,23 @@ def thc_eris(
             orbs,
             optimize=True)
     return eris
+
+class THCHelper:
+
+    def __init__(
+            self,
+            orbs,
+            muv):
+        self.orbs = orbs
+        self.muv = muv
+
+    def get_eri(ikpts):
+        eris = np.einsum(
+                'pP,qP,PQ,rQ,sQ->pqrs',
+                orbs,
+                orbs,
+                muv,
+                orbs,
+                orbs,
+                optimize=True)
+        return eris

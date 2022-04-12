@@ -46,10 +46,8 @@ def test_kpoint_cholesky_integrals():
     chol = hamil_chol['chol']
     nchol_per_kp = hamil_chol['nchol_pk']
     qk_to_k2 = hamil_chol['qk_k2']
-    for i, c in enumerate(chol):
-        LQ.append(c.reshape((nk, max_nmo, max_nmo, nchol_per_kp[i])))
     eris = kpoint_cholesky_eris(
-            LQ,
+            chol,
             kmf.kpts,
             qk_to_k2,
             nmo_pk,

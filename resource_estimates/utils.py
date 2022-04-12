@@ -56,7 +56,7 @@ def build_cc_object(
                 8,
                 eris,
                 nmo)
-    return cc.CCSD(mf)
+    return cc.RCCSD(mf)
 
 
 # taken from qmcpack afqmctools.hamiltonian.converter!
@@ -205,7 +205,10 @@ def read_qmcpack_cholesky_kpoint(filename, get_chol=True):
         raise KeyError("Error NCholPerKP dataset does not exist.")
     if get_chol:
         for i in range(0, nkp):
-            chol_vecs.append(get_kpoint_chol(filename, nchol_pk, minus_k, i))
+            LQi = get_kpoint_chol(filename, nchol_pk, minus_k, i)
+            chol_vecs.append(
+                    LQi.reshape((nkp, nmo_max, nmo_max, nchol_pk[i]))
+                    )
     else:
         chol_vecs = None
 

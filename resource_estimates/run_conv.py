@@ -12,51 +12,33 @@ from pyscf.pbc import cc
 chkfile = 'data/scf_nk2.chk'
 cell, kmf = init_from_chkfile(chkfile)
 
-# kmf.exxdiv = None
-# ref: Ec = -0.247905392728507
-# kcc = cc.KCCSD(kmf)
-# kcc.kernel()
+# mycc = cc.KRCCSD(kmf)
+# mycc.kernel()
 
-# supercell_hf = k2gamma(kmf, make_real=True)
-# supercell = supercell_hf.cell
-# mo_coeff = supercell_hf.mo_coeff
-# mo_occ = supercell_hf.mo_occ
-# mo_energy = supercell_hf.mo_energy
-# eris = supercell_eris(
-        # supercell_hf.cell,
-        # mo_coeff=mo_coeff
-        # )
-# hcore = mo_coeff.conj().T @ supercell_hf.get_hcore() @ mo_coeff
+# Sparse ERIS?
+from custom_ao2mo import _ERIS
+from integral_tools import ERIHelper
+# helper = ERIHelper(kmf.with_df, kmf.mo_coeff, kmf.kpts)
+# mycc = cc.KRCCSD(kmf)
+# eris = _ERIS(mycc, kmf.mo_coeff,  eri_helper=helper, method='incore')
+# def ao2mo(self, mo_coeff=None):
+    # return eris
+# mycc.ao2mo = ao2mo
+# mycc.kernel()
 
-# cc = build_cc_object(
-        # hcore,
-        # eris,
-        # np.eye(hcore.shape[0]),
-        # int(sum(np.concatenate(kmf.mo_occ))),
-        # mo_coeff,
-        # mo_occ,
-        # mo_energy)
-# ecc, t1, t2 = cc.kernel()
-# print(ecc/2)
-
-supercell_hf = k2gamma(kmf, make_real=False)
-supercell = supercell_hf.cell
-mo_coeff = supercell_hf.mo_coeff
-mo_occ = supercell_hf.mo_occ
-mo_energy = supercell_hf.mo_energy
-eris = supercell_eris(
-        supercell_hf.cell,
-        mo_coeff=mo_coeff
-        )
-hcore = mo_coeff.conj().T @ supercell_hf.get_hcore() @ mo_coeff
-
-cc = build_cc_object(
-        hcore,
-        eris,
-        np.eye(hcore.shape[0]),
-        int(sum(np.concatenate(kmf.mo_occ))),
-        mo_coeff,
-        mo_occ,
-        mo_energy)
-ecc, t1, t2 = cc.kernel()
-print(ecc/2)
+# Cholesky
+from integral_tools import CholeskyHelper
+from utils import read_qmcpack_cholesky_kpoint
+chkfile = 'data/scf_nk2.chk'
+cell, kmf = init_from_chkfile(chkfile)
+hamil_chol = read_qmcpack_cholesky_kpoint('data/chol_nk2.h5')
+helper = CholeskyHelper(
+        hamil_chol['chol'],
+        hamil_chol['qk_k2'],
+        hamil_chol['kpoints'])
+mycc = cc.KRCCSD(kmf)
+eris = _ERIS(mycc, kmf.mo_coeff,  eri_helper=helper, method='incore')
+def ao2mo(self, mo_coeff=None):
+    return eris
+mycc.ao2mo = ao2mo
+mycc.kernel()
