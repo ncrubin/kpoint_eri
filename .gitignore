@@ -1,0 +1,7 @@
+*.npz
+*pycache*
+*tmp*
+*.npy
+*.h5
+*.chk
+*.dat
