@@ -92,7 +92,7 @@ def test_df_integrals():
             kpoints,
             nmo_per_kp,
             chol_thresh=264,
-            df_thresh=0.0)
+            df_thresh=1e-12)
     eri_df = dfh.get_eri(ikpts)
     # print(eri_ref[0,0,0,0], eri_df[0,0,0,0])
     print(np.max(np.abs(eri_ref-eri_df)))

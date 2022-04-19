@@ -104,10 +104,10 @@ def kpoint_cholesky_eris(
                     Lkp_minu_q,
                     Lks_minu_q.conj(),
                     optimize=True)
-            P = slice(ikp*offsets[ikp], ikp*offsets[ikp] + nmo_pk[ikp])
-            Q = slice(ikq*offsets[ikq], ikq*offsets[ikq] + nmo_pk[ikq])
-            R = slice(ikr*offsets[ikr], ikr*offsets[ikr] + nmo_pk[ikr])
-            S = slice(iks*offsets[iks], iks*offsets[iks] + nmo_pk[iks])
+            P = slice(offsets[ikp], offsets[ikp] + nmo_pk[ikp])
+            Q = slice(offsets[ikq], offsets[ikq] + nmo_pk[ikq])
+            R = slice(offsets[ikr], offsets[ikr] + nmo_pk[ikr])
+            S = slice(offsets[iks], offsets[iks] + nmo_pk[iks])
             eris[P,Q,R,S] = eri_pqrs
 
     return eris
@@ -222,10 +222,10 @@ class DFHelper:
         # (p kp q q kp - Q | r ks - Q s ks)
         # (pq|rs) = A^2 + B^2
         #         = U[n,pq,t]* e^2 U[n,pq, t]
-        P = slice(ikp*self.offsets[ikp], ikp*self.offsets[ikp] + self.nmo_pk[ikp])
-        Q = slice(ikq*self.offsets[ikq], ikq*self.offsets[ikq] + self.nmo_pk[ikq])
-        R = slice(ikr*self.offsets[ikr], ikr*self.offsets[ikr] + self.nmo_pk[ikr])
-        S = slice(iks*self.offsets[iks], iks*self.offsets[iks] + self.nmo_pk[iks])
+        P = slice(self.offsets[ikp], self.offsets[ikp] + self.nmo_pk[ikp])
+        Q = slice(self.offsets[ikq], self.offsets[ikq] + self.nmo_pk[ikq])
+        R = slice(self.offsets[ikr], self.offsets[ikr] + self.nmo_pk[ikr])
+        S = slice(self.offsets[iks], self.offsets[iks] + self.nmo_pk[iks])
         # print(iq)
         # U = self.Us[iq]
         # eri_A = np.einsum(
@@ -253,28 +253,41 @@ class DFHelper:
         UQ = self.Us[iq,:,Q,:].copy()
         UR = self.Us[iq,:,R,:].copy()
         US = self.Us[iq,:,S,:].copy()
-        eri_A = np.einsum(
-                'nPt,nt,nQt,nRr,nr,nSr->PQRS',
-                UP,
-                self.lambda_A[iq],
-                UQ.conj(),
-                UR,
-                self.lambda_A[iq],
-                US.conj(),
-                optimize=True)
+        lt = self.lambda_A[iq]
+        LPQ = np.einsum('nPt,nt,nQt->nPQ', UP, lt, UQ.conj(), optimize=True)
+        LRS = np.einsum('nPt,nt,nQt->nPQ', UR, lt, US.conj(), optimize=True)
+        eri_A = np.einsum('nPQ,nRS->PQRS', LPQ, LRS, optimize=True)
         VP = self.Vs[iq,:,P,:].copy()
         VQ = self.Vs[iq,:,Q,:].copy()
         VR = self.Vs[iq,:,R,:].copy()
         VS = self.Vs[iq,:,S,:].copy()
-        eri_B = np.einsum(
-                'nPt,nt,nQt,nRr,nr,nSr->PQRS',
-                VP,
-                self.lambda_B[iq],
-                VQ.conj(),
-                VR,
-                self.lambda_B[iq],
-                VS.conj(),
-                optimize=True)
+        lt = self.lambda_B[iq]
+        LPQ = np.einsum('nPt,nt,nQt->nPQ', VP, lt, VQ.conj(), optimize=True)
+        LRS = np.einsum('nPt,nt,nQt->nPQ', VR, lt, VS.conj(), optimize=True)
+        eri_B = np.einsum('nPQ,nRS->PQRS', LPQ, LRS, optimize=True)
+        # print(eri_A.shape, eri_B.shape, ikp, ikq, ikr, iks, P, Q, R, S)
+        # eri_A = np.einsum(
+                # 'nPt,nt,nQt,nRr,nr,nSr->PQRS',
+                # UP,
+                # self.lambda_A[iq],
+                # UQ.conj(),
+                # UR,
+                # self.lambda_A[iq],
+                # US.conj(),
+                # optimize=True)
+        # VP = self.Vs[iq,:,P,:].copy()
+        # VQ = self.Vs[iq,:,Q,:].copy()
+        # VR = self.Vs[iq,:,R,:].copy()
+        # VS = self.Vs[iq,:,S,:].copy()
+        # eri_B = np.einsum(
+                # 'nPt,nt,nQt,nRr,nr,nSr->PQRS',
+                # VP,
+                # self.lambda_B[iq],
+                # VQ.conj(),
+                # VR,
+                # self.lambda_B[iq],
+                # VS.conj(),
+                # optimize=True)
 
         eri = eri_A + eri_B
         return eri * len(self.kpoints)
@@ -282,14 +295,14 @@ class DFHelper:
     @staticmethod
     def get_df_factor(mat, thresh):
         eigs, eigv = np.linalg.eigh(mat)
-        # normSC = np.sum(np.abs(eigs))
-        # ix = np.argsort(np.abs(eigs))[::-1]
-        # eigs = eigs[ix]
-        # eigv = eigv[:,ix]
-        # truncation = normSC * np.abs(eigs)
-        # to_zero = truncation < thresh
-        # eigs[to_zero] = 0.0
-        # eigv[:,to_zero] = 0.0
+        normSC = np.sum(np.abs(eigs))
+        ix = np.argsort(np.abs(eigs))[::-1]
+        eigs = eigs[ix]
+        eigv = eigv[:,ix]
+        truncation = normSC * np.abs(eigs)
+        to_zero = truncation < thresh
+        eigs[to_zero] = 0.0
+        eigv[:,to_zero] = 0.0
         return eigs, eigv
 
     def build_AB(self, Q_index, chol_indx, momentum_map):
