@@ -135,36 +135,36 @@ def test_thc_integrals():
         # eris.reshape((no,)*4) - eri_df)
         # )
 
-def test_random_df_cmplx():
-    no = 4
-    from ipie.utils.testing import generate_hamiltonian
-    h1e, chol, enuc, eris = generate_hamiltonian(no, (2,2), cplx=4, sym=4, tol=1e-12)
-    chol = chol.reshape((-1, no, no))
-    print("delta: ", np.linalg.norm(
-        eris.reshape((no,)*4)- np.einsum('npq,nsr->pqrs', chol, chol.conj(), optimize=True)
-        ))
-    nchol = chol.shape[0]
-    Us = np.zeros((nchol, no, no), dtype=np.complex128)
-    ls = np.zeros((nchol, no), dtype=np.complex128)
-    Vs = np.zeros((nchol, no, no), dtype=np.complex128)
-    ts = np.zeros((nchol, no), dtype=np.complex128)
-    for i in range(nchol):
-        # print(np.linalg.norm(chol[i] - chol[i].conj().T))
-        eigs, eigv = np.linalg.eigh(0.5*(chol[i]+chol[i].conj().T))
-        Us[i] = eigv
-        ls[i] = eigs
-        eigs, eigv = np.linalg.eigh(0.5*1j*(chol[i]-chol[i].conj().T))
-        Vs[i] = eigv
-        ts[i] = eigs
+# def test_random_df_cmplx():
+    # no = 4
+    # from ipie.utils.testing import generate_hamiltonian
+    # h1e, chol, enuc, eris = generate_hamiltonian(no, (2,2), cplx=4, sym=4, tol=1e-12)
+    # chol = chol.reshape((-1, no, no))
+    # print("delta: ", np.linalg.norm(
+        # eris.reshape((no,)*4)- np.einsum('npq,nsr->pqrs', chol, chol.conj(), optimize=True)
+        # ))
+    # nchol = chol.shape[0]
+    # Us = np.zeros((nchol, no, no), dtype=np.complex128)
+    # ls = np.zeros((nchol, no), dtype=np.complex128)
+    # Vs = np.zeros((nchol, no, no), dtype=np.complex128)
+    # ts = np.zeros((nchol, no), dtype=np.complex128)
+    # for i in range(nchol):
+        # # print(np.linalg.norm(chol[i] - chol[i].conj().T))
+        # eigs, eigv = np.linalg.eigh(0.5*(chol[i]+chol[i].conj().T))
+        # Us[i] = eigv
+        # ls[i] = eigs
+        # eigs, eigv = np.linalg.eigh(0.5*1j*(chol[i]-chol[i].conj().T))
+        # Vs[i] = eigv
+        # ts[i] = eigs
 
-    eri_df_A = np.einsum(
-            'nPt,nt,nQt,nRs,ns,nSs->PQRS',
-            Us, ls, Us.conj(), Us, ls, Us.conj(),
-            optimize=True)
-    eri_df_B = np.einsum(
-            'nPt,nt,nQt,nRs,ns,nSs->PQRS',
-            Vs, ts, Vs.conj(), Vs, ts, Vs.conj(),
-            optimize=True)
-    print("delta 2: ", np.linalg.norm(
-        eris - (eri_df_A+eri_df_B))
-        )
+    # eri_df_A = np.einsum(
+            # 'nPt,nt,nQt,nRs,ns,nSs->PQRS',
+            # Us, ls, Us.conj(), Us, ls, Us.conj(),
+            # optimize=True)
+    # eri_df_B = np.einsum(
+            # 'nPt,nt,nQt,nRs,ns,nSs->PQRS',
+            # Vs, ts, Vs.conj(), Vs, ts, Vs.conj(),
+            # optimize=True)
+    # print("delta 2: ", np.linalg.norm(
+        # eris - (eri_df_A+eri_df_B))
+        # )
