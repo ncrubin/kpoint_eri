@@ -242,3 +242,18 @@ def get_kpoint_chol(filename, nchol_pk, minus_k, i):
             nchol_pk[i] = nchol
             Lk = Lk.view(np.complex128).conj()[:,:,0]
     return Lk
+
+def energy_eri(hcore, eris, nocc, enuc):
+    e1b = 2*hcore[:nocc, :nocc].trace()
+    ecoul = 2*np.einsum('iijj->', eris[:nocc,:nocc,:nocc,:nocc])
+    exx = -np.einsum('ijji->', eris[:nocc,:nocc,:nocc,:nocc])
+    return e1b + ecoul + exx + enuc, e1b + enuc, ecoul + exx
+
+def eri_thc(orbs, Muv):
+    eri_thc = np.einsum(
+            'pP,qP,PQ,rQ,sQ->pqrs',
+            orbs, orbs,
+            Muv,
+            orbs, orbs,
+            optimize=True)
+    return eri_thc
