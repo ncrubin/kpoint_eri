@@ -64,7 +64,8 @@ def from_qmcpack_complex(data, shape=None):
     if shape is not None:
         return data.view(np.complex128).ravel().reshape(shape)
     else:
-        return data.view(np.complex128).ravel()
+        shape = tuple((s for s in data.shape[:-1]))
+        return data.view(np.complex128).ravel().reshape(shape)
 
 def get_dset_simple(fh5, name):
     try:
