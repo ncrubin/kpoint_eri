@@ -315,9 +315,11 @@ def write_basic(comm, cell, kpts, hcore, h5file, X, nmo_pk, qk_to_k2, kminus,
         if comm.rank == 0:
             h1 = numpy.dot(X[ki][:,0:nmo_pk[ki]].T.conj(),
                            numpy.dot(hcore[ki], X[ki][:,0:nmo_pk[ki]]))
-            write_kp_h1(h5file.grp, ki, nmo_pk[ki], h1)
+            write_kp_h1(h5file.grp, ki, nmo_pk[ki], h1, 'H1_kp')
+            write_kp_h1(h5file.grp, ki, nmo_pk[ki], X[ki], 'X_kp')
         else:
-            write_kp_h1(h5file.grp, ki, nmo_pk[ki], None)
+            write_kp_h1(h5file.grp, ki, nmo_pk[ki], None, 'H1_kp')
+            write_kp_h1(h5file.grp, ki, nmo_pk[ki], None, 'X_kp')
 
     comm.barrier()
 
@@ -730,13 +732,11 @@ def construct_qk_maps(cell, kpts):
 
     return QKToK2, kminus
 
-def write_kp_h1(h5grp, ki, nmo, h1):
+def write_kp_h1(h5grp, ki, nmo, h1, name):
     if h1 is not None:
         assert(h1.shape[0]==nmo)
         assert(h1.shape[1]==nmo)
-    H1 = h5grp.create_dataset("H1_kp"+str(ki), (nmo,nmo,2), dtype=numpy.float64)
+    H1 = h5grp.create_dataset(name+str(ki), (nmo,nmo,2), dtype=numpy.float64)
     if h1 is not None:
-        for i in range(h1.shape[0]):
-            for j in range(h1.shape[1]):
-                H1[i,j,0] = h1[i,j].real
-                H1[i,j,1] = h1[i,j].imag
+        H1[:,:,0] = h1.real.copy()
+        H1[:,:,1] = h1.imag.copy()
