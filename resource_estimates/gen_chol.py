@@ -107,6 +107,11 @@ def get_ortho_ao(cell, kpts, LINDEP_CUTOFF=0):
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     options = parse_args(sys.argv[1:], comm)
+    if comm.rank == 0:
+        print(" Options")
+        print("---------")
+        for k, v in vars(options).items():
+            print(" {:14s} : {:14s}".format(k, str(v)))
     assert options.basis in ['mo', 'ao', 'oao']
 
     cell, kmf = init_from_chkfile(options.chkfile)
