@@ -52,7 +52,6 @@ def get_lambda_unregularized(
         T = h1 - 0.5 * np.einsum("illj->ij", eri_full) + np.einsum(
             "llij->ij", eri_thc)  # Eq. 3 + Eq. 18
     else:
-        print(eri_full.shape, h1.shape)
         T = h1 - 0.5 * np.einsum("illj->ij", eri_full) + np.einsum(
             "llij->ij", eri_full)  # Eq. 3 + Eq. 18
     #e, v = np.linalg.eigh(T)
@@ -87,7 +86,7 @@ if __name__ == '__main__':
     muv   = hamil_thc['Muv'].real
     etaPp = hamil_thc['orbs_pu'].real.T.copy()
     nthc = muv.shape[0]
-    # print(get_lambda_unregularized(etaPp, muv, hcore, eris))
+    print(get_lambda_unregularized(etaPp, muv, hcore, eris))
     # import openfermion as of
     # print(np.max(np.abs(hamil_thc['orbs_pu'].imag)))
     # print(np.max(np.abs(hamil_thc['Muv'].imag)))
@@ -98,14 +97,13 @@ if __name__ == '__main__':
             adagrad_opt_thc
             )
     import h5py
-    # for max_iter in range(10, 100, 100):
     init = np.hstack((etaPp.ravel(), muv.ravel()))
     params = lbfgsb_opt_thc_l2reg(
             eris,
             nthc,
             initial_guess=init,
             maxiter=max_iter,
-            chkfile_name=f'thc/bfgs_reopt_{max_iter}_{nthc}.h5')
+            chkfile_name=f'bfgs_reopt_{max_iter}_{nthc}.h5')
     orbs = params[:nthc*nmo].reshape((nthc, nmo))
     muv = params[nthc*nmo:].reshape((nthc, nthc))
     lamb, nthc, de, de2, x, y = get_lambda_unregularized(orbs, muv, hcore, eris)
@@ -117,7 +115,7 @@ if __name__ == '__main__':
             initial_guess=init,
             maxiter=50000,
             # gtol
-            chkfile_name=f'thc/adagrad_reopt_{max_iter}_{nthc}.h5')
+            chkfile_name=f'adagrad_reopt_{max_iter}_{nthc}.h5')
     orbs = params[:nthc*nmo].reshape((nthc, nmo))
     muv = params[nthc*nmo:].reshape((nthc, nthc))
     lamb, nthc, de, de2, x, y = get_lambda_unregularized(orbs, muv, hcore, eris)
