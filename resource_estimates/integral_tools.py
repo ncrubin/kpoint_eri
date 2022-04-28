@@ -353,10 +353,10 @@ class THCHelper:
     def get_eri(self, ikpts):
         eris = np.einsum(
                 'pP,qP,PQ,rQ,sQ->pqrs',
-                self.orbs,
+                self.orbs.conj(),
                 self.orbs,
                 self.muv,
-                self.orbs,
+                self.orbs.conj(),
                 self.orbs,
                 optimize=True)
         return eris
