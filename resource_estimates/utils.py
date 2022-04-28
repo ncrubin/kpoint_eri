@@ -17,6 +17,7 @@ def init_from_chkfile(chkfile):
     kmf.mo_occ = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_occ'))
     kmf.mo_coeff = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_coeff'))
     kmf.mo_energy = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_energy'))
+    kmf.e_tot = energy
     return cell, kmf
 
 def build_cc_object(
@@ -253,8 +254,8 @@ def energy_eri(hcore, eris, nocc, enuc):
 def eri_thc(orbs, Muv):
     eri_thc = np.einsum(
             'pP,qP,PQ,rQ,sQ->pqrs',
-            orbs, orbs,
+            orbs.conj(), orbs,
             Muv,
-            orbs, orbs,
+            orbs.conj(), orbs,
             optimize=True)
     return eri_thc
