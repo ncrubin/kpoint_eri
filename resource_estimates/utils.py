@@ -13,9 +13,14 @@ def init_from_chkfile(chkfile):
     energy = np.asarray(lib.chkfile.load(chkfile, 'scf/e_tot'))
     kpts = np.asarray(lib.chkfile.load(chkfile, 'scf/kpts'))
     nkpts = len(kpts)
-    kmf = pb_scf.KRHF(cell, kpts)
+    mo_coeff = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_coeff'))
+    # print(mo_coeff.shape)
+    if len(mo_coeff.shape) == 4:
+        kmf = pb_scf.KUHF(cell, kpts)
+    else:
+        kmf = pb_scf.KRHF(cell, kpts)
     kmf.mo_occ = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_occ'))
-    kmf.mo_coeff = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_coeff'))
+    kmf.mo_coeff = mo_coeff
     kmf.mo_energy = np.asarray(lib.chkfile.load(chkfile, 'scf/mo_energy'))
     kmf.e_tot = energy
     return cell, kmf
