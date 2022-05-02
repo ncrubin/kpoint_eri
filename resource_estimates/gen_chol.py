@@ -123,7 +123,7 @@ if __name__ == '__main__':
         if comm.rank == 0:
             # only on root for unique eigen decomposition.
             _X, _nmo_pk = get_ortho_ao(cell, kmf.kpts, LINDEP_CUTOFF=options.threshold)
-            assert _nmo_pk == nmo_pk, "Number of discarded basis functions not consistent."
+            assert (_nmo_pk == nmo_pk).all(), "Number of discarded basis functions not consistent."
         else:
             _X = None
         X = comm.bcast(_X)
