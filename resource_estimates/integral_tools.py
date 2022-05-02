@@ -356,7 +356,7 @@ class THCHelper:
 
     def get_eri(self, ikpts):
         if self.ao:
-            orbs = np.einsum('pi,pP->iP', self.mo_coeff, self.orbs)
+            orbs = np.einsum('pi,pP->iP', self.mo_coeffs, self.orbs)
         else:
             orbs = self.orbs
         eris = np.einsum(
