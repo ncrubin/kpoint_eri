@@ -333,10 +333,10 @@ def thc_eris(
         muv):
     eris = np.einsum(
             'pP,qP,PQ,rQ,sQ->pqrs',
-            orbs,
+            orbs.conj(),
             orbs,
             muv,
-            orbs,
+            orbs.conj(),
             orbs,
             optimize=True)
     return eris
@@ -346,17 +346,25 @@ class THCHelper:
     def __init__(
             self,
             orbs,
-            muv):
+            muv,
+            ao=False,
+            mo_coeffs=None):
         self.orbs = orbs
         self.muv = muv
+        self.ao = ao
+        self.mo_coeffs = mo_coeffs
 
     def get_eri(self, ikpts):
+        if self.ao:
+            orbs = np.einsum('pi,pP->iP', self.mo_coeff, self.orbs)
+        else:
+            orbs = self.orbs
         eris = np.einsum(
                 'pP,qP,PQ,rQ,sQ->pqrs',
-                self.orbs.conj(),
-                self.orbs,
+                orbs.conj(),
+                orbs,
                 self.muv,
-                self.orbs.conj(),
-                self.orbs,
+                orbs.conj(),
+                orbs,
                 optimize=True)
         return eris
