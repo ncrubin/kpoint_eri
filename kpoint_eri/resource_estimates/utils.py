@@ -253,6 +253,22 @@ def read_qmcpack_cholesky_kpoint(filename, get_chol=True):
         }
     return hamil
 
+def read_cholesky_contiguous(filename, frac_chol_to_keep=1):
+    hamil = read_qmcpack_cholesky_kpoint(filename)
+    chol = hamil['chol']
+    min_nchol = max(cv.shape[-1] for cv in chol)
+    min_nchol = int(min_nchol * frac_chol_to_keep)
+    shape = list(chol[0].shape)
+    shape[-1] = min_nchol
+    nk = len(chol)
+    chol_contiguous = np.zeros((nk,)+tuple(shape), dtype=np.complex128)
+    for ic, cv in enumerate(chol):
+        chol_contiguous[ic] = cv[:,:,:,:min_nchol]
+
+    hamil['chol'] = chol_contiguous
+    return hamil
+
+
 def get_kpoint_chol(filename, nchol_pk, minus_k, i):
     with h5py.File(filename, 'r') as fh5:
         try:
