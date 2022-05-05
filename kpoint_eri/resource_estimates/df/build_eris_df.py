@@ -11,10 +11,10 @@ def build_eris_kpt(
     Compute (momentum conserving) kpoint-integrals (pkp qkq | rkr sks) block
     (pkp qkp-Q | rks-Q sks) =
     """
-    ikp, ikq, ikr, iks = ikpts
     # (p kp q q kp - Q | r ks - Q s ks)
     # (pq|rs) = A^2 + B^2
     #         = U[n,pq,t]* e^2 U[n,pq, t]
+    P, Q, R, S = PQRS
     UP = Uq[:,P,:]
     UQ = Uq[:,Q,:]
     UR = Uq[:,R,:]
@@ -43,7 +43,6 @@ def kpoint_df_eris(
     eris = np.zeros((nmo,)*4, dtype=np.complex128)
     num_kpoints = momentum_map.shape[0]
     offsets = np.cumsum(nmo_pk) - nmo_pk[0]
-    nchol_pk = [L.shape[-1] for L in chol]
     for iq in range(num_kpoints):
         for ikp, iks in product(range(num_kpoints), repeat=2):
             ikq = momentum_map[iq, ikp]
