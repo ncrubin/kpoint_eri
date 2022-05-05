@@ -3,7 +3,7 @@ from itertools import product
 
 from kpoint_eri.resource_estimates.utils import build_momentum_transfer_mapping
 
-def build_eris_kpt(pyscf_mf,
+def build_eris_kpt(df,
                    mos_pqrs: np.ndarray,
                    kpt_pqrs: np.ndarray,
                    compact=False):
