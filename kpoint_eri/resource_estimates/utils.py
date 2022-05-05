@@ -4,7 +4,27 @@ from pyscf import lib
 from pyscf.lib.chkfile import load, load_mol
 from pyscf.pbc.lib.chkfile import load_cell
 from pyscf.pbc import scf as pb_scf
-from pyscf import gto, scf, ao2mo, cc
+# from pyscf import gto, scf, ao2mo, cc
+
+def build_momentum_transfer_mapping(
+        cell,
+        kpoints
+        ):
+    # Define mapping momentum_transfer_map[Q][k1] = k2 that satisfies
+    # k1 - k2 + G = Q.
+    a = cell.lattice_vectors() / (2*np.pi)
+    delta_k1_k2_Q = kpoints[:,None,None,:] - kpoints[None,:,None,:] - kpoints[None,None,:,:]
+    delta_dot_a = np.einsum('wx,kpQx->kpQw', a, delta_k1_k2_Q)
+    int_delta_dot_a = np.rint(delta_dot_a)
+    # Should be zero if transfer is statisfied (2*pi*n)
+    mapping = np.where(np.sum(np.abs(delta_dot_a-int_delta_dot_a), axis=3) < 1e-10)
+    num_kpoints = len(kpoints)
+    momentum_transfer_map = np.zeros((num_kpoints,)*2, dtype=np.int32)
+    # Note index flip due to Q being first index in map but broadcasted last..
+    momentum_transfer_map[mapping[1], mapping[0]] = mapping[2]
+
+    return momentum_transfer_map
+
 
 def init_from_chkfile(chkfile):
     cell = load_cell(chkfile)
@@ -264,3 +284,30 @@ def eri_thc(orbs, Muv):
             orbs.conj(), orbs,
             optimize=True)
     return eri_thc
+
+def build_test_system_diamond(basis):
+    from pyscf.pbc import scf as pb_scf
+    from pyscf.pbc import gto
+    cell = gto.Cell()
+    cell.atom = '''
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    '''
+    cell.basis = basis
+    cell.pseudo = 'gth-pade'
+    cell.a = '''
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000'''
+    cell.unit = 'B'
+    cell.verbose = 4
+    cell.build()
+    kpts = cell.make_kpts([2, 2, 1])
+    a = cell.lattice_vectors() / (2*np.pi)
+    kpoints = kpts
+    num_kpoints = len(kpoints)
+    mom_map = build_momentum_transfer_mapping(cell, kpts)
+    kmf = pb_scf.KRHF(cell, kpts, exxdiv=None)
+    kmf.chkfile = 'diamond_221.chk'
+    kmf.kernel()
+    return kmf
