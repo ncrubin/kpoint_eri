@@ -10,8 +10,8 @@ def build_eris_kpt(df,
     """
     Compute (momentum conserving) kpoint-integrals (pkp qkq | rkr sks) block
     """
-    nk = len(pyscf_mf.kpts)
-    eri_pqrs = pyscf_mf.with_df.ao2mo(
+    nk = len(df.kpts)
+    eri_pqrs = df.ao2mo(
             mos_pqrs,
             kpts=kpt_pqrs,
             compact=compact) / nk

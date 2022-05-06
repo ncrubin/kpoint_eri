@@ -1,3 +1,5 @@
+import numpy as np
+
 from kpoint_eri.resource_estimates import sparse, sf, df, thc
 
 # Sparse
@@ -19,11 +21,13 @@ class SparseHelper:
         kpt_pqrs = [self.kpoints[ik] for ik in ikpts]
         mos_pqrs = [self.mo_coeffs[ik] for ik in ikpts]
         mos_shape = [C.shape[1] for C in mos_pqrs]
-        nk = len(kpoints)
-        eri_pqrs = nk * self.df.ao2mo(
+        nk = len(self.kpoints)
+        eri_pqrs = nk * sparse.build_eris_kpt(
+                self.df,
                 mos_pqrs,
-                kpts=kpt_pqrs,
+                kpt_pqrs,
                 compact=False).reshape(mos_shape)
+        eri_pqrs[np.abs(eri_pqrs) < self.thresh] = 0.0
         return eri_pqrs
 
 # Single-Factorization
@@ -34,7 +38,7 @@ class SingleFactorizationHelper:
             chol,
             mom_map,
             kpoints,
-            chol_thresh=None):
+            ):
         self.chol = chol
         nchol_pk = [L.shape[-1] for L in chol]
         self.nchol_pk = nchol_pk
@@ -63,12 +67,10 @@ class DoubleFactorizationHelper:
             mom_map,
             kpoints,
             nmo_pk,
-            chol_thresh=None,
             df_thresh=0.0):
         self.chol = chol
         nchol_pk = [L.shape[-1] for L in chol]
         self.offsets = np.cumsum(nmo_pk) - nmo_pk[0]
-        nchol = chol_thresh
         self.nchol_pk = nchol_pk
         self.kpoints = kpoints
         self.mom_map = mom_map
@@ -94,15 +96,17 @@ class DoubleFactorizationHelper:
         iq = self.mom_map_12[ikp, ikq]
         iq_ = self.mom_map_12[iks, ikr]
         assert iq == iq_
-        Uiq = df_factors['U'][iq]
-        lambda_Uiq = df_factors['lambda_U'][iq]
-        Viq = df_factors['V'][iq]
-        lambda_Viq = df_factors['lambda_V'][iq]
+        Uiq = self.df_factors['U'][iq]
+        lambda_Uiq = self.df_factors['lambda_U'][iq]
+        Viq = self.df_factors['V'][iq]
+        lambda_Viq = self.df_factors['lambda_V'][iq]
+        offsets = self.offsets
+        nmo_pk = self.nmo_pk
         P = slice(offsets[ikp], offsets[ikp] + nmo_pk[ikp])
         Q = slice(offsets[ikq], offsets[ikq] + nmo_pk[ikq])
         R = slice(offsets[ikr], offsets[ikr] + nmo_pk[ikr])
         S = slice(offsets[iks], offsets[iks] + nmo_pk[iks])
-        eri_pqrs_df = df.build_eris_kpt(
+        eri_pqrs = df.build_eris_kpt(
                 Uiq,
                 lambda_Uiq,
                 Viq,
@@ -110,32 +114,32 @@ class DoubleFactorizationHelper:
                 (P,Q,R,S),
                 )
         nk = len(self.kpoints)
-        return nk * eri
+        return nk * eri_pqrs
 
 class THCHelper:
 
     def __init__(
             self,
-            orbs,
-            muv,
+            etapP,
+            MPQ,
             ao=False,
             mo_coeffs=None):
-        self.orbs = orbs
-        self.muv = muv
+        self.etapP = etapP
+        self.MPQ = MPQ
         self.ao = ao
         self.mo_coeffs = mo_coeffs
 
     def get_eri(self, ikpts):
         if self.ao:
-            orbs = np.einsum('pi,pP->iP', self.mo_coeffs, self.orbs)
+            etapP = np.einsum('pi,pP->iP', self.mo_coeffs, self.etapP)
         else:
-            orbs = self.orbs
+            etapP = self.etapP
         eris = np.einsum(
                 'pP,qP,PQ,rQ,sQ->pqrs',
-                orbs.conj(),
-                orbs,
-                self.muv,
-                orbs.conj(),
-                orbs,
+                etapP.conj(),
+                etapP,
+                self.MPQ,
+                etapP.conj(),
+                etapP,
                 optimize=True)
         return eris
