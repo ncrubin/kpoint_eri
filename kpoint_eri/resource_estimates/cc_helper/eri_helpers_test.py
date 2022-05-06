@@ -47,7 +47,6 @@ _file_path = os.path.dirname(os.path.abspath(__file__))
 
 def test_thc_helpers():
     cell, kmf = utils.init_from_chkfile(_file_path+'/../sparse/diamond_221.chk')
-    from kpoint_eri.resource_estimates.k2gamma import k2gamma
     ham = utils.read_qmcpack_thc(_file_path + '/../thc/thc_4_4.h5')
     kcc = cc_helper.build_krcc_thc_eris(
             kmf,

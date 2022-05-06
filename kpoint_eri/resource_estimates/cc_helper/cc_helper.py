@@ -1,7 +1,7 @@
 from pyscf.pbc import cc, scf
 
 from kpoint_eri.resource_estimates import cc_helper
-from kpoint_eri.resource_estimates.k2gamma import k2gamma
+from kpoint_eri.resource_estimates import utils
 
 def build_cc(approx_cc, helper):
     eris = cc_helper._ERIS(
@@ -56,12 +56,13 @@ def build_krcc_df_eris(
             )
     return build_cc(approx_cc, helper)
 
+# supercell case
 def build_krcc_thc_eris(
         pyscf_mf,
         etapP,
         MPQ
         ):
-    scmf = k2gamma(pyscf_mf)
+    scmf = utils.k2gamma(pyscf_mf)
     kscmf = scf.KRHF(scmf.cell)
     kscmf.mo_coeff = [scmf.mo_coeff]
     kscmf.mo_occ = [scmf.mo_occ]

@@ -31,7 +31,7 @@ def test_sf_eris():
     mos_shape = [C.shape[1] for C in mos_pqrs]
     # eri_pqrs = sparse.build_eris_kpt(kmf, mos_pqrs, kpt_pqrs, compact=False)
     eri_pqrs_exact = sparse.build_eris_kpt(
-            kmf,
+            kmf.with_df,
             mos_pqrs,
             kpt_pqrs,
             compact=False).reshape(mos_shape)
