@@ -44,12 +44,13 @@ def compute_lambda(pyscf_mf,
                     mo_coeffs[ik_prime],
                     mo_coeffs[ik_prime]
                     ]
+            mos_shape = [C.shape[1] for C in mos_pqrs]
             eri_pqrs = sparse.build_eris_kpt(
                     pyscf_mf.with_df,
                     mos_pqrs,
                     kpt_pqrs,
-                    compact=False)
-            h2b += 0.5 * np.einsum('pqrr->pq', er_pqrs, optimize=True)
+                    compact=False).reshape(mos_shape)
+            h2b += 0.5 * np.einsum('pqrr->pq', eri_pqrs, optimize=True)
         T = h1b + h2b
         lambda_T = np.sum(np.abs(T))
 
