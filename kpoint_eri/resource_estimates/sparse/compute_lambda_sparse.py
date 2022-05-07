@@ -26,7 +26,7 @@ def compute_lambda(pyscf_mf,
                     compact=False)
             lambda_V += np.sum(np.abs(eri_pqrs))
 
-    hcore = pyscf_mf.get_hcore(k, kpts=pyscf_mf.kpts)
+    hcore = pyscf_mf.get_hcore(pyscf_mf.cell, kpts=pyscf_mf.kpts)
     lambda_T = 0.0
     for ik in range(num_kpoints):
         h1b = mo_coeffs[ik].conj().T @ hcore[ik] @ mo_coeffs[ik]
@@ -39,9 +39,9 @@ def compute_lambda(pyscf_mf,
                     kpoints[ik_prime]
                     ]
             mos_pqrs = [
-                    mo_coeffs[ik]
-                    mo_coeffs[ik]
-                    mo_coeffs[ik_prime]
+                    mo_coeffs[ik],
+                    mo_coeffs[ik],
+                    mo_coeffs[ik_prime],
                     mo_coeffs[ik_prime]
                     ]
             eri_pqrs = sparse.build_eris_kpt(
