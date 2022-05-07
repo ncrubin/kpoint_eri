@@ -1,6 +1,9 @@
 import numpy as np
 
+from kpoint_eri.resource_estimates import sf
+
 def compute_lambda_sf(
+        hcore,
         chol,
         kpoints,
         momentum_map,
@@ -16,17 +19,14 @@ def compute_lambda_sf(
         for ikp, iks in product(range(num_kpoints), repeat=2):
             ikq = momentum_map[iq, ikp]
             ikr = momentum_map[iq, iks]
-            P = slice(offsets[ikp], offsets[ikp] + nmo_pk[ikp])
-            Q = slice(offsets[ikq], offsets[ikq] + nmo_pk[ikq])
-            R = slice(offsets[ikr], offsets[ikr] + nmo_pk[ikr])
-            S = slice(offsets[iks], offsets[iks] + nmo_pk[iks])
-            eri_pqrs = build_eris_kpt(chol[iq], ikp, iks)
+            eri_pqrs = sf.build_eris_kpt(chol[iq], ikp, iks)
             lambda_W += num.sum(np.abs(eri_pqrs))
 
     for ik in range(num_kpoints):
-        h1b = mo_coeffs[ik].conj().T @ hcore[ik] @ mo_coeffs[ik]
+        h1b = hcore[ik]
+        h2b = np.zeros_like(h1b)
         for ik_prime in range(num_kpoints):
-            eri_pqrs = build_eris_kpt(chol[0], ik, ik_prime)
+            eri_pqrs = sf.build_eris_kpt(chol[0], ik, ik_prime)
             h2b += 0.5 * np.einsum('pqrr->pq', er_pqrs, optimize=True)
         T = h1b + h2b
         lambda_T = np.sum(np.abs(T_prime))
