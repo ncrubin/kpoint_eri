@@ -1,8 +1,9 @@
 import numpy as np
 
 from kpoint_eri.resource_estimates import df
+from kpoint_eri.resource_estimates import utils
 
-def compute_lambda_df(
+def compute_lambda(
         hcore,
         df_factors,
         kpoints,
@@ -29,18 +30,18 @@ def compute_lambda_df(
         h1b = hcore[ik]
         h2b = np.zeros_like(h1b)
         for ik_prime in range(num_kpoints):
-            P = slice(offsets[ikp], offsets[ikp] + nmo_pk[ikp])
-            Q = slice(offsets[ikq], offsets[ikq] + nmo_pk[ikq])
-            R = slice(offsets[ikr], offsets[ikr] + nmo_pk[ikr])
-            S = slice(offsets[iks], offsets[iks] + nmo_pk[iks])
-            eri_pqrs = build_eris_kpt(
+            P = slice(offsets[ik], offsets[ik] + nmo_pk[ik])
+            Q = slice(offsets[ik], offsets[ik] + nmo_pk[ik])
+            R = slice(offsets[ik_prime], offsets[ik_prime] + nmo_pk[ik_prime])
+            S = slice(offsets[ik_prime], offsets[ik_prime] + nmo_pk[ik_prime])
+            eri_pqrs = df.build_eris_kpt(
                     Uiq,
                     lambda_Uiq,
                     Viq,
                     lambda_Viq,
                     (P,Q,R,S),
                     )
-            h2b += 0.5 * np.einsum('pqrr->pq', er_pqrs, optimize=True)
+            h2b += 0.5 * np.einsum('pqrr->pq', eri_pqrs, optimize=True)
         T = h1b + h2b
         lambda_T = np.sum(np.abs(T))
 

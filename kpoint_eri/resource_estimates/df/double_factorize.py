@@ -1,24 +1,7 @@
 from itertools import product
 import numpy as np
 
-def build_AB(Lqn, q_index, momentum_map):
-    nmo = Lqn.shape[1]
-    assert len(Lqn.shape) == 3
-    num_kpoints = Lqn.shape[0]
-    M = np.zeros((nmo*num_kpoints, nmo*num_kpoints), dtype=np.complex128)
-    A = np.zeros((nmo*num_kpoints, nmo*num_kpoints), dtype=np.complex128)
-    B = np.zeros((nmo*num_kpoints, nmo*num_kpoints), dtype=np.complex128)
-    for kp in range(num_kpoints):
-        kq = momentum_map[q_index, kp]
-        for p, q in product(range(nmo), repeat=2):
-            P = int(kp * nmo + p)
-            Q = int(kq * nmo + q)
-            M[P,Q] += Lqn[kp, p, q]
-    A = 0.5  * (M + M.conj().T)
-    B = 0.5j * (M - M.conj().T)
-    assert np.linalg.norm(A-A.conj().T) < 1e-12
-    assert np.linalg.norm(B-B.conj().T) < 1e-12
-    return A, B
+from kpoint_eri.resource_estimates import sf
 
 def get_df_factor(mat, thresh):
     eigs, eigv = np.linalg.eigh(mat)
@@ -50,7 +33,7 @@ def double_factorize(
         # print(iq)
         for nc in range(nchol):
             LQn = chol[iq,:,:,:,nc]
-            A, B = build_AB(LQn, iq, momentum_map)
+            A, B = sf.build_AB(LQn, iq, momentum_map)
             eigs, eigv = get_df_factor(A, df_thresh)
             lambda_U[iq, nc] = eigs
             Us[iq, nc] = eigv

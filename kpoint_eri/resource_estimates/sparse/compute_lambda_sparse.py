@@ -50,8 +50,8 @@ def compute_lambda(pyscf_mf,
                     mos_pqrs,
                     kpt_pqrs,
                     compact=False).reshape(mos_shape)
-            h2b += 0.5 * np.einsum('pqrr->pq', eri_pqrs, optimize=True)
-        T = h1b + h2b
+            h2b += np.einsum('pqrr->pq', eri_pqrs, optimize=True)
+        T = h1b - 0.5 * h2b
         lambda_T = np.sum(np.abs(T))
 
     lambda_tot = lambda_T + lambda_V
