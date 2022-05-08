@@ -8,7 +8,7 @@ from kpoint_eri.resource_estimates import utils
 
 _file_path = os.path.dirname(os.path.abspath(__file__))
 
-def test_sf_eris():
+def test_compute_lambda_df():
     ham = utils.read_cholesky_contiguous(
             _file_path + '/../sf/chol_diamond_nk4.h5',
             frac_chol_to_keep=1.0)
@@ -22,7 +22,7 @@ def test_sf_eris():
             ham['chol'],
             ham['qk_k2'],
             ham['nmo_pk'],
-            df_thresh=0.0)
+            df_thresh=1e-5)
     lambda_tot, lambda_T, lambda_F = df.compute_lambda(
             ham['hcore'],
             df_factors,
@@ -31,4 +31,17 @@ def test_sf_eris():
             ham['nmo_pk']
             )
 
-    print(lambda_tot, lambda_T, lambda_F)
+    df_factors = df.double_factorize_batched(
+            ham['chol'],
+            ham['qk_k2'],
+            ham['nmo_pk'],
+            df_thresh=1e-5)
+    lambda_tot_batch, lambda_T_, lambda_F_ = df.compute_lambda(
+            ham['hcore'],
+            df_factors,
+            kpoints,
+            momentum_map,
+            ham['nmo_pk']
+            )
+
+    assert lambda_tot - lambda_tot_batch < 1e-12
