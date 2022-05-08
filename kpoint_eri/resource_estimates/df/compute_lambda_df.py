@@ -16,8 +16,8 @@ def compute_lambda(
     offsets = np.cumsum(nmo_pk) - nmo_pk[0]
     eigs_A = df_factors['lambda_U'] # Q, nchol, neig
     eigs_B = df_factors['lambda_V'] # Q, nchol, neig
-    lambda_F  = np.sum(np.abs(eigs_A)**2)
-    lambda_F += np.sum(np.abs(eigs_B)**2)
+    lambda_F  = np.sum(np.einsum('qnt->qn', np.abs(eigs_A))**2.0)
+    lambda_F += np.sum(np.einsum('qnt->qn', np.abs(eigs_B))**2.0)
     lambda_F *= 0.125
 
     # one-body contribution only contains contributions from Q = 0
