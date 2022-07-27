@@ -18,11 +18,12 @@ def compute_lambda(
     lambda_W = 0.0
     for iq in range(num_kpoints):
         An, Bn = sf.build_ABn(chol[iq,:,:,], iq, momentum_map)
-        lambda_W += np.sum(np.einsum('npq->n', np.abs(An))**2.0)
-        lambda_W += np.sum(np.einsum('npq->n', np.abs(Bn))**2.0)
+        # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
+        lambda_W += np.sum(np.einsum('npq->n', np.abs(An.real)+np.abs(An.imag))**2.0)
+        lambda_W += np.sum(np.einsum('npq->n', np.abs(Bn.real)+np.abs(Bn.imag))**2.0)
 
     # TODO check prefactor.
-    lambda_W *= 0.5
+    lambda_W *= 0.25
 
     for ik in range(num_kpoints):
         h1b = hcore[ik]
@@ -31,7 +32,7 @@ def compute_lambda(
             eri_pqrs = sf.build_eris_kpt(chol[0], ik, ik_prime)
             h2b += np.einsum('pqrr->pq', eri_pqrs, optimize=True)
         T = h1b - 0.5 * h2b
-        lambda_T = np.sum(np.abs(T))
+        lambda_T = np.sum(np.abs(T.real) + np.abs(T.imag))
 
     lambda_tot = lambda_T + lambda_W
     return lambda_tot, lambda_T, lambda_W
