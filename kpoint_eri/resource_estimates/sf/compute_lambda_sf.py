@@ -34,4 +34,4 @@ def compute_lambda(
         lambda_T = np.sum(np.abs(T))
 
     lambda_tot = lambda_T + lambda_W
-    return lambda_tot, lambda_T, lambda_W
+    return lambda_tot, lambda_T, lambda_W, sum(nchol_pk)

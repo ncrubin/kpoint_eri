@@ -18,7 +18,9 @@ def compute_lambda(
     eigs_B = df_factors['lambda_V'] # Q, nchol, neig
     lambda_F  = np.sum(np.einsum('qnt->qn', np.abs(eigs_A))**2.0)
     lambda_F += np.sum(np.einsum('qnt->qn', np.abs(eigs_B))**2.0)
-    lambda_F *= 0.125
+    lambda_F *= 0.5 # 1/8 * 4 (spin summation)
+    num_eig  = np.sum(eigs_A > 0) # should be explicitly zerod before entry
+    num_eig += np.sum(eigs_A > 0) # should be explicitly zerod before entry
 
     # one-body contribution only contains contributions from Q = 0
     Uiq = df_factors['U'][0]
@@ -43,7 +45,8 @@ def compute_lambda(
                     )
             h2b += 0.5 * np.einsum('pqrr->pq', eri_pqrs, optimize=True)
         T = h1b + h2b
-        lambda_T = np.sum(np.abs(T))
+        e, _ = np.linalg.eigh(T)
+        lambda_T = np.sum(np.abs(e))
 
     lambda_tot = lambda_T + lambda_F
-    return lambda_tot, lambda_T, lambda_F
+    return lambda_tot, lambda_T, lambda_F, num_eig

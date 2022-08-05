@@ -52,12 +52,20 @@ def build_sparse_eris(
 
     return eris
 
+def read_hamil_sparse(filename, num_kpoints):
+    integrals = {}
+    with h5py.File(filename, 'r') as fh5:
+        for iq, ikp, iks in product(range(num_kpoints), repeat=3):
+            integrals[(iq,ikp,iks)] = fh5[f'{iq}_{ikp}_{iks}'][:]
+    return integrals
+
 def write_hamil_sparse(
         comm,
         pyscf_mf,
         filename='sparse.h5',
         localization='ibo',
-        threshold=1e-5):
+        threshold=1e-5,
+        compact=False):
     kpoints = pyscf_mf.kpts
     mo_coeffs = pyscf_mf.mo_coeff
     # TODO: Do localization somewhere!

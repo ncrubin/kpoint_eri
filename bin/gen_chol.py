@@ -7,7 +7,7 @@ from pyscf.pbc import scf
 from pyscf import lib
 import argparse
 
-from kpoint_eri.resource_estimates.cholesky import write_hamil_kpoints
+from kpoint_eri.resource_estimates.sf.cholesky import write_hamil_kpoints
 
 def parse_args(args, comm):
     """Parse command-line arguments.
