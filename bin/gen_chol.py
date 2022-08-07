@@ -106,7 +106,7 @@ def get_ortho_ao(cell, kpts, LINDEP_CUTOFF=0):
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     options = parse_args(sys.argv[1:], comm)
-    if comm.rank == 0:
+    if comm.rank == 0 and options.verbose:
         print(" Options")
         print("---------")
         for k, v in vars(options).items():
