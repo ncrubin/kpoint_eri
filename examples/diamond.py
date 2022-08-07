@@ -19,7 +19,7 @@ cell = gto.M(
               C 1.68506866 1.68506866 1.68506866''',
     basis='gth-szv',
     pseudo='gth-pade',
-    verbose=0
+    verbose=4
 )
 
 # We build a supercell composed of 'nmp' replicated units and run
@@ -44,8 +44,8 @@ lambda_tot, lambda_T, lambda_V, num_nnz, sparsity = sparse.compute_lambda(kmf)
 print("sparse lambda : ", lambda_tot)
 
 chol_file = 'kpoint_chol.h5'
-verbose = ''
-# verbose = '- vvv'
+# verbose = ''
+verbose = '-vvv'
 import os
 os.system(f"""
 mpirun -np 2 python -u ../bin/gen_chol.py -i scf_kpoint.chk -o {chol_file} \

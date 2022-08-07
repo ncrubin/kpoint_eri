@@ -1,2 +1,4 @@
 openfermion
 pyscf
+mpi4py
+numpy
