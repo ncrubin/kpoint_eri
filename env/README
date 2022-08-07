@@ -1,0 +1,3 @@
+* Install openmpi via conda (some wrangling is necessary if you want to use the compilers
+  but this isnt necessary)
+* mpi4py via pip
