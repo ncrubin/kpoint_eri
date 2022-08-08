@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# adapted from pyscf
+# adapted from pyscf example
 
 import numpy as np
 from pyscf.pbc import cc as pbccc
@@ -26,11 +26,6 @@ cell = gto.M(
 # our usual molecular Hartree-Fock program, but using integrals
 # between periodic gaussians.
 #cell = build_cell(ase_atom, ke=50., basis=basis)
-# supcell = super_cell(cell, nmp)
-# mf = pbchf.RHF(supcell)
-# mf.chkfile = 'scf_supercell.chk'
-# mf.kernel()
-# supcell_energy = mf.energy_tot() / np.prod(nmp)
 
 kpts = cell.make_kpts(nmp)
 kmf = pbchf.KRHF(cell, kpts)
@@ -44,6 +39,7 @@ lambda_tot, lambda_T, lambda_V, num_nnz, sparsity = sparse.compute_lambda(kmf)
 print("sparse lambda : ", lambda_tot)
 
 chol_file = 'kpoint_chol.h5'
+# swap for queiter output 
 # verbose = ''
 verbose = '-vvv'
 import os
@@ -113,3 +109,100 @@ cc = build_krcc_df_eris(
         ham['nmo_pk'], df_thresh=1e-1
         )
 print("df cc (sf 0.8, df 1e-1): ", cc.kernel()[0])
+
+# Supercell comparison
+# from openfermion molecular
+def compute_lambda(h1, eri_full, sf_factors):
+    """ Compute lambda for Hamiltonian using SF method of Berry, et al.
+
+    Args:
+        pyscf_mf - PySCF mean field object
+        sf_factors (ndarray) - (N x N x rank) array of SF factors from rank
+            reduction of ERI
+
+    Returns:
+        lambda_tot (float) - lambda value for the single factorized Hamiltonian
+    """
+
+    # Effective one electron operator contribution
+    T = h1 - 0.5 * np.einsum("pqqs->ps", eri_full, optimize=True) +\
+        np.einsum("pqrr->pq", eri_full, optimize = True)
+
+    lambda_T = np.sum(np.abs(T))
+
+    # Two electron operator contributions
+    lambda_W = 0.25 * np.einsum(
+        "ijP,klP->", np.abs(sf_factors), np.abs(sf_factors), optimize=True)
+    lambda_tot = lambda_T + lambda_W
+
+    return lambda_tot
+
+import time
+def modified_cholesky(M, tol=1e-6, verbose=True, cmax=20):
+    """Modified cholesky decomposition of matrix.
+    See, e.g. [Motta17]_
+    Parameters
+    ----------
+    M : :class:`numpy.ndarray`
+        Positive semi-definite, symmetric matrix.
+    tol : float
+        Accuracy desired.
+    verbose : bool
+        If true print out convergence progress.
+    Returns
+    -------
+    chol_vecs : :class:`numpy.ndarray`
+        Matrix of cholesky vectors.
+    """
+    # matrix of residuals.
+    assert len(M.shape) == 2
+    delta = np.copy(M.diagonal())
+    nchol_max = int(cmax*M.shape[0]**0.5)
+    # index of largest diagonal element of residual matrix.
+    nu = np.argmax(np.abs(delta))
+    delta_max = delta[nu]
+    if verbose:
+        print ("# max number of cholesky vectors = %d"%nchol_max)
+        print ("# iteration %d: delta_max = %f"%(0, delta_max.real))
+    # Store for current approximation to input matrix.
+    Mapprox = np.zeros(M.shape[0], dtype=M.dtype)
+    chol_vecs = np.zeros((nchol_max, M.shape[0]), dtype=M.dtype)
+    nchol = 0
+    chol_vecs[0] = np.copy(M[:,nu])/delta_max**0.5
+    while abs(delta_max) > tol:
+        # Update cholesky vector
+        start = time.time()
+        Mapprox += chol_vecs[nchol]*chol_vecs[nchol].conj()
+        delta = M.diagonal() - Mapprox
+        nu = np.argmax(np.abs(delta))
+        delta_max = np.abs(delta[nu])
+        nchol += 1
+        Munu0 = np.dot(chol_vecs[:nchol,nu].conj(), chol_vecs[:nchol,:])
+        chol_vecs[nchol] = (M[:,nu] - Munu0) / (delta_max)**0.5
+        if verbose:
+            step_time = time.time() - start
+            info = (nchol, delta_max, step_time)
+            print ("# iteration %d: delta_max = %13.8e: time = %13.8e"%info)
+
+    return np.array(chol_vecs[:nchol])
+
+
+supcell = super_cell(cell, nmp)
+mf = pbchf.RHF(supcell)
+mf.chkfile = 'scf_supercell.chk'
+mf.kernel()
+supcell_energy = mf.energy_tot() / np.prod(nmp)
+
+# 8-fold symmetry at gamma.
+C = mf.mo_coeff
+h1 = C.T @ mf.get_hcore() @ C
+eri = mf.with_df.ao2mo(C)
+from pyscf import ao2mo
+
+eri_full = ao2mo.restore(1, eri, C.shape[1])
+nmo = C.shape[1]
+L = modified_cholesky(eri_full.reshape((nmo*nmo, nmo*nmo)))
+# produces naux x nmo x nmo, openfermion expects naux on last index
+L = L.reshape((-1, nmo, nmo)).transpose((1, 2, 0))
+print("cholesky error: ", np.linalg.norm((np.einsum('pqn,rsn->pqrs', L, L)-eri_full)))
+print("lambda sf mol: ", compute_lambda(h1, eri_full, L))
