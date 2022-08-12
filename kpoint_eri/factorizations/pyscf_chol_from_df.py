@@ -120,7 +120,7 @@ if __name__ == '__main__':
     # use regular density fitting for compatibility with pyscf pip release
     # uncomment for rs density fitting:
     # mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf = scf.KRHF(cell, kpts).density_fit()
+    mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = 'ncr_test_C_density_fitints.chk'
     mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
     mf.init_guess = 'chkfile'

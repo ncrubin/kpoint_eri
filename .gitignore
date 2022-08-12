@@ -124,3 +124,7 @@ src/fqe/lib/_fqe_data.c
 
 # vim tmp files
 *.swp
+
+# pyscf files
+*.chk
+*.h5
