@@ -119,6 +119,3 @@ def test_ncr_sf_helpers():
     exact_cc.kernel()
     assert np.isclose(approx_cc.e_corr, exact_cc.e_corr)
     assert np.isclose(exact_emp2, emp2)
-
-
-test_ncr_sf_helpers()
