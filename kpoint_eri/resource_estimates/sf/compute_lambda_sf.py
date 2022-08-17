@@ -1,7 +1,9 @@
+from typing import Tuple
 import numpy as np
 from itertools import product
 
 from kpoint_eri.resource_estimates import sf
+from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
 
 def compute_lambda(
         hcore,
@@ -36,3 +38,60 @@ def compute_lambda(
 
     lambda_tot = lambda_T + lambda_W
     return lambda_tot, lambda_T, lambda_W, sum(nchol_pk)
+
+
+def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper) -> Tuple([float, float, float]):
+    """
+    Compute one-body and two-body lambda for qubitization of 
+    single-factorized Hamiltonian.
+
+    one-body term h_pq(k) = hcore_{pq}(k) 
+                            - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+                            + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+    The first term is the kinetic energy + pseudopotential (or electron-nuclear),
+    second term is from rearranging two-body operator into chemist charge-charge
+    type notation, and the third is from the one body term obtained when
+    squaring the two-body A and B operators.
+
+    two-body term V = 0.5 sum_{Q}sum_{n}(A_{n}(Q)^2 +_ B_{n}(Q)^2)
+    or V = 0.5 sum_{Q}sum_{n'}W_{n}(Q)^{2} where n' is twice the range of n.
+    lambda is 0.25sum_{Q}sum_{n'}(sum_{p,q}^{N_{k}N/2}|Re[W_{p,q}(Q)^{n}]| + |Im[W_{pq}(Q)^{n}]|)^{2}
+    note the n' sum implying W is A or B.  See note for why 0.25 in front.
+
+    :param hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
+    :param chol: cholesky factor in pyscf format [kpt, kpt, naux, nao, nao]
+    :param kpts: kpoints from scf calculation
+    """
+    kpts = sf_obj.kmf.kpts
+    one_body_mat = np.empty((len(kpts)), dtype=object)
+    lambda_one_body = 0.
+    for kidx in range(len(kpts)):
+        # matrices for - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+        # and  + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+        h1_pos = np.zeros_like(hcore[kidx])
+        h1_neg = np.zeros_like(hcore[kidx])
+        for qidx in range(len(kpts)):
+            # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+            eri_kqqk_pqrs = sf_obj.get_eri([kidx, qidx, qidx, kidx]) 
+            h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True)
+            # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+            eri_kkqq_pqrs = sf_obj.get_eri([kidx, kidx, qidx, qidx]) 
+            h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs)
+
+        one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + 0.5 * h1_pos
+        lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real) + np.abs(one_body_mat[kidx].imag))
+
+    lambda_two_body = 0
+    for qidx in range(len(kpts)):
+        # A and B are W
+        A, B = sf_obj.build_AB_from_chol(qidx) # [naux, nao * nk, nao * nk]
+        # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
+        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A.real) + np.abs(A.imag))**2)
+        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B.real) + np.abs(B.imag))**2)
+    lambda_two_body *= 0.25
+
+    lambda_tot = lambda_one_body + lambda_two_body
+    return lambda_tot, lambda_one_body, lambda_two_body
+
+
+

@@ -111,7 +111,9 @@ class DFABKpointIntegrals:
                     P = int(kidx * nmo + p)  #a^_{pK}
                     Q = int(k_minus_q_idx * nmo + q)  #a_{q(K-Q)}
                     rho[kidx, :, k_minus_q_idx, p, q] += a_by_kq[qidx][:, P, Q] + -1.j * b_by_kq[qidx][:, P, Q]
-                assert np.allclose(rho[kidx, :, k_minus_q_idx, :, :], self.chol[kidx, k_minus_q_idx])
+                # I should make this a test.  Checks if rho is equal to chol
+                # only would pass assert in the case where no truncation is performed
+                # assert np.allclose(rho[kidx, :, k_minus_q_idx, :, :], self.chol[kidx, k_minus_q_idx])
         return rho.transpose(0, 2, 1, 3, 4)
 
 

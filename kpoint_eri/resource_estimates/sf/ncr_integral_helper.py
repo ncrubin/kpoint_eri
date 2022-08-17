@@ -1,6 +1,9 @@
+import itertools
 import numpy as np
 
 from pyscf.pbc import scf
+
+from kpoint_eri.resource_estimates.utils.misc_utils import build_momentum_transfer_mapping
 
 # Single-Factorization
 class NCRSingleFactorizationHelper:
@@ -20,6 +23,39 @@ class NCRSingleFactorizationHelper:
         self.kmf = kmf
         self.nk = len(self.kmf.kpts)
         self.naux = naux
+        k_transfer_map = build_momentum_transfer_mapping(self.kmf.cell, self.kmf.kpts)
+        self.k_transfer_map = k_transfer_map
+
+
+    def build_AB_from_chol(self, qidx):
+        """
+        Construct A and B matrices given Q-kpt idx.  This constructs
+        all matrices association with n-chol
+
+        :param qidx: index for momentum mode Q.  
+        :returns: Tuple(np.ndarray, np.ndarray) where each array is 
+                  [naux, nmo * kpts, nmk * kpts] set of matrices.
+        """
+        nmo = self.nao # number of gaussians used
+        naux = self.naux
+
+        # now form A and B
+        # First set up matrices to store. We will loop over Q index and construct
+        # entire set of matrices index by n-aux.
+        rho = np.zeros((naux, nmo * self.nk, nmo * self.nk), dtype=np.complex128)
+
+        for kidx in range(self.nk):
+            k_minus_q_idx = self.k_transfer_map[qidx, kidx]
+            for p, q in itertools.product(range(nmo), repeat=2):
+                P = int(kidx * nmo + p)  #a^_{pK}
+                Q = int(k_minus_q_idx * nmo + q)  #a_{q(K-Q)}
+                rho[:,P,Q] += self.chol[kidx, k_minus_q_idx][:, p, q]  # L_{pK, q(K-Q)}a^_{pK}a_{q(K-Q)}
+            
+        A = 0.5  * (rho + rho.transpose((0,2,1)).conj())
+        B = 0.5j * (rho - rho.transpose((0,2,1)).conj())
+
+        assert np.allclose(rho, A + -1j * B)  # This can be removed later
+        return A, B
 
     def get_eri(self, ikpts, check_eq=False):
         """
