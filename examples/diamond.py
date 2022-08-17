@@ -31,6 +31,7 @@ kpts = cell.make_kpts(nmp)
 kmf = pbchf.KRHF(cell, kpts)
 kmf.chkfile = 'scf_kpoint.chk'
 kpoint_energy = kmf.kernel()
+print(kpoint_energy)
 
 from kpoint_eri.resource_estimates import sparse
 # 0. Sparse
