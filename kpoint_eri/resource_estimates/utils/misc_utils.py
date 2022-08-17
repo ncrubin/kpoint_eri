@@ -352,5 +352,5 @@ def test_momentum_transfer_map():
     for i, Q in enumerate(kpts):
         for j, k1 in enumerate(kpts):
             k2 = kpts[mom_map[i, j]]
-            test = Q - k1 - k2
+            test = Q - k1 + k2
             assert test in cell.Gv
