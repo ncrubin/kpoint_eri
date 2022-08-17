@@ -327,3 +327,30 @@ def build_test_system_diamond(basis):
     kmf.chkfile = 'diamond_221.chk'
     kmf.kernel()
     return kmf
+
+
+def test_momentum_transfer_map():
+    from pyscf.pbc import scf as pb_scf
+    from pyscf.pbc import gto
+    cell = gto.Cell()
+    cell.atom = '''
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    '''
+    cell.basis = 'gth-szv'
+    cell.pseudo = 'gth-pade'
+    cell.a = '''
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000'''
+    cell.unit = 'B'
+    cell.verbose = 4
+    cell.build()
+    kpts = cell.make_kpts([2, 2, 1])
+    a = cell.lattice_vectors() / (2*np.pi)
+    mom_map = build_momentum_transfer_mapping(cell, kpts)
+    for i, Q in enumerate(kpts):
+        for j, k1 in enumerate(kpts):
+            k2 = kpts[mom_map[i, j]]
+            test = Q - k1 - k2
+            assert test in cell.Gv
