@@ -22,7 +22,10 @@ class NCRSingleFactorizationHelper:
         self.chol = cholesky_factor
         self.kmf = kmf
         self.nk = len(self.kmf.kpts)
+        if naux is None:
+            naux = cholesky_factor[0, 0].shape[0]
         self.naux = naux
+        self.nao = cholesky_factor[0, 0].shape[-1]
         k_transfer_map = build_momentum_transfer_mapping(self.kmf.cell, self.kmf.kpts)
         self.k_transfer_map = k_transfer_map
 
@@ -69,6 +72,7 @@ class NCRSingleFactorizationHelper:
         ikp, ikq, ikr, iks = ikpts
         n = self.naux
         naux_pq = self.chol[ikp, ikq].shape[0]
+        print(n, naux_pq)
         if n > naux_pq:
             print("WARNING: specified naux ({}) is too large!".format(n))
             n = naux_pq

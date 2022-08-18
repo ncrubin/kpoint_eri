@@ -117,7 +117,7 @@ class DFABKpointIntegrals:
         return rho.transpose(0, 2, 1, 3, 4)
 
 
-    def double_factorize(self, thresh):
+    def double_factorize(self, thresh=None):
         """
         construct a double factorization of the Hamiltonian check's object if 
         we have already constructed the DF then returns
@@ -126,6 +126,8 @@ class DFABKpointIntegrals:
                        where U and V are matrices size nk * nmo x Z
                        lambda_U and lambda_v are size Z vectors.  
         """
+        if thresh is None:
+            thresh = 1.0E-13
         if self.df_factors is not None:
             return self.df_factors
 

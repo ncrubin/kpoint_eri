@@ -1,4 +1,3 @@
-from typing import Tuple
 import numpy as np
 from itertools import product
 
@@ -40,7 +39,7 @@ def compute_lambda(
     return lambda_tot, lambda_T, lambda_W, sum(nchol_pk)
 
 
-def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper) -> Tuple([float, float, float]):
+def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper):
     """
     Compute one-body and two-body lambda for qubitization of 
     single-factorized Hamiltonian.
@@ -91,6 +90,3 @@ def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper) -> Tuple([fl
 
     lambda_tot = lambda_one_body + lambda_two_body
     return lambda_tot, lambda_one_body, lambda_two_body
-
-
-

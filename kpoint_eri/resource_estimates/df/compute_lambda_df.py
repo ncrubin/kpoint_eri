@@ -94,8 +94,10 @@ def compute_lambda_ncr(hcore, df_obj: DFABKpointIntegrals):
     for qidx in range(len(kpts)):
         # A and B are W
         eigs_u_by_nc, eigs_v_by_nc = df_obj.df_factors['lambda_U'][qidx], df_obj.df_factors['lambda_V'][qidx]
-        lambda_two_body += np.sum(np.einsum('np->n', np.abs(eigs_u_by_nc))**2)
-        lambda_two_body += np.sum(np.einsum('np->n', np.abs(eigs_v_by_nc))**2)
+        squared_sum_a_eigs = np.array([np.sum(np.abs(xx))**2 for xx in eigs_u_by_nc])
+        squared_sum_b_eigs = np.array([np.sum(np.abs(xx))**2 for xx in eigs_v_by_nc])
+        lambda_two_body += np.sum(squared_sum_a_eigs)
+        lambda_two_body += np.sum(squared_sum_b_eigs)
         num_eigs += sum([len(xx) for xx in eigs_u_by_nc]) + sum([len(xx) for xx in eigs_v_by_nc])
     lambda_two_body *= 0.25
 
