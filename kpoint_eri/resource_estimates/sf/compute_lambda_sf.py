@@ -59,8 +59,7 @@ def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper) -> Tuple([fl
     note the n' sum implying W is A or B.  See note for why 0.25 in front.
 
     :param hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
-    :param chol: cholesky factor in pyscf format [kpt, kpt, naux, nao, nao]
-    :param kpts: kpoints from scf calculation
+    :param sf_obj: SingleFactorization object.    
     """
     kpts = sf_obj.kmf.kpts
     one_body_mat = np.empty((len(kpts)), dtype=object)
