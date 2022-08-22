@@ -73,3 +73,41 @@ def compute_lambda(
 
     lambda_tot = lambda_T + lambda_V
     return lambda_tot, lambda_T, lambda_V, num_nnz, 1-num_nnz/tot_size
+
+
+def compute_lambda_ncr(hcore, sf_obj):
+    kpts = sf_obj.kmf.kpts
+    nkpts = len(kpts)
+    one_body_mat = np.empty((len(kpts)), dtype=object)
+    lambda_one_body = 0.
+
+    for kidx in range(len(kpts)):
+        # matrices for - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+        # and  + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+        h1_pos = np.zeros_like(hcore[kidx])
+        h1_neg = np.zeros_like(hcore[kidx])
+        for qidx in range(len(kpts)):
+            # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+            eri_kqqk_pqrs = sf_obj.get_eri([kidx, qidx, qidx, kidx]) 
+            h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
+            # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+            eri_kkqq_pqrs = sf_obj.get_eri([kidx, kidx, qidx, qidx])  
+            h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
+
+        one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + 0.5 * h1_pos
+        one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
+        lambda_one_body += np.sum(np.abs(one_eigs))
+    
+    lambda_two_body = 0
+    for qidx in range(len(kpts)):
+        # A and B are W
+        A, B = sf_obj.build_AB_from_chol(qidx) # [naux, nao * nk, nao * nk]
+        A /= np.sqrt(nkpts)
+        B /= np.sqrt(nkpts)
+        # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
+        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A.real) + np.abs(A.imag))**2)
+        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B.real) + np.abs(B.imag))**2)
+    lambda_two_body *= 0.25
+
+    lambda_tot = lambda_one_body + lambda_two_body
+    return lambda_tot, lambda_one_body, lambda_two_body

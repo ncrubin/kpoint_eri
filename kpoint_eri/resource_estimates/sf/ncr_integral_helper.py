@@ -72,7 +72,6 @@ class NCRSingleFactorizationHelper:
         ikp, ikq, ikr, iks = ikpts
         n = self.naux
         naux_pq = self.chol[ikp, ikq].shape[0]
-        print(n, naux_pq)
         if n > naux_pq:
             print("WARNING: specified naux ({}) is too large!".format(n))
             n = naux_pq

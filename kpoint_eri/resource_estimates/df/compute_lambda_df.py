@@ -70,8 +70,10 @@ def compute_lambda_ncr(hcore, df_obj: DFABKpointIntegrals):
     :param df_obj: Object of DFABKpointIntegrals
     """
     kpts = df_obj.kmf.kpts
+    nkpts = len(kpts)
     one_body_mat = np.empty((len(kpts)), dtype=object)
     lambda_one_body = 0.
+
     for kidx in range(len(kpts)):
         # matrices for - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
         # and  + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
@@ -80,10 +82,10 @@ def compute_lambda_ncr(hcore, df_obj: DFABKpointIntegrals):
         for qidx in range(len(kpts)):
             # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
             eri_kqqk_pqrs = df_obj.get_eri([kidx, qidx, qidx, kidx]) 
-            h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True)
+            h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
             # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
-            eri_kkqq_pqrs = df_obj.get_eri([kidx, kidx, qidx, qidx]) 
-            h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs)
+            eri_kkqq_pqrs = df_obj.get_eri([kidx, kidx, qidx, qidx])  
+            h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
         one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + 0.5 * h1_pos
         one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
@@ -96,16 +98,10 @@ def compute_lambda_ncr(hcore, df_obj: DFABKpointIntegrals):
         eigs_u_by_nc, eigs_v_by_nc = df_obj.df_factors['lambda_U'][qidx], df_obj.df_factors['lambda_V'][qidx]
         squared_sum_a_eigs = np.array([np.sum(np.abs(xx))**2 for xx in eigs_u_by_nc])
         squared_sum_b_eigs = np.array([np.sum(np.abs(xx))**2 for xx in eigs_v_by_nc])
-        lambda_two_body += np.sum(squared_sum_a_eigs)
-        lambda_two_body += np.sum(squared_sum_b_eigs)
+        lambda_two_body += np.sum(squared_sum_a_eigs) / nkpts
+        lambda_two_body += np.sum(squared_sum_b_eigs) / nkpts
         num_eigs += sum([len(xx) for xx in eigs_u_by_nc]) + sum([len(xx) for xx in eigs_v_by_nc])
     lambda_two_body *= 0.25
 
     lambda_tot = lambda_one_body + lambda_two_body
     return lambda_tot, lambda_one_body, lambda_two_body, num_eigs
-
-
-    
-
-
-
