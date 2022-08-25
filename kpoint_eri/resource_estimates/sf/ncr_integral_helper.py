@@ -52,7 +52,7 @@ class NCRSingleFactorizationHelper:
             for p, q in itertools.product(range(nmo), repeat=2):
                 P = int(kidx * nmo + p)  #a^_{pK}
                 Q = int(k_minus_q_idx * nmo + q)  #a_{q(K-Q)}
-                rho[:,P,Q] += self.chol[kidx, k_minus_q_idx][:, p, q]  # L_{pK, q(K-Q)}a^_{pK}a_{q(K-Q)}
+                rho[:,P,Q] += self.chol[kidx, k_minus_q_idx][:naux, p, q]  # L_{pK, q(K-Q)}a^_{pK}a_{q(K-Q)}
             
         A = 0.5  * (rho + rho.transpose((0,2,1)).conj())
         B = 0.5j * (rho - rho.transpose((0,2,1)).conj())

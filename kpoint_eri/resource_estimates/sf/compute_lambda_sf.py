@@ -1,5 +1,6 @@
 import numpy as np
 from itertools import product
+import copy
 
 from kpoint_eri.resource_estimates import sf
 from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
@@ -65,6 +66,9 @@ def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper):
     one_body_mat = np.empty((len(kpts)), dtype=object)
     lambda_one_body = 0.
 
+    old_naux = sf_obj.naux # need to reset naux for one-body computation
+    sf_obj.naux = sf_obj.chol[0, 0].shape[0]
+
     for kidx in range(len(kpts)):
         # matrices for - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
         # and  + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
@@ -82,6 +86,7 @@ def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper):
         one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
         lambda_one_body += np.sum(np.abs(one_eigs))
 
+    sf_obj.naux = old_naux  # reset naux to original value
     # this part needs to change 
     lambda_two_body = 0
     for qidx in range(len(kpts)):
