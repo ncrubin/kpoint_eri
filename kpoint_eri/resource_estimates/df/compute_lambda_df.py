@@ -81,10 +81,10 @@ def compute_lambda_ncr(hcore, df_obj: DFABKpointIntegrals):
         h1_neg = np.zeros_like(hcore[kidx])
         for qidx in range(len(kpts)):
             # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
-            eri_kqqk_pqrs = df_obj.get_eri([kidx, qidx, qidx, kidx]) 
+            eri_kqqk_pqrs = df_obj.get_eri_exact([kidx, qidx, qidx, kidx]) 
             h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
             # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
-            eri_kkqq_pqrs = df_obj.get_eri([kidx, kidx, qidx, qidx])  
+            eri_kkqq_pqrs = df_obj.get_eri_exact([kidx, kidx, qidx, qidx])  
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
         one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + 0.5 * h1_pos

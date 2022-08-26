@@ -26,6 +26,9 @@ def get_df_factor(mat: np.ndarray, thresh: float, verify_adjoint=False) -> Tuple
     to_zero = truncation < thresh
     eigs[to_zero] = 0.0
     eigv[:,to_zero] = 0.0
+    idx_not_zero = np.where(~to_zero==True)[0]
+    eigs = eigs[idx_not_zero]
+    eigv = eigv[:, idx_not_zero]
     return eigs, eigv
 
 
@@ -102,7 +105,7 @@ class DFABKpointIntegrals:
         :param b_by_kq: [kq_idx, naux, nmo * k , nmo * k]
         :returns: cholesky factor [ki, kj, naux, nao, nao]
         """
-        rho = np.zeros((self.nk, self.naux, self.nk, self.nao, self.nao), dtype=self.chol[-1, -1].dtype)
+        rho = np.zeros((self.nk, self.naux, self.nk, self.nao, self.nao), dtype=a_by_kq[0].dtype)
         nmo = self.nao
         for qidx in range(self.nk):
             for kidx in range(self.nk):
@@ -180,3 +183,13 @@ class DFABKpointIntegrals:
         # build Cholesky vector from truncated A and B
         Luv = self.build_chol_from_AB(a_mats, b_mats)  
         return np.einsum('npq,nsr->pqrs', Luv[ikp, ikq], Luv[iks, ikr].conj(), optimize=True)
+    
+    def get_eri_exact(self, ikpts):
+        """
+        Construct (pkp qkq| rkr sks) exactly from Cholesky vector.  This is for constructing the J and K like terms
+        needed for the one-body component lambda
+
+        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        """
+        ikp, ikq, ikr, iks = ikpts
+        return np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
