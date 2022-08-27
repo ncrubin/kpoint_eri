@@ -14,6 +14,7 @@ def build_momentum_transfer_mapping(
     # k1 - k2 + G = Q.
     a = cell.lattice_vectors() / (2*np.pi)
     delta_k1_k2_Q = kpoints[:,None,None,:] - kpoints[None,:,None,:] - kpoints[None,None,:,:]
+    delta_k1_k2_Q += kpoints[0][None, None, None, :]  # shift to center
     delta_dot_a = np.einsum('wx,kpQx->kpQw', a, delta_k1_k2_Q)
     int_delta_dot_a = np.rint(delta_dot_a)
     # Should be zero if transfer is statisfied (2*pi*n)
@@ -330,7 +331,6 @@ def build_test_system_diamond(basis):
 
 
 def test_momentum_transfer_map():
-    from pyscf.pbc import scf as pb_scf
     from pyscf.pbc import gto
     cell = gto.Cell()
     cell.atom = '''
@@ -346,11 +346,11 @@ def test_momentum_transfer_map():
     cell.unit = 'B'
     cell.verbose = 4
     cell.build()
-    kpts = cell.make_kpts([2, 2, 1])
-    a = cell.lattice_vectors() / (2*np.pi)
+    kpts = cell.make_kpts([2, 2, 1], scaled_center=[0.1, 0.2, 0.3])
     mom_map = build_momentum_transfer_mapping(cell, kpts)
     for i, Q in enumerate(kpts):
         for j, k1 in enumerate(kpts):
             k2 = kpts[mom_map[i, j]]
             test = Q - k1 + k2
-            assert test in cell.Gv
+            assert np.amin(
+                np.abs(test[None, :] - cell.Gv - kpts[0][None, :])) < 1e-15
