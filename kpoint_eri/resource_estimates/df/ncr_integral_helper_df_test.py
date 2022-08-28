@@ -28,7 +28,7 @@ def test_ab_decomp():
     pp_name = cell.pseudo
 
     kmesh = [1, 1, 3]
-    kpts = cell.make_kpts(kmesh)
+    kpts = cell.make_kpts(kmesh, scaled_center=[0.2, 0.3, 0.5])
 
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
@@ -46,7 +46,7 @@ def test_ab_decomp():
 
     Luv = cholesky_from_df_ints(mymp)  # [kpt, kpt, naux, nao, nao]
     dfk_inst = DFABKpointIntegrals(Luv.copy(), mf)
-    df_factors = dfk_inst.double_factorize(1.0E-13)
+    df_factors = dfk_inst.double_factorize(1.0E-15)
 
     test_a_mats = np.empty((dfk_inst.nk, dfk_inst.naux), dtype=object)
     test_b_mats = np.empty((dfk_inst.nk, dfk_inst.naux), dtype=object)

@@ -82,7 +82,7 @@ def compute_lambda_ncr(hcore, sf_obj: NCRSingleFactorizationHelper):
             eri_kkqq_pqrs = sf_obj.get_eri([kidx, kidx, qidx, qidx])  
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
-        one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + 0.5 * h1_pos
+        one_body_mat[kidx] = hcore[kidx] + 0.5 * h1_neg + 0.5 * h1_pos
         one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
         lambda_one_body += np.sum(np.abs(one_eigs))
 
