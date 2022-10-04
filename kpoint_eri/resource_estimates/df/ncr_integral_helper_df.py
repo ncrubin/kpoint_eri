@@ -218,7 +218,12 @@ class DFAlphaBetaKpointIntegrals:
         kpts = self.kmf.kpts
         cell = self.kmf.cell
         k_transfer_map = build_momentum_transfer_mapping(self.kmf.cell, self.kmf.kpts)
-        self.k_transfer_map = k_transfer_map
+        self.k_transfer_map = k_transfer_map # [qidx, kidx] = (k - q)idx
+        self.reverse_k_transfer_map = np.zeros_like(self.k_transfer_map)  # [kidx, kmq_idx] = qidx
+        for kidx in range(self.nk):
+            for qidx in range(self.nk):
+                kmq_idx = self.k_transfer_map[qidx, kidx]
+                self.reverse_k_transfer_map[kidx, kmq_idx] = qidx
 
         # set up for later when we construct DF
         self.df_factors = None
@@ -335,69 +340,84 @@ class DFAlphaBetaKpointIntegrals:
         return rho_k[:, self.k_slice, self.kmq_slice], rho_kp[:, self.kp_slice, self.kpmq_slice]
 
 
-    def double_factorize(self, thresh=None):
+    def double_factorize(self, thresh=None) -> None:
         """
-        construct a double factorization of the Hamiltonian check's object if 
-        we have already constructed the DF then returns
+        construct a double factorization of the Hamiltonian
 
-        :returns dict: Dict with keys U, lambda_U, V, lambda_V
-                       where U and V are matrices size nk * nmo x Z
-                       lambda_U and lambda_v are size Z vectors.  
+        We store each matrix that is 2N x 2N as objects in the following objects
+
+        alpha_p_mats = np.empty((self.nk, self.nk, self.nk, self.naux), dtype=object)
+        alpha_m_mats = np.empty((self.nk, self.nk, self.nk, self.naux), dtype=object)
+        beta_p_mats = np.empty((self.nk, self.nk, self.nk, self.naux), dtype=object)
+        beta_m_mats = np.empty((self.nk, self.nk, self.nk, self.naux), dtype=object)
+
+        where the input is [k-idx, k'-idx, q-idx, naux] and output is the 2N x 2N matrix
+
+        :returns: None. we mutate the object and store listed objects above 
         """
         if thresh is None:
             thresh = 1.0E-13
         if self.df_factors is not None:
             return self.df_factors
 
-        a_mats = np.empty((self.nk,), dtype=object)
-        b_mats = np.empty((self.nk,), dtype=object)
-        u_basis = np.empty((self.nk, self.naux), dtype=object)
-        u_lambda = np.empty((self.nk, self.naux), dtype=object)
-        v_basis = np.empty((self.nk, self.naux), dtype=object)
-        v_lambda = np.empty((self.nk, self.naux), dtype=object)
+        alpha_p_mats = np.zeros((self.nk, self.nk, self.nk, self.naux, 4 * self.nao, 4 * self.nao), dtype=np.complex128)
+        alpha_m_mats = np.zeros((self.nk, self.nk, self.nk, self.naux, 4 * self.nao, 4 * self.nao), dtype=np.complex128)
+        beta_p_mats = np.zeros((self.nk, self.nk, self.nk, self.naux, 4 * self.nao, 4 * self.nao), dtype=np.complex128)
+        beta_m_mats = np.zeros((self.nk, self.nk, self.nk, self.naux, 4 * self.nao, 4 * self.nao), dtype=np.complex128)
 
-        for iq in range(self.nk):
-            A, B = self.build_AB_from_chol(iq)
-            a_mats[iq] = np.zeros((self.naux, self.nao * self.nk, self.nao * self.nk), dtype=np.complex128)
-            b_mats[iq] = np.zeros((self.naux, self.nao * self.nk, self.nao * self.nk), dtype=np.complex128)
-            for nc in range(self.naux):
-                # diagonalize A-mat at thresh 
-                A_eigs, A_eigv = get_df_factor(A[nc], thresh)
-                u_basis[iq, nc] = A_eigv[:, :]
-                u_lambda[iq, nc] = A_eigs[:]
-                a_mats[iq][nc] = A_eigv @ np.diag(A_eigs) @ A_eigv.conj().T
+        kconserv = tools.get_kconserv(self.kmf.cell, self.kmf.kpts)
+        nkpts = self.nk
+        # recall (k, k-q|k'-q, k')
+        for kidx in range(nkpts):
+            for kpidx in range(nkpts):
+                for qidx in range(nkpts):                 
+                    kmq_idx = self.k_transfer_map[qidx, kidx]
+                    kpmq_idx = self.k_transfer_map[qidx, kpidx]
+                    alpha_p, alpha_m, beta_p, beta_m = \
+                       self.build_alpha_beta_from_chol(kidx, kpidx, qidx)
+                    for nc in range(self.naux):
+                        alphap_eigs, alphap_eigv = get_df_factor(alpha_p[nc], thresh)
+                        alpha_p_mats[kidx, kpidx, qidx][nc, :, :] = alphap_eigv @ np.diag(alphap_eigs) @ alphap_eigv.conj().T
+                        assert np.allclose(alpha_m[nc].conj().T, -alpha_m[nc])
+                        alpham_eigs, alpham_eigv = get_df_factor(1j * alpha_m[nc], thresh)
+                        alpha_m_mats[kidx, kpidx, qidx][nc, :, :] = alpham_eigv @ np.diag(-1j * alpham_eigs) @ alpham_eigv.conj().T
 
-                # diagonalize B-mat at thresh
-                B_eigs, B_eigv = get_df_factor(B[nc], thresh)
-                v_basis[iq, nc] = B_eigv[:, :]
-                v_lambda[iq, nc] = B_eigs[:]
-                b_mats[iq][nc] = B_eigv @ np.diag(B_eigs) @ B_eigv.conj().T
+                        betap_eigs, betap_eigv = get_df_factor(beta_p[nc], thresh)
+                        beta_p_mats[kidx, kpidx, qidx][nc, :, :] = betap_eigv @ np.diag(betap_eigs) @ betap_eigv.conj().T
+                        assert np.allclose(beta_m[nc].conj().T, -beta_m[nc])
+                        betam_eigs, betam_eigv = get_df_factor(1j * beta_m[nc], thresh)
+                        beta_m_mats[kidx, kpidx, qidx][nc, :, :] = betam_eigv @ np.diag(-1j * betam_eigs) @ betam_eigv.conj().T
 
-        self.df_factors  = {'U': u_basis, 'lambda_U': u_lambda,
-                            'V': v_basis, 'lambda_V': v_lambda}
-        self.a_mats = a_mats
-        self.b_mats = b_mats
-        return self.df_factors
+        self.alpha_p_mats = alpha_p_mats 
+        self.alpha_m_mats = alpha_m_mats        
+        self.beta_p_mats = beta_p_mats         
+        self.beta_m_mats = beta_m_mats
+        return
 
-    def get_eri(self, ikpts, a_mats=None, b_mats=None):
+    def get_eri(self, ikpts):
         """
         Construct (pkp qkq| rkr sks) via A and B tensors that have already been constructed
 
         :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
         """
-        if (self.a_mats is None or self.b_mats is None) and (a_mats is None and b_mats is None):
-            raise ValueError("No DF factorization has occured yet. Rerun by calling inst.double_factorize()")
-        
-        if a_mats is None:
-            a_mats = self.a_mats
-        if b_mats is None:
-            b_mats = self.b_mats 
-
-        ikp, ikq, ikr, iks = ikpts
+        ikp, ikq, ikr, iks = ikpts # (k, k-q, k'-q, k')
+        qidx = self.reverse_k_transfer_map[ikp, ikq]
+        test_qidx = self.reverse_k_transfer_map[iks, ikr]
+        assert test_qidx == qidx
 
         # build Cholesky vector from truncated A and B
-        Luv = self.build_chol_from_AB(a_mats, b_mats)  
-        return np.einsum('npq,nsr->pqrs', Luv[ikp, ikq], Luv[iks, ikr].conj(), optimize=True)
+        chol_val_k_kmq, chol_val_kp_kpmq = self.build_chol_part_from_alpha_beta(ikp, 
+                                                             iks,  
+                                                             qidx, 
+                                                             self.alpha_p_mats[ikp, iks, qidx],
+                                                             self.alpha_m_mats[ikp, iks, qidx],
+                                                             self.beta_p_mats[ikp, iks, qidx],
+                                                             self.beta_m_mats[ikp, iks, qidx]
+                                                             )
+
+        # return np.einsum('npq,nsr->pqrs', Luv[ikp, ikq], Luv[iks, ikr].conj(), optimize=True)
+        return np.einsum('npq,nsr->pqrs', chol_val_k_kmq, chol_val_kp_kpmq.conj(), optimize=True)
+
     
     def get_eri_exact(self, ikpts):
         """

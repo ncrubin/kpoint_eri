@@ -139,5 +139,46 @@ def test_alphabeta_decomp():
                 assert np.allclose(beta_p, beta_p.transpose((0,2,1)).conj())
                 assert np.allclose(beta_m, -beta_m.transpose((0,2,1)).conj())
 
+                test_chol_val_k_kmq, test_chol_val_kp_kpmq = \
+                    dfk_inst.build_chol_part_from_alpha_beta(kidx, 
+                                                             kpidx,  
+                                                             qidx, 
+                                                             alpha_p,
+                                                             alpha_m,
+                                                             beta_p,
+                                                             beta_m
+                                                             )
+                assert np.allclose(test_chol_val_k_kmq, Luv[kidx, kmq_idx])
+                assert np.allclose(test_chol_val_kp_kpmq, Luv[kpidx, kpmq_idx])
+    
+    # now test if integrals are correctly reconstructed after decomposition
+    dfk_inst.double_factorize(thresh=1.0E-14)
+    for kidx in range(nkpts):
+        for kpidx in range(nkpts):
+            for qidx in range(nkpts):                 
+                kmq_idx = dfk_inst.k_transfer_map[qidx, kidx]
+                kpmq_idx = dfk_inst.k_transfer_map[qidx, kpidx]
+                exact_eri_block = dfk_inst.get_eri_exact([kidx, kmq_idx, kpmq_idx, kpidx])
+                test_eri_block = dfk_inst.get_eri([kidx, kmq_idx, kpmq_idx, kpidx])
+                assert np.allclose(exact_eri_block, test_eri_block)
 
-test_alphabeta_decomp()
+    print("PASSED TESTS")
+
+    # new test to get integrals
+    approx_cc = cc.KRCCSD(mf)
+    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
+    from kpoint_eri.resource_estimates.cc_helper import _ERIS
+    print("Building approx cc")
+    approx_cc = build_cc(approx_cc, dfk_inst)
+    eris = approx_cc.ao2mo(lambda x: x)
+    emp2, _, _ = approx_cc.init_amps(eris)
+    approx_cc.kernel()
+
+    exact_cc = cc.KRCCSD(mf)
+    eris = exact_cc.ao2mo()
+    exact_emp2, _, _ = exact_cc.init_amps(eris)
+    exact_cc.kernel()
+    assert np.isclose(approx_cc.e_corr, exact_cc.e_corr)
+    assert np.isclose(exact_emp2, emp2)
+
+# test_alphabeta_decomp()
