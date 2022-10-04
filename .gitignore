@@ -128,3 +128,6 @@ src/fqe/lib/_fqe_data.c
 # pyscf files
 *.chk
 *.h5
+
+# vscode files
+*.vscode
