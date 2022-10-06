@@ -50,8 +50,8 @@ class DFABKpointIntegrals:
         self.chol = cholesky_factor
         self.kmf = kmf 
         self.nk = len(self.kmf.kpts)
-        self.nao = self.kmf.cell.nao
         self.naux = self.chol[0, 0].shape[0]
+        self.nao = cholesky_factor[0, 0].shape[-1]
         kpts = self.kmf.kpts
         cell = self.kmf.cell
         k_transfer_map = build_momentum_transfer_mapping(self.kmf.cell, self.kmf.kpts)
@@ -213,7 +213,7 @@ class DFAlphaBetaKpointIntegrals:
         self.chol = cholesky_factor
         self.kmf = kmf 
         self.nk = len(self.kmf.kpts)
-        self.nao = self.kmf.cell.nao
+        self.nao = cholesky_factor[0, 0].shape[-1]
         self.naux = self.chol[0, 0].shape[0]
         kpts = self.kmf.kpts
         cell = self.kmf.cell
