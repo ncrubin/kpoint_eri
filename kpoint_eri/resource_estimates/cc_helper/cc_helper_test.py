@@ -2,7 +2,7 @@ from pyscf.pbc import gto, scf, mp
 import numpy as np
 
 
-def test_eri_blocks():
+def test_eri_helpers():
     cell = gto.Cell()
     cell.atom = """
     C 0.000000000000   0.000000000000   0.000000000000
@@ -16,10 +16,9 @@ def test_eri_blocks():
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
     cell.verbose = 4
-    cell.spin = 2
     cell.build()
 
-    kmesh = [1, 1, 1]
+    kmesh = [1, 2, 2]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KROHF(cell, kpts).rs_density_fit()
     mf.chkfile = "uccsd_test.chk"
@@ -27,22 +26,22 @@ def test_eri_blocks():
     mf.with_df._cderi_to_save = mf.chkfile
     mf.kernel()
 
+    nk = np.prod(kmesh)
+
     from pyscf.pbc.mp.kump2 import KUMP2
 
     u_from_ro = scf.addons.convert_to_uhf(mf)
-    # mymp = KUMP2(u_from_ro)
-    # mymp.kernel()
     mymp = mp.KMP2(mf)
 
     from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
-    Luv = cholesky_from_df_ints(
-        mymp, mo_coeff=mf.mo_coeff
-    )  # [kpt, kpt, naux, nao, nao]
+    Luv = cholesky_from_df_ints(mymp)  # [kpt, kpt, naux, nao, nao]
     from pyscf.pbc.cc.kccsd_uhf import _make_df_eris
     from pyscf.pbc.cc import KUCCSD
 
     cc = KUCCSD(u_from_ro)
+    eris = cc.ao2mo()
+    emp2_ref, _, _ = cc.init_amps(eris)
     ref_eris = _make_df_eris(cc)
     from kpoint_eri.resource_estimates.cc_helper.custom_ao2mo import (
         _custom_make_df_eris,
@@ -76,6 +75,16 @@ def test_eri_blocks():
     for block in eri_blocks:
         assert np.allclose(test_eris.__dict__[block][:], ref_eris.__dict__[block][:])
 
+    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_ucc
+
+    helper = NCRSingleFactorizationHelper(cholesky_factor=Luv, kmf=mf)
+    approx_cc = KUCCSD(u_from_ro)
+    approx_cc = build_ucc(approx_cc, helper)
+    eris = approx_cc.ao2mo(lambda x: x)
+    emp2_approx, _, _ = approx_cc.init_amps(eris)
+
+    assert abs(emp2_approx - emp2_ref) < 1e-12
+
 
 if __name__ == "__main__":
-    test_eri_blocks()
+    test_eri_helpers()
