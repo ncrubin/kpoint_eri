@@ -139,7 +139,6 @@ def _custom_make_df_eris(cc, eri_helper, mo_coeff=None):
     mo_coeff = padded_mo_coeff(cc, mo_coeff)
     eris.mo_coeff = mo_coeff
     eris.nocc = cc.nocc
-    print(eris.nocc)
     thisdf = cc._scf.with_df
 
     kpts = cc.kpts
@@ -246,7 +245,7 @@ def _custom_kuccsd_eris_common_(cc, eris, eri_helper):
     for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
         ks = kconserv[kp,kq,kr]
         kpts = [kp, kq, kr, ks]
-        tmp = eri_helper.get_eri(kpts)
+        tmp = eri_helper.get_eri(kpts) / nkpts
         eris.oooo[kp,kq,kr] = tmp[:nocca,:nocca,:nocca,:nocca]
         eris.ooov[kp,kq,kr] = tmp[:nocca,:nocca,:nocca,nocca:]
         eris.oovv[kp,kq,kr] = tmp[:nocca,:nocca,nocca:,nocca:]
@@ -257,7 +256,7 @@ def _custom_kuccsd_eris_common_(cc, eris, eri_helper):
     for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
         ks = kconserv[kp,kq,kr]
         kpts = [kp, kq, kr, ks]
-        tmp = eri_helper.get_eri(kpts)
+        tmp = eri_helper.get_eri(kpts) / nkpts
         eris.OOOO[kp,kq,kr] = tmp[:noccb,:noccb,:noccb,:noccb]
         eris.OOOV[kp,kq,kr] = tmp[:noccb,:noccb,:noccb,noccb:]
         eris.OOVV[kp,kq,kr] = tmp[:noccb,:noccb,noccb:,noccb:]
@@ -268,7 +267,7 @@ def _custom_kuccsd_eris_common_(cc, eris, eri_helper):
     for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
         ks = kconserv[kp,kq,kr]
         kpts = [kp, kq, kr, ks]
-        tmp = eri_helper.get_eri(kpts)
+        tmp = eri_helper.get_eri(kpts) / nkpts
         eris.ooOO[kp,kq,kr] = tmp[:nocca,:nocca,:noccb,:noccb]
         eris.ooOV[kp,kq,kr] = tmp[:nocca,:nocca,:noccb,noccb:]
         eris.ooVV[kp,kq,kr] = tmp[:nocca,:nocca,noccb:,noccb:]
@@ -279,7 +278,7 @@ def _custom_kuccsd_eris_common_(cc, eris, eri_helper):
     for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
         ks = kconserv[kp,kq,kr]
         kpts = [kp, kq, kr, ks]
-        tmp = eri_helper.get_eri(kpts)
+        tmp = eri_helper.get_eri(kpts) / nkpts
         # eris.OOoo[kp,kq,kr] = tmp[:noccb,:noccb,:nocca,:nocca]
         eris.OOov[kp,kq,kr] = tmp[:noccb,:noccb,:nocca,nocca:]
         eris.OOvv[kp,kq,kr] = tmp[:noccb,:noccb,nocca:,nocca:]
