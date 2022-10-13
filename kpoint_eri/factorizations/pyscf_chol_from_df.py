@@ -81,7 +81,7 @@ def cholesky_from_df_ints(mp):
 
     log.timer_debug1("transforming DF-AO integrals to MO", *cput0)
 
-    return Lchol
+    return Lchol, mo_coeff
 
 
 def _format_jks(vj, dm, kpts_band):
