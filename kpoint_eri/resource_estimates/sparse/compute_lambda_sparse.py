@@ -74,6 +74,47 @@ def compute_lambda(
     lambda_tot = lambda_T + lambda_V
     return lambda_tot, lambda_T, lambda_V, num_nnz, 1-num_nnz/tot_size
 
+def compute_lambda_new(
+        hcore,
+        sparse_inst,
+        momentum_map,
+        ):
+    lambda_V = 0.0
+    num_nnz = 0
+    num_kpoints = len(hcore)
+    for iq in range(num_kpoints):
+        for ikp, iks in product(range(num_kpoints), repeat=2):
+            ikq = momentum_map[iq, ikp]
+            ikr = momentum_map[iq, iks]
+            ikpts = [ikp, ikq, ikr, iks]
+            eri_pqrs = sparse_inst.get_eri(ikpts) / num_kpoints
+            num_nnz += np.sum(np.abs(eri_pqrs) > 0)
+            lambda_V += np.sum(np.abs(eri_pqrs))
+
+    # factor of 1/4 in hamiltonian gets multiplied by factor of 4 for spin
+    # summation. so no further prefactor of num_nnz or lambda
+
+    lambda_T = 0.0
+    for ik in range(num_kpoints):
+        h2b = np.zeros_like(hcore)
+        for ik_prime in range(num_kpoints):
+            # (p k r Q | r Q q k)
+            ikpts = [ik, ik_prime, ik_prime, ik]
+            eri_pqrs = sparse_inst.get_eri(ikpts) / num_kpoints
+            h2b += np.einsum('prrq->pq', eri_pqrs, optimize=True)
+        T = hcore - 0.5 * h2b
+        lambda_T += np.sum(np.abs(T))
+
+    lambda_tot = lambda_T + lambda_V
+    results = {
+            "lambda_tot": lambda_tot,
+            "lambda_T": lambda_tot,
+            "lambda_V": lambda_tot,
+            "num_nnz": num_nnz,
+            }
+    return results
+
+
 
 def compute_lambda_ncr(hcore, sf_obj):
     kpts = sf_obj.kmf.kpts
