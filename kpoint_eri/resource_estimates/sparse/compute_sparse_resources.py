@@ -1,0 +1,131 @@
+"""
+Compute resource estimates for sparse LCU of k-point Hamiltonian
+"""
+from typing import Tuple
+import numpy as np
+from numpy.lib.scimath import arccos, arcsin  # has analytc continuation to cplx
+from openfermion.resource_estimates.utils import QI, power_two
+
+
+def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
+                stps: int) -> Tuple[int, int, int]:
+    """ Determine fault-tolerant costs using sparse decomposition in quantum
+        chemistry
+    Args:
+        n (int) - the number of spin-orbitals
+        Nk (int) - the number of k-points
+        lam (float) - the lambda-value for the Hamiltonian
+        dE (float) - allowable error in phase estimation
+        L (int) - the rank of the first decomposition
+        Lxi (int) - the total number of eigenvectors
+        chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
+            number of bits for the representation of the coefficients
+        beta (int) - equivalent to beth in the document, the number of bits
+            for the rotations
+        stps (int) - an approximate number of steps to choose the precision
+            of single qubit rotations in preparation of the equal superposition
+            state
+    Returns:
+        step_cost (int) - Toffolis per step
+        total_cost (int) - Total number of Toffolis
+        ancilla_cost (int) - Total ancilla cost
+    """
+
+    # I think there is a bug in the mathematica notebook. It does not check if
+    # 2 is a factor first, which it should, cf. the similar function in
+    # costingdf.nb Below is correct using the power_two() function, to give
+    # power of 2 that is a factor of d.
+    eta = 1 if power_two(d) == 0 else power_two(d)
+
+    nN = np.ceil(np.log2(n // 2))
+    nNk = np.ceil(np.log2(Nk))
+
+    m = chi + 8 * nN + 4  # Eq (A13)
+    m = m + 4 # in the case where spin values need to be output, the size of the QROM is increased by 4 bits
+    m = m + 6 * nNk + 1 # where we need to ouoput the k,k', Q values, and a bit to select between real and imaginary parts
+
+    oh = [0] * 20
+
+    nM = (np.ceil(np.log2(d)) - eta) / 2
+
+    for p in range(2, 22):
+        # JJG note: arccos arg may be > 1
+        v = np.round(np.power(2,p+1) / (2 * np.pi) * arccos(np.power(2,nM) /\
+            np.sqrt(d/2**eta)/2))
+        oh[p-2] = np.real(stps * (1 / (np.sin(3 * arcsin(np.cos(v * 2 * np.pi /\
+            np.power(2,p+1)) * \
+            np.sqrt(d/2**eta) / np.power(2,nM)))**2) - 1) + 4 * (p + 1))
+
+    # Bits of precision for rotation
+    br = int(np.argmin(oh) + 1) + 2
+
+    # Hand selecting the k expansion factor
+    k1 = 32
+
+    # Equation (A17)
+    cost = np.ceil(d/k1) + m * (k1 -1) + QI(d)[1] + 4 * n + 8 * nN + 2 * chi + \
+        7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 19
+    cost = cost + 3 # as well as the increase in the number of output qubits where we modfiied m, we need to do a controlled SWAP of the two pairs of spin qubits (cost 2) as well as perform the controlled swap of thw two spin for symmetry
+    cost = cost + 3 * nNk + 3 * nNk + 4 * nNk # We have an extra cost of 3*nNk for swapping the k, k', and Q values in the state preparation,  then 3*nNk for computing k - Q and k' -  Q (one is controlled), then 4*nNk for the controlled swaps to generate the symmetries
+    cost = cost + 4 * nN - 2 + 5 # Previously we had a cost of 4 N - 6 since one didn' t need to be controlled (reducing the cost by 2). Now we are needing to select between X and Y as well, which doubles the selected cost of 4 (N - 1).  We also have another 3 Toffolis for phase factors and 2 for selecting between X and Y
+
+    # Number of iterations needed for the phase estimation.
+    iters = np.ceil(np.pi * lam / (dE * 2))
+
+    # The following are the number of qubits from the listing on page 39.
+
+    # Control registers for phase estimation and iteration on them.
+    ac1 = 2 * np.ceil(np.log2(iters)) - 1
+
+    # System qubits
+    ac2 = n * Nk # shoulding this be Nk * n
+
+    # The register used for the QROM
+    ac3 = np.ceil(np.log2(d))
+
+    # The qubit used for flagging the success of the equal superposition state
+    # preparation and the ancilla qubit for rotation
+    ac45 = 2
+
+    # The phase gradient state
+    ac6 = br
+
+    # The equal superposition state for coherent alias sampling
+    ac7 = chi
+
+    # The ancillas used for QROM
+    ac8 = np.ceil(np.log2(d / k1)) + m * k1
+
+    ac9 = 5
+
+    ancilla_cost = ac1 + ac2 + ac3 + ac45 + ac6 + ac7 + ac8 + ac9
+
+    # Sanity checks before returning as int
+    assert cost.is_integer()
+    assert iters.is_integer()
+    assert ancilla_cost.is_integer()
+
+    step_cost = int(cost)
+    total_cost = int(cost * iters)
+    ancilla_cost = int(ancilla_cost)
+
+    return step_cost, total_cost, ancilla_cost
+
+if __name__ == "__main__":
+    nLi = 152
+    lam_Li = 1547.3
+    dLi = 440501
+    dE = 0.001
+    chi = 10
+    nK = 8
+
+    # n: int, Nk: int, lam: float, d: int, dE: float, chi: int, stps: int) -> Tuple[int, int, int]
+    stps2 = cost_sparse(nLi, nK, lam_Li, dLi, dE, chi, 20_000)
+    toff_per_step, total_toff, total_ancilla_cost = cost_sparse(nLi, nK, lam_Li, dLi, dE, chi, stps2[0])
+    print(toff_per_step)
+    print(total_toff)
+    print(total_ancilla_cost)
+    assert toff_per_step == 18914
+    assert total_toff == 45_970_363_516
+    assert total_ancilla_cost == 4294
+
