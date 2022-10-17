@@ -4,10 +4,10 @@ from kpoint_eri.resource_estimates.df.compute_df_resources import compute_cost
 
 
 def test_estimate():
-    n = 302
-    lam = 3071.8
-    L = 275
-    Lxi = 11
+    n = 52
+    lam = 92.8
+    L = 336
+    Lxi = 616
     dE = 0.001
     chi = 10
     beta = 20
@@ -22,6 +22,6 @@ def test_estimate():
         beta=beta,
         stps=20000,
     )
-    assert np.isclose(stps2[0], 33721)
-    assert np.isclose(stps2[1], 162709658733)
-    assert np.isclose(stps2[2], 7206)
+    assert np.isclose(stps2[0], 6745)
+    assert np.isclose(stps2[1], 983218650)
+    assert np.isclose(stps2[2], 730)
