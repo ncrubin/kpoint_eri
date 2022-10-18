@@ -7,7 +7,7 @@ from kpoint_eri.resource_estimates.sf.ncr_integral_helper import (
 )
 
 
-class SparseFactorizationHelper(NCRSingleFactorizationHelper):
+class SparseKPointHelper(NCRSingleFactorizationHelper):
     def __init__(
         self,
         cholesky_factor: np.ndarray,
