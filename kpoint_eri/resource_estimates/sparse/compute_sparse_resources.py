@@ -35,7 +35,7 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     # 2 is a factor first, which it should, cf. the similar function in
     # costingdf.nb Below is correct using the power_two() function, to give
     # power of 2 that is a factor of d.
-    eta = 1 if power_two(d) == 0 else power_two(d)
+    eta = power_two(d) # 0 if power_two(d) == 0 else power_two(d)
 
     nN = np.ceil(np.log2(n // 2))
     nNk = np.ceil(np.log2(Nk))
@@ -67,7 +67,7 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
         7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 19
     cost = cost + 3 # as well as the increase in the number of output qubits where we modfiied m, we need to do a controlled SWAP of the two pairs of spin qubits (cost 2) as well as perform the controlled swap of thw two spin for symmetry
     cost = cost + 3 * nNk + 3 * nNk + 4 * nNk # We have an extra cost of 3*nNk for swapping the k, k', and Q values in the state preparation,  then 3*nNk for computing k - Q and k' -  Q (one is controlled), then 4*nNk for the controlled swaps to generate the symmetries
-    cost = cost + 4 * nN - 2 + 5 # Previously we had a cost of 4 N - 6 since one didn' t need to be controlled (reducing the cost by 2). Now we are needing to select between X and Y as well, which doubles the selected cost of 4 (N - 1).  We also have another 3 Toffolis for phase factors and 2 for selecting between X and Y
+    cost = cost + 4 * n - 2 + 5 # Previously we had a cost of 4 N - 6 since one didn' t need to be controlled (reducing the cost by 2). Now we are needing to select between X and Y as well, which doubles the selected cost of 4 (N - 1).  We also have another 3 Toffolis for phase factors and 2 for selecting between X and Y
 
     # Number of iterations needed for the phase estimation.
     iters = np.ceil(np.pi * lam / (dE * 2))
