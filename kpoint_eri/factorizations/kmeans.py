@@ -69,7 +69,7 @@ class KMeansCVT(object):
 
     def map_centroids_to_grid(self, centroids):
         grid_mapping = self.classify_grid_points(centroids, self.grid)
-        return self.grid[grid_mapping]
+        return grid_mapping
 
     def find_interpolating_points(
         self,
@@ -92,7 +92,7 @@ class KMeansCVT(object):
         new_centroids = np.zeros_like(centroids)
         delta_grid = 1.0
         if verbose:
-            print("{:<10s} {:>13s}".format("iteration", "Error"))
+            print("{:<10s}  {:>13s}".format("iteration", "Error"))
         for iteration in range(self.max_iteration):
             grid_mapping = self.classify_grid_points(self.grid, centroids)
             # Global reduce
@@ -101,7 +101,7 @@ class KMeansCVT(object):
             )
             delta_grid = np.linalg.norm(new_centroids - centroids)
             if verbose:
-                print(f"{iteration:<10d} {delta_grid:13.8e}")
+                print(f"{iteration:<9d}  {delta_grid:13.8e}")
             if delta_grid < self.threshold:
                 return self.map_centroids_to_grid(new_centroids)
             centroids[:] = new_centroids[:]
