@@ -131,3 +131,6 @@ src/fqe/lib/_fqe_data.c
 
 # vscode files
 *.vscode
+
+# images
+*.png
