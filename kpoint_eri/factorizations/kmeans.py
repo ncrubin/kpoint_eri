@@ -100,9 +100,12 @@ class KMeansCVT(object):
                 weighting_factor, grid_mapping, centroids
             )
             delta_grid = np.linalg.norm(new_centroids - centroids)
-            if verbose:
+            if verbose and iteration % 10 == 0:
                 print(f"{iteration:<9d}  {delta_grid:13.8e}")
             if delta_grid < self.threshold:
+                if verbose:
+                    print("KMeansCVT successfully completed.")
+                    print(f"Final error {delta_grid:13.8e}.")
                 return self.map_centroids_to_grid(new_centroids)
             centroids[:] = new_centroids[:]
         print("Warning K-Means not converged.")
