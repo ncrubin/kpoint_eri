@@ -1,5 +1,4 @@
 import numpy as np
-import time
 
 
 class KMeansCVT(object):
@@ -18,7 +17,7 @@ class KMeansCVT(object):
         self.threshold = threshold
 
     @staticmethod
-    def classify_grid_points(grid_points, centroids) -> np.ndarray:
+    def classify_grid_points(grid_points: np.ndarray, centroids: np.ndarray) -> np.ndarray:
         r"""Assign grid points to centroids.
 
         Find centroid closest to each given grid point.
@@ -31,10 +30,16 @@ class KMeansCVT(object):
             array of length num_interp_points.
         :returns: 1D np.array assigning grid point to centroids
         """
-        # Build N_g x N_mu matrix of distances using broadcasting.
-        distances = np.linalg.norm(
-            grid_points[:, None, :] - centroids[None, :, :], axis=2
-        )
+        # Build N_g x N_mu matrix of distances.
+        # distances = np.linalg.norm(
+            # grid_points[:, None, :] - centroids[None, :, :], axis=2
+        # )
+        num_grid_points = grid_points.shape[0]
+        num_interp_points = centroids.shape[0]
+        distances = np.zeros((num_grid_points, num_interp_points))
+        # For loop is faster than broadcasting by 2x.
+        for ig in range(num_grid_points):
+            distances[ig] = np.linalg.norm(grid_points[ig]-centroids, axis=1)
         # Find shortest distance for each grid point.
         classification = np.argmin(distances, axis=1)
         return classification
@@ -78,7 +83,9 @@ class KMeansCVT(object):
         centroids=None,
         verbose=True,
     ) -> np.ndarray:
-        """ """
+        """
+        """
+        import time
         num_grid_points = self.grid.shape[0]
         if centroids is None:
             # Randomly select grid points as centroids.
@@ -94,13 +101,17 @@ class KMeansCVT(object):
         if verbose:
             print("{:<10s}  {:>13s}".format("iteration", "Error"))
         for iteration in range(self.max_iteration):
+            start = time.time()
             grid_mapping = self.classify_grid_points(self.grid, centroids)
+            print("classify: ", time.time()-start)
             # Global reduce
+            start = time.time()
             new_centroids[:] = self.compute_new_centroids(
                 weighting_factor, grid_mapping, centroids
             )
+            print("update : ", time.time()-start)
             delta_grid = np.linalg.norm(new_centroids - centroids)
-            if verbose and iteration % 10 == 0:
+            if verbose and iteration % 1 == 0:
                 print(f"{iteration:<9d}  {delta_grid:13.8e}")
             if delta_grid < self.threshold:
                 if verbose:
