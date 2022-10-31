@@ -45,9 +45,11 @@ def supercell_isdf(
     r"""
     Build ISDF-THC tensors.
 
-    :returns tuple: (zeta, chi, Theta): central tensor, orbitals on interpolating
-        points and matrix interpolating vectors Theta = [xi_1, xi_2.., xi_Nmu]
-        [R, Nmu].  Note chi is not necessarily normalized (check).
+    :returns tuple: (chi, zeta, Theta): orbitals on interpolating
+        points, zeta (central tensor), and matrix of interpolating vectors Theta
+        of dimension [R, num_interp_points] (also called xi_mu(r)).
+
+    TODO: Note chi is not necessarily normalized (check).
     """
 
     cell = mydf.cell
