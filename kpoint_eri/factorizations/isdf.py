@@ -38,16 +38,29 @@ def solve_isdf(orbitals, interp_indx):
 def supercell_isdf(
     mydf: df.FFTDF,
     interp_indx: np.ndarray,
-    orbitals,
-    grid_points,
+    orbitals: np.ndarray,
+    grid_points: np.ndarray,
     kpoint=np.zeros(3),
 ):
     r"""
     Build ISDF-THC tensors.
 
+    Given the orbitals evaluated on a (dense) real space grid, and a set of
+    interpolating points (indexed  by interp_indx) determine the interpolating
+    orbitals (chi), central tensor (zeta), and interpolating vectors Theta (also
+    called xi).
+
+    :param mydf: instance of pyscf.pbc.df.FFTDF object.
+    :param interp_indx: array indexing interpolating points determined through
+        K-Means CVT procedure. Dimension [num_interp_points]
+    :param orbitals: orbitals on a grid of shape [num_grid_points, num_orbitals]
+    :param grid_points: Real space grid. Dimension [num_grid_points, num_dim],
+        num_dim is 1, 2 or 3 for 1D, 2D, 3D.
     :returns tuple: (chi, zeta, Theta): orbitals on interpolating
         points, zeta (central tensor), and matrix of interpolating vectors Theta
-        of dimension [R, num_interp_points] (also called xi_mu(r)).
+        of dimension [num_grid_points, num_interp_points] (also called
+        xi_mu(r)), where num_grid_points is the number of real space grid points
+        and num_interp_points is the number of interpolating points.
 
     TODO: Note chi is not necessarily normalized (check).
     """
@@ -72,16 +85,35 @@ def supercell_isdf(
 def kpoint_isdf(
     mydf: df.FFTDF,
     interp_indx: np.ndarray,
-    kpts,
-    orbitals,
-    grid_points,
+    kpts: np.ndarray,
+    orbitals: np.ndarray,
+    grid_points: np.ndarray,
 ):
     r"""
-    Build ISDF-THC representation of ERI tensors.
+    Build kpoint ISDF-THC tensors.
 
+    Given the orbitals evaluated on a (dense) real space grid, and a set of
+    interpolating points (indexed  by interp_indx) determine the interpolating
+    orbitals (chi), central tensor (zeta), and interpolating vectors Theta (also
+    called xi).
+
+    WARNING: Not currently 100% worked out re central tensor.
+
+    :param mydf: instance of pyscf.pbc.df.FFTDF object.
+    :param interp_indx: array indexing interpolating points determined through
+        K-Means CVT procedure. Dimension [num_interp_points]
+    :param kpts: Array of k-points. 
+    :param orbitals: orbitals on a grid of shape [num_grid_points,
+        num_orbitals], note num_orbitals = N_k * m, where m is the number of
+        orbitals in the unit cell and N_k is the number of k-points.
+    :param grid_points: Real space grid. Dimension [num_grid_points, num_dim],
+        num_dim is 1, 2 or 3 for 1D, 2D, 3D.
     :returns tuple: (chi, Theta): orbitals on interpolating
-        points and matrix interpolating vectors Theta = [xi_1, xi_2.., xi_Nmu].
-        Note chi is not necessarily normalized (check).
+        points, and a matrix of interpolating vectors Theta
+        of dimension [num_grid_points, num_interp_points] (also called
+        xi_mu(r)), where num_grid_points is the number of real space grid points
+        and num_interp_points is the number of interpolating points.
+
     """
     num_grid_points = len(grid_points)
     assert orbitals.shape[0] == num_grid_points
