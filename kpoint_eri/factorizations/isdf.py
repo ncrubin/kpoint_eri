@@ -77,28 +77,11 @@ def kpoint_isdf(
     r"""
     Build ISDF-THC representation of ERI tensors.
 
-    :returns tuple: (zeta, chi, Theta): central tensor, orbitals on interpolating
+    :returns tuple: (chi, Theta): orbitals on interpolating
         points and matrix interpolating vectors Theta = [xi_1, xi_2.., xi_Nmu].
         Note chi is not necessarily normalized (check).
     """
-    num_kpts = len(kpts)
-    cell = mydf.cell
-
     num_grid_points = len(grid_points)
-    num_interp_points = len(interp_indx)
     assert orbitals.shape[0] == num_grid_points
-
     Theta, chi = solve_isdf(orbitals, interp_indx)
-    zeta_Q = np.zeros(
-        (num_kpts, num_interp_points, num_interp_points), dtype=np.complex128
-    )
-    # FFT Theta[R, mu] -> Theta[mu, G]
-    # Transpose as fft expects contiguous for each mu.
-    Theta_G = tools.fft(Theta.T, mydf.mesh)
-    for iq, q in enumerate(kpts):
-        coulG = tools.get_coulG(cell, k=q, mesh=mydf.mesh)
-        weighted_coulG = coulG * cell.vol / num_grid_points**2.0
-        # zeta_{mu,nu} = \sum_G 4pi/(omega * G^2) zeta_{mu,G} * (zeta_G*){nu, G}
-        Theta_G_tilde = np.einsum("iG,G->iG", Theta_G, weighted_coulG)
-        zeta_Q[iq] = Theta_G_tilde @ Theta_G.conj().T
-    return chi, zeta_Q, Theta
+    return chi, Theta
