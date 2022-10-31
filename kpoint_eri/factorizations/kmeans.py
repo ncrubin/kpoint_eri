@@ -85,7 +85,6 @@ class KMeansCVT(object):
     ) -> np.ndarray:
         """
         """
-        import time
         num_grid_points = self.grid.shape[0]
         if centroids is None:
             # Randomly select grid points as centroids.
@@ -101,17 +100,13 @@ class KMeansCVT(object):
         if verbose:
             print("{:<10s}  {:>13s}".format("iteration", "Error"))
         for iteration in range(self.max_iteration):
-            start = time.time()
             grid_mapping = self.classify_grid_points(self.grid, centroids)
-            print("classify: ", time.time()-start)
             # Global reduce
-            start = time.time()
             new_centroids[:] = self.compute_new_centroids(
                 weighting_factor, grid_mapping, centroids
             )
-            print("update : ", time.time()-start)
             delta_grid = np.linalg.norm(new_centroids - centroids)
-            if verbose and iteration % 1 == 0:
+            if verbose and iteration % 10 == 0:
                 print(f"{iteration:<9d}  {delta_grid:13.8e}")
             if delta_grid < self.threshold:
                 if verbose:
