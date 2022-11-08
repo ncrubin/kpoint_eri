@@ -260,11 +260,11 @@ def kpoint_isdf_double_translation(
         df_inst.cell, kpts, momentum_map
     )
     if only_unique_G:
-        G_mapping_unique = G_mapping_unique
+        G_mapping = G_mapping_unique
         delta_Gs = delta_Gs_unique
     else:
         delta_Gs = [G_vectors] * num_kpts
-        G_mapping_unique = G_mapping
+        G_mapping = G_mapping
     zeta = np.zeros((num_kpts,), dtype=object)
     for iq in range(num_kpts):
         num_G = len(delta_Gs[iq])
@@ -278,4 +278,4 @@ def kpoint_isdf_double_translation(
                 )
                 out_array[iG, iG_prime] = zeta_indx
         zeta[iq] = out_array
-    return chi, zeta, xi, G_mapping_unique
+    return chi, zeta, xi, G_mapping
