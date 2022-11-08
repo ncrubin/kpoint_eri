@@ -305,6 +305,7 @@ def build_eri_isdf(chi, zeta, q_indx, kpts_indx, G_mapping):
     )
     return eri
 
+
 def build_eri_isdf_single_translation(chi, zeta, q_indx, kpts_indx, G_mapping):
     """Build (pkp qkq | rkr sks) from k-point ISDF factors.
 

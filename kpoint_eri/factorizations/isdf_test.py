@@ -893,9 +893,11 @@ def test_kpoint_isdf_build_single_translation():
             for iq in range(zeta.shape[0]):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     kconserv = get_kconserv(cell, kpts)
-    kpts_pq = np.array([(kp, kpts[ikq]) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)])
+    kpts_pq = np.array([(kp, kpts[ikq]) for ikp, kp in enumerate(kpts) for ikq
+                        in range(num_kpts)])
 
-    kpts_pq_indx = np.array([(ikp, ikq) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)])
+    kpts_pq_indx = np.array([(ikp, ikq) for ikp, kp in enumerate(kpts) for ikq
+                             in range(num_kpts)])
     transfers = kpts_pq[:,0] - kpts_pq[:,1]
     # assert len(transfers) == (nk**3)**2
     unique_q, unique_indx, unique_inverse = unique(transfers)
