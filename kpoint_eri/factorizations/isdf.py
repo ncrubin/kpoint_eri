@@ -137,10 +137,12 @@ def build_G_vector_mappings(
     :param kpts: array of kpoints.
     :param momentum_map: momentum mapping to satisfy Q = (k_p - k_q) mod G.
         momentum_map[iq, ikp] = ikq.
-    :returns tuple: (G_vectors, Gpq_mapping), G_vectors is a list of all 27
+    :returns tuple: (G_vectors, Gpq_mapping, Gpq_mapping_unique, delta_Gs), G_vectors is a list of all 27
         G-vectors and Gpq_mapping[iq, kp] = indx_Gpq, where Gpq = kpts[ikp] -
         kpts[ikq] - kpts[iq], i.e. returns index to G-vector (consistent with
-        G_vectors) satisfying this condition.
+        G_vectors) satisfying this condition. Gpq_mapping_unique provides
+        mapping to unique G_vector index. Delta_gs provides compressed lists of
+        unique G vectors.
     """
     G_dict = {}
     G_vectors = np.zeros((27, 3), dtype=np.float64)
@@ -167,7 +169,16 @@ def build_G_vector_mappings(
             )
             Gpq_mapping[iq, ikp] = G_dict[tuple(miller_indx)]
 
-    return G_vectors, Gpq_mapping
+    delta_Gs = np.zeros((num_kpts,), dtype=object)
+    Gpq_mapping_unique = np.zeros_like(Gpq_mapping)
+    for iq in range(num_kpts):
+        unique_G = np.unique(Gpq_mapping[iq])
+        delta_Gs[iq] = G_vectors[unique_G]
+        # Build map to unique index
+        Gpq_mapping_unique[iq] = [
+            ix for el in Gpq_mapping[iq] for ix in np.where(unique_G == el)[0]
+        ]
+    return G_vectors, Gpq_mapping, Gpq_mapping_unique, delta_Gs
 
 
 def build_eri_isdf(chi, zeta, q_indx, kpts_indx, G_mapping):
@@ -245,17 +256,12 @@ def kpoint_isdf_double_translation(
     num_kpts = len(kpts)
     num_interp_points = xi.shape[1]
     assert xi.shape == (num_grid_points, num_interp_points)
-    G_vectors, G_mapping = build_G_vector_mappings(df_inst.cell, kpts, momentum_map)
-    G_mapping_unique = np.zeros_like(G_mapping)
+    G_vectors, G_mapping, G_mapping_unique, delta_Gs_unique = build_G_vector_mappings(
+        df_inst.cell, kpts, momentum_map
+    )
     if only_unique_G:
-        delta_Gs = np.zeros((num_kpts,), dtype=object)
-        for iq in range(num_kpts):
-            unique_G = np.unique(G_mapping[iq])
-            delta_Gs[iq] = G_vectors[unique_G]
-            # Build map to unique index
-            G_mapping_unique[iq] = [
-                ix for el in G_mapping[iq] for ix in np.where(unique_G == el)[0]
-            ]
+        G_mapping_unique = G_mapping_unique
+        delta_Gs = delta_Gs_unique
     else:
         delta_Gs = [G_vectors] * num_kpts
         G_mapping_unique = G_mapping

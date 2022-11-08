@@ -610,7 +610,7 @@ def test_G_vector_mapping():
     kpts = cell.make_kpts(kmesh)
 
     momentum_map = build_momentum_transfer_mapping(cell, kpts)
-    G_vecs, G_map = build_G_vector_mappings(cell, kpts, momentum_map)
+    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings(cell, kpts, momentum_map)
     num_kpts = len(kpts)
     for iq in range(num_kpts):
         for ikp in range(num_kpts):
@@ -620,9 +620,8 @@ def test_G_vector_mapping():
             assert np.allclose(q, kpts[iq] + G_shift)
     for iq in range(num_kpts):
         unique_G = np.unique(G_map[iq])
-        unique_map = [ix for el in G_map[iq] for ix in np.where(unique_G == el)[0]]
         for i, G in enumerate(G_map[iq]):
-            assert unique_G[unique_map[i]] == G
+            assert unique_G[G_unique[iq][i]] == G
 
 
 def test_kpoint_isdf_build():
@@ -641,7 +640,7 @@ def test_kpoint_isdf_build():
     cell.verbose = 4
     cell.build()
 
-    kmesh = [1, 2, 2]
+    kmesh = [1, 2, 1]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts)
     mf.chkfile = "test_isdf_kpoint_build.chk"
