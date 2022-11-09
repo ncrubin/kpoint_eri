@@ -13,7 +13,7 @@ from kpoint_eri.factorizations.isdf import (
     build_G_vector_mappings_single_translation,
     kpoint_isdf_double_translation,
     kpoint_isdf_single_translation,
-    build_eri_isdf,
+    build_eri_isdf_double_translation,
     build_eri_isdf_single_translation,
 )
 from kpoint_eri.resource_estimates.utils import build_momentum_transfer_mapping
@@ -614,7 +614,9 @@ def test_G_vector_mapping():
     kpts = cell.make_kpts(kmesh)
 
     momentum_map = build_momentum_transfer_mapping(cell, kpts)
-    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings(cell, kpts, momentum_map)
+    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings(
+        cell, kpts, momentum_map
+    )
     num_kpts = len(kpts)
     for iq in range(num_kpts):
         for ikp in range(num_kpts):
@@ -626,6 +628,7 @@ def test_G_vector_mapping():
         unique_G = np.unique(G_map[iq])
         for i, G in enumerate(G_map[iq]):
             assert unique_G[G_unique[iq][i]] == G
+
 
 def test_G_vector_mapping_single_translation():
     cell = gto.Cell()
@@ -650,14 +653,19 @@ def test_G_vector_mapping_single_translation():
 
     momentum_map = build_momentum_transfer_mapping(cell, kpts)
 
-    kpts_pq = np.array([(kp, kpts[ikq]) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)])
+    kpts_pq = np.array(
+        [(kp, kpts[ikq]) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)]
+    )
 
-    kpts_pq_indx = np.array([(ikp, ikq) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)])
-    transfers = kpts_pq[:,0] - kpts_pq[:,1]
-    assert len(transfers) == (nk**3)**2
+    kpts_pq_indx = np.array(
+        [(ikp, ikq) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)]
+    )
+    transfers = kpts_pq[:, 0] - kpts_pq[:, 1]
+    assert len(transfers) == (nk**3) ** 2
     unique_q, unique_indx, unique_inverse = unique(transfers)
-    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_single_translation(cell, kpts,
-                                               kpts_pq_indx[unique_indx])
+    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_single_translation(
+        cell, kpts, kpts_pq_indx[unique_indx]
+    )
     kconserv = get_kconserv(cell, kpts)
     for ikp in range(num_kpts):
         for ikq in range(num_kpts):
@@ -673,7 +681,6 @@ def test_G_vector_mapping_single_translation():
                 # print(len(delta_Gs[qindx]), dG_indx)
                 delta_G = delta_Gs[qindx][dG_indx]
                 assert np.allclose(delta_G_expected, delta_G)
-
 
 
 def test_kpoint_isdf_build():
@@ -792,7 +799,7 @@ def test_kpoint_isdf_build():
                 eri_pqrs = mf.with_df.ao2mo(mos_pqrs, kpt_pqrs, compact=False).reshape(
                     (num_mo,) * 4
                 )
-                eri_pqrs_isdf = build_eri_isdf(
+                eri_pqrs_isdf = build_eri_isdf_double_translation(
                     chi, zeta, iq, [ikp, ikq, ikr, iks], G_mapping
                 )
                 eri_from_isdf_old, zeta_ = eri_from_isdf(
@@ -801,6 +808,7 @@ def test_kpoint_isdf_build():
                 print("delta new: ", np.linalg.norm(eri_pqrs - eri_pqrs_isdf))
                 print("delta old: ", np.linalg.norm(eri_pqrs - eri_from_isdf_old))
                 print("dzeta: ", np.linalg.norm(zeta_ - zeta[iq][Gpq, Gsr]))
+
 
 def test_kpoint_isdf_build_single_translation():
     cell = gto.Cell()
@@ -893,12 +901,14 @@ def test_kpoint_isdf_build_single_translation():
             for iq in range(zeta.shape[0]):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     kconserv = get_kconserv(cell, kpts)
-    kpts_pq = np.array([(kp, kpts[ikq]) for ikp, kp in enumerate(kpts) for ikq
-                        in range(num_kpts)])
+    kpts_pq = np.array(
+        [(kp, kpts[ikq]) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)]
+    )
 
-    kpts_pq_indx = np.array([(ikp, ikq) for ikp, kp in enumerate(kpts) for ikq
-                             in range(num_kpts)])
-    transfers = kpts_pq[:,0] - kpts_pq[:,1]
+    kpts_pq_indx = np.array(
+        [(ikp, ikq) for ikp, kp in enumerate(kpts) for ikq in range(num_kpts)]
+    )
+    transfers = kpts_pq[:, 0] - kpts_pq[:, 1]
     # assert len(transfers) == (nk**3)**2
     unique_q, unique_indx, unique_inverse = unique(transfers)
     for ikp in range(num_kpts):
@@ -931,9 +941,9 @@ def test_kpoint_isdf_build_single_translation():
 
 
 if __name__ == "__main__":
-    # test_supercell_isdf_gamma()
-    # test_supercell_isdf_complex()
-    # test_kpoint_isdf_build()
+    test_supercell_isdf_gamma()
+    test_supercell_isdf_complex()
+    test_kpoint_isdf_build()
     test_kpoint_isdf_build_single_translation()
-    # test_G_vector_mapping()
-    # test_G_vector_mapping_single_translation()
+    test_G_vector_mapping()
+    test_G_vector_mapping_single_translation()

@@ -3,10 +3,12 @@ import numpy as np
 
 from pyscf.pbc import tools, df, gto
 from pyscf.pbc.lib.kpts_helper import unique, get_kconserv
+from pyscf.pbc.dft import gen_grid, numint
 
 from kpoint_eri.resource_estimates.utils.misc_utils import (
     build_momentum_transfer_mapping,
 )
+from kpoint_eri.factorizations.kmeans import KMeansCVT
 
 
 def solve_isdf(orbitals, interp_indx):
@@ -208,7 +210,7 @@ def find_unique_G_vectors(G_vectors, G_mapping):
     return unique_mapping, delta_Gs
 
 
-def build_G_vector_mappings(
+def build_G_vector_mappings_double_translation(
     cell: gto.Cell,
     kpts: np.ndarray,
     momentum_map: np.ndarray,
@@ -281,7 +283,7 @@ def build_G_vector_mappings_single_translation(
     return G_vectors, Gpqr_mapping, Gpqr_mapping_unique, delta_Gs
 
 
-def build_eri_isdf(chi, zeta, q_indx, kpts_indx, G_mapping):
+def build_eri_isdf_double_translation(chi, zeta, q_indx, kpts_indx, G_mapping):
     """Build (pkp qkq | rkr sks) from k-point ISDF factors.
 
     :param chi: array of interpolating orbitals of shape [num_kpts, num_mo, num_interp_points]
@@ -336,7 +338,7 @@ def kpoint_isdf_double_translation(
     kpts: np.ndarray,
     orbitals: np.ndarray,
     grid_points: np.ndarray,
-    only_unique_G: bool = False,
+    only_unique_G: bool = True,
 ):
     r"""
     Build kpoint ISDF-THC tensors.
@@ -380,7 +382,7 @@ def kpoint_isdf_double_translation(
     num_kpts = len(kpts)
     num_interp_points = xi.shape[1]
     assert xi.shape == (num_grid_points, num_interp_points)
-    G_vectors, G_mapping, G_mapping_unique, delta_Gs_unique = build_G_vector_mappings(
+    G_vectors, G_mapping, G_mapping_unique, delta_Gs_unique = build_G_vector_mappings_double_translation(
         df_inst.cell, kpts, momentum_map
     )
     if only_unique_G:
@@ -479,3 +481,64 @@ def kpoint_isdf_single_translation(
             out_array[iG] = zeta_indx
         zeta[iq] = out_array
     return chi, zeta, xi, G_map_unique
+
+
+def solve_kmeans_kpisdf(
+        mf_inst,
+        num_interp_points,
+        max_kmeans_iteration=500,
+        single_translation=True,
+        ):
+    cell = mf_inst.cell
+    kpts = mf_inst.kpts
+    grid_points = cell.gen_uniform_grids(mf_inst.with_df.mesh)
+    num_grid_points = grid_points.shape[0]
+    bloch_orbitals_ao = np.array(numint.eval_ao_kpts(cell, grid_points, kpts=kpts))
+    bloch_orbitals_mo = np.einsum(
+        "kRp,kpi->kRi", bloch_orbitals_ao, mf_inst.mo_coeff, optimize=True
+    )
+    nocc = cell.nelec[0]  # assuming same for each k-point
+    density = np.einsum(
+        "kRi,kRi->R",
+        bloch_orbitals_mo[:, :, :nocc].conj(),
+        bloch_orbitals_mo[:, :, :nocc],
+        optimize=True,
+    )
+    num_mo = mf_inst.mo_coeff[0].shape[-1]  # assuming the same for each k-point
+    kmeans = KMeansCVT(grid_points, max_iteration=max_kmeans_iteration)
+    interp_indx = kmeans.find_interpolating_points(
+        num_interp_points, density.real
+    )
+    num_kpts = len(kpts)
+    # Cell periodic part
+    # u = e^{-ik.r} phi(r)
+    exp_minus_ikr = np.exp(-1j * np.einsum("kx,Rx->kR", kpts, grid_points))
+    cell_periodic_mo = np.einsum("kR,kRi->kRi", exp_minus_ikr, bloch_orbitals_mo)
+    # go from kRi->Rki
+    # AO ISDF
+    cell_periodic_mo = cell_periodic_mo.transpose((1, 0, 2)).reshape(
+        (num_grid_points, num_kpts * num_mo)
+    )
+    if single_translation:
+        chi, zeta, xi, G_mapping = kpoint_isdf_single_translation(
+            mf_inst.with_df,
+            interp_indx,
+            kpts,
+            cell_periodic_mo,
+            grid_points,
+            only_unique_G=True,
+        )
+    else:
+        chi, zeta, xi, G_mapping = kpoint_isdf_double_translation(
+            mf_inst.with_df,
+            interp_indx,
+            kpts,
+            cell_periodic_mo,
+            grid_points,
+        )
+    assert chi.shape == (num_interp_points, num_kpts*num_mo)
+    # go from Rki -> kiR
+    chi = chi.reshape((num_interp_points, num_kpts, num_mo))
+    chi = chi.transpose((1, 2, 0))
+
+    return chi, zeta, xi, G_mapping
