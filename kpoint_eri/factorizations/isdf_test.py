@@ -9,7 +9,7 @@ from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, member
 
 from kpoint_eri.factorizations.kmeans import KMeansCVT
 from kpoint_eri.factorizations.isdf import (
-    build_G_vector_mappings,
+    build_G_vector_mappings_double_translation,
     build_G_vector_mappings_single_translation,
     kpoint_isdf_double_translation,
     kpoint_isdf_single_translation,
@@ -614,7 +614,7 @@ def test_G_vector_mapping():
     kpts = cell.make_kpts(kmesh)
 
     momentum_map = build_momentum_transfer_mapping(cell, kpts)
-    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings(
+    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_double_translation(
         cell, kpts, momentum_map
     )
     num_kpts = len(kpts)
