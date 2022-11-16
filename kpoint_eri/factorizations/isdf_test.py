@@ -10,8 +10,11 @@ from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, member
 
 from kpoint_eri.factorizations.kmeans import KMeansCVT
 from kpoint_eri.factorizations.isdf import (
+<<<<<<< HEAD
     inverse_G_map_double_translation,
     build_kpoint_zeta,
+=======
+>>>>>>> 9b33371 (Q G mapping based on miller index representation)
     # build_G_vector_mappings,
     build_G_vectors,
     build_G_vector_mappings_single_translation,
