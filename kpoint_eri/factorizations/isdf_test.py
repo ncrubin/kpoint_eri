@@ -949,9 +949,9 @@ def test_kpoint_isdf_build_single_translation():
 
 
 if __name__ == "__main__":
-    # test_supercell_isdf_gamma()
-    # test_supercell_isdf_complex()
-    # test_kpoint_isdf_build()
-    # test_kpoint_isdf_build_single_translation()
+    test_supercell_isdf_gamma()
+    test_supercell_isdf_complex()
+    test_kpoint_isdf_build()
+    test_kpoint_isdf_build_single_translation()
     test_G_vector_mapping()
-    # test_G_vector_mapping_single_translation()
+    test_G_vector_mapping_single_translation()
