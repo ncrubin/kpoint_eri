@@ -241,7 +241,6 @@ def build_G_vector_mappings_double_translation(
                 np.einsum("wx,x->w", lattice_vectors, delta_Gpq) / (2 * np.pi)
             )
             Gpq_mapping[iq, ikp] = G_dict[tuple(miller_indx)]
-
     Gpq_mapping_unique, delta_Gs = find_unique_G_vectors(G_vectors, Gpq_mapping)
     return G_vectors, Gpq_mapping, Gpq_mapping_unique, delta_Gs
 
