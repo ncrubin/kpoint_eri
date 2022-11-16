@@ -283,6 +283,43 @@ def build_G_vector_mappings_single_translation(
     return G_vectors, Gpqr_mapping, Gpqr_mapping_unique, delta_Gs
 
 
+def inverse_G_map_double_translation(
+    cell: gto.Cell,
+    kpts: np.ndarray,
+    momentum_map: np.ndarray,
+):
+    """For given Q and G figure out all k which satisfy Q - k + G = 0
+
+    :param cell: pyscf.pbc.gto.Cell object.
+    :param kpts: array of kpoints.
+    :param momentum_map: momentum mapping to satisfy Q = (k_p - k_q) mod G.
+        momentum_map[iq, ikp] = ikq.
+    :returns inverse_map: ragged numpy array. inverse_map[iq, iG] returns array
+        of size in range(0, num_kpts) and lists all k-point indices that
+        satisfy G_pq[iq, ik] = iG, i.e. an array of all ik.
+    """
+    G_dict, G_vectors = build_G_vectors(cell)
+    lattice_vectors = cell.lattice_vectors()
+    num_kpts = len(kpts)
+    Gpq_mapping = np.zeros((num_kpts, num_kpts), dtype=np.int32)
+    num_kpts = len(kpts)
+    for iq in range(num_kpts):
+        for ikp in range(num_kpts):
+            ikq = momentum_map[iq, ikp]
+            delta_Gpq = (kpts[ikp] - kpts[ikq]) - kpts[iq]
+            miller_indx = np.rint(
+                np.einsum("wx,x->w", lattice_vectors, delta_Gpq) / (2 * np.pi)
+            )
+            Gpq_mapping[iq, ikp] = G_dict[tuple(miller_indx)]
+
+    inverse_map = np.zeros((num_kpts, 27,), dtype=object)
+    for iq in range(num_kpts):
+        for iG in range(len(G_vectors)):
+            inverse_map[iq, iG] =  np.array([ik for ik in range(num_kpts) if Gpq_mapping[iq, ik] == iG])
+
+    return inverse_map
+
+
 def build_eri_isdf_double_translation(chi, zeta, q_indx, kpts_indx, G_mapping):
     """Build (pkp qkq | rkr sks) from k-point ISDF factors.
 

@@ -11,6 +11,7 @@ from kpoint_eri.factorizations.kmeans import KMeansCVT
 from kpoint_eri.factorizations.isdf import (
     build_G_vector_mappings_double_translation,
     build_G_vector_mappings_single_translation,
+    inverse_G_map_double_translation,
     kpoint_isdf_double_translation,
     kpoint_isdf_single_translation,
     build_eri_isdf_double_translation,
@@ -609,7 +610,7 @@ def test_G_vector_mapping():
     cell.verbose = 4
     cell.build()
 
-    nk = 3
+    nk = 2
     kmesh = [nk, nk, nk]
     kpts = cell.make_kpts(kmesh)
 
@@ -628,6 +629,12 @@ def test_G_vector_mapping():
         unique_G = np.unique(G_map[iq])
         for i, G in enumerate(G_map[iq]):
             assert unique_G[G_unique[iq][i]] == G
+
+    inv_G_map = inverse_G_map_double_translation(cell, kpts, momentum_map)
+    for iq in range(num_kpts):
+        for ik in range(num_kpts):
+            ix_G_qk = G_map[iq, ik]
+            assert ik in inv_G_map[iq, ix_G_qk]
 
 
 def test_G_vector_mapping_single_translation():
@@ -878,7 +885,8 @@ def test_kpoint_isdf_build_single_translation():
             chi = fh5["chi"][:]
             xi = fh5["xi"][:]
             G_mapping = fh5["G_mapping"][:]
-            zeta = np.zeros((num_kpts,), dtype=object)
+            num_qpoints = len(G_mapping)
+            zeta = np.zeros((num_qpoints,), dtype=object)
             for iq in range(G_mapping.shape[0]):
                 zeta[iq] = fh5[f"zeta_{iq}"][:]
         print(chi.shape)
@@ -941,9 +949,9 @@ def test_kpoint_isdf_build_single_translation():
 
 
 if __name__ == "__main__":
-    test_supercell_isdf_gamma()
-    test_supercell_isdf_complex()
-    test_kpoint_isdf_build()
-    test_kpoint_isdf_build_single_translation()
+    # test_supercell_isdf_gamma()
+    # test_supercell_isdf_complex()
+    # test_kpoint_isdf_build()
+    # test_kpoint_isdf_build_single_translation()
     test_G_vector_mapping()
-    test_G_vector_mapping_single_translation()
+    # test_G_vector_mapping_single_translation()
