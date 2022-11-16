@@ -1,3 +1,4 @@
+import itertools
 import h5py
 import numpy as np
 import pytest
@@ -9,9 +10,10 @@ from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, member
 
 from kpoint_eri.factorizations.kmeans import KMeansCVT
 from kpoint_eri.factorizations.isdf import (
-    build_G_vector_mappings_double_translation,
-    build_G_vector_mappings_single_translation,
     inverse_G_map_double_translation,
+    # build_G_vector_mappings,
+    build_G_vector_mappings_single_translation,
+    build_G_vector_mappings_double_translation,
     kpoint_isdf_double_translation,
     kpoint_isdf_single_translation,
     build_eri_isdf_double_translation,
@@ -947,8 +949,137 @@ def test_kpoint_isdf_build_single_translation():
                 print("delta old: ", np.linalg.norm(eri_pqrs - eri_from_isdf_old))
                 print("dzeta: ", np.linalg.norm(zeta_ - zeta[qindx][dg_indx]))
 
+def test_G_vector_mapping_double():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    import itertools
+    from pyscf import lib
+    nk = 4
+    kmesh = [nk, 1, 1]
+    # kmesh = [3, 2, 1]
+    kpts = cell.make_kpts(kmesh)
+    scaled_kpts = cell.get_scaled_kpts(kpts)
+    ks_each_axis = []
+    ks_int_each_axis = []
+    for n in kmesh:
+        ks = np.arange(n, dtype=float) / n
+        ks_each_axis.append(ks)
+        ks_int_each_axis.append(np.arange(n, dtype=float))
+    scaled_kpts = lib.cartesian_prod(ks_each_axis)
+    int_scaled_kpts = lib.cartesian_prod(ks_int_each_axis)
+    assert np.allclose(scaled_kpts[:, 0] * kmesh[0], int_scaled_kpts[:, 0])
+    assert np.allclose(scaled_kpts[:, 1] * kmesh[1], int_scaled_kpts[:, 1])
+    assert np.allclose(scaled_kpts[:, 2] * kmesh[2], int_scaled_kpts[:, 2])
+
+    momentum_map = build_momentum_transfer_mapping(cell, kpts)
+    # print(momentum_map)
+
+    kpoints = kpts
+    delta_k1_k2_Q = kpoints[:,None,None,:] - kpoints[None,:,None,:] - kpoints[None,None,:,:]
+    delta_k1_k2_Q += kpoints[0][None, None, None, :]  # shift to center
+    delta_k1_k2_Q_int = int_scaled_kpts[:, None, None, :] - int_scaled_kpts[None, :, None, :] - int_scaled_kpts[None, None, :, :]
+
+    import itertools
+    for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
+        assert np.allclose(kpoints[kpidx] - kpoints[kqidx] - kpoints[qidx], delta_k1_k2_Q[kpidx, kqidx, qidx])
+    delta_dot_a = np.einsum('wx,kpQx->kpQw', cell.lattice_vectors() / (2 * np.pi), delta_k1_k2_Q)
+    delta_dot_a_v2 = np.zeros_like(delta_dot_a)  # fraction [0, 1) representation of the momentum mode
+    delta_dot_a_int_version = np.zeros_like(delta_dot_a) # integer representation [[0, Nk_{x}-1], [0, Nk_{y}-1], [0, Nk_{z}- 1]]
+    for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
+        delta_dot_a_v2[kpidx, kqidx, qidx] = cell.get_scaled_kpts(np.array(delta_k1_k2_Q[kpidx, kqidx, qidx]))
+        delta_dot_a_int_version[kpidx, kqidx, qidx] = cell.get_scaled_kpts(np.array(delta_k1_k2_Q[kpidx, kqidx, qidx])) * np.array(kmesh)
+
+        assert np.allclose(delta_dot_a_v2[kpidx, kqidx, qidx], 
+                           delta_dot_a[kpidx, kqidx, qidx])
+        # print(delta_dot_a_v2[kpidx, kqidx, qidx])
+        # print(delta_dot_a_int_version[kpidx, kqidx, qidx])
+        # print(delta_k1_k2_Q_int[kpidx, kqidx, qidx])
+        assert np.allclose(delta_k1_k2_Q_int[kpidx, kqidx, qidx], delta_dot_a_int_version[kpidx, kqidx, qidx])
+
+
+    int_delta_dot_a = np.rint(delta_dot_a)
+    # Should be zero if transfer is statisfied (2*pi*n)
+    test_transfer_map = np.zeros((len(kpts), len(kpts)), dtype=np.int32)
+    ncr_transfer_map = np.zeros((len(kpts), len(kpts)), dtype=np.int32)
+    for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
+        # explicitly build my transfer matrix
+        if np.sum(np.abs(delta_dot_a_v2[kpidx, kqidx, qidx] - np.rint(delta_dot_a_v2[kpidx, kqidx, qidx]))) < 1.0E-10:
+            test_transfer_map[kqidx, kpidx] = qidx
+
+        # build transfer matrix based on integer version.  Pretty much we need to know 
+        # if the mod is zero. rint just forces this to be the integer value beacuse we are coming
+        # from float land where we aren't precise integers. 
+        # print(delta_dot_a_int_version[kpidx, kqidx, qidx],             
+        #      (np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][0])) % kmesh[0],
+        #      (np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][1])) % kmesh[1],
+        #      (np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][2])) % kmesh[2]
+        #      )
+        if np.allclose([np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][0]) % kmesh[0],
+                        np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][1]) % kmesh[1],
+                        np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][2]) % kmesh[2],
+                       ], 0
+                      ):
+            ncr_transfer_map[kqidx, kpidx] = qidx
+
+    # print("kmesh")
+    # print(kmesh)
+    mapping = np.where(np.sum(np.abs(delta_dot_a-int_delta_dot_a), axis=3) < 1e-10)
+    num_kpoints = len(kpoints)
+    momentum_transfer_map = np.zeros((num_kpoints,)*2, dtype=np.int32)
+    # Note index flip due to Q being first index in map but broadcasted last..
+    momentum_transfer_map[mapping[1], mapping[0]] = mapping[2]
+    # print(momentum_transfer_map)
+    # print(test_transfer_map)
+    assert np.allclose(momentum_transfer_map, test_transfer_map)
+    # print(ncr_transfer_map)
+    assert np.allclose(ncr_transfer_map, momentum_transfer_map)
+
+    
+    # now test building G_vecs
+    from kpoint_eri.factorizations.isdf import build_G_vectors
+    # G_dict, G_vectors = build_G_vectors(cell)
+    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_double_translation(
+        cell, kpts, momentum_map
+    )
+    num_kpts = len(kpts)
+    for iq in range(num_kpts):
+        for ikp in range(num_kpts):
+            ikq = momentum_map[iq, ikp]
+            q = kpts[ikp] - kpts[ikq]
+            # print(cell.get_scaled_kpts(q))
+            G_shift = G_vecs[G_map[iq, ikp]]
+            # print(cell.get_scaled_kpts(G_shift))
+            # print(cell.get_scaled_kpts(kpts[iq]))
+            # print(cell.get_scaled_kpts(G_shift)[0], # * kmesh[0],
+            #       cell.get_scaled_kpts(G_shift)[1], # * kmesh[1],
+            #       cell.get_scaled_kpts(G_shift)[2],)#  * kmesh[2])
+            # print(cell.get_scaled_kpts(kpts[iq] + G_shift))
+            print(cell.get_scaled_kpts(q))
+            print(cell.get_scaled_kpts(G_shift) + 
+                  cell.get_scaled_kpts(kpts[iq]))
+            print()
+            assert np.allclose(q, kpts[iq] + G_shift)
+    for iq in range(num_kpts):
+        unique_G = np.unique(G_map[iq])
+        for i, G in enumerate(G_map[iq]):
+            assert unique_G[G_unique[iq][i]] == G
+
 
 if __name__ == "__main__":
+    test_G_vector_mapping_double()
     test_supercell_isdf_gamma()
     test_supercell_isdf_complex()
     test_kpoint_isdf_build()
