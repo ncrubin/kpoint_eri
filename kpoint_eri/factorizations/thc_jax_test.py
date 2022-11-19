@@ -1,6 +1,7 @@
 from numpy.linalg import solve
 import h5py
 import numpy as np
+import jax.numpy as jnp
 
 from pyscf.pbc import gto, scf, mp
 
@@ -15,9 +16,13 @@ from kpoint_eri.factorizations.thc_jax import (
     thc_objective_regularized,
     unpack_thc_factors,
     get_zeta_size,
-    lbfgsb_opt_thc_l2reg,
+    lbfgsb_opt_kpthc_l2reg,
 )
 
+from openfermion.resource_estimates.thc.utils.thc_factorization import (
+        lbfgsb_opt_thc_l2reg,
+        adagrad_opt_thc
+        )
 
 def test_kpoint_thc_reg():
     cell = gto.Cell()
@@ -35,7 +40,7 @@ def test_kpoint_thc_reg():
     cell.verbose = 4
     cell.build()
 
-    kmesh = [1, 1, 1]
+    kmesh = [1, 2, 3]
     kpts = cell.make_kpts(kmesh)
     num_kpts = len(kpts)
     mf = scf.KRHF(cell, kpts)
@@ -113,21 +118,107 @@ def test_kpoint_thc_reg():
     assert np.allclose(chi_unpacked, chi)
     for iq in range(num_kpts):
         assert np.allclose(zeta[iq], zeta_unpacked[iq])
+    naux = min([Luv[k1, k1].shape[0] for k1 in range(num_kpts)])
+    Luv_cont = np.zeros(
+        (
+            num_kpts,
+            num_kpts,
+            naux,
+            num_mo,
+            num_mo,
+        ),
+        dtype=np.complex128,
+    )
+    for ik1 in range(num_kpts):
+        for ik2 in range(num_kpts):
+            Luv_cont[ik1, ik2] = Luv[ik1, ik2][:naux]
     error = compute_eri_error(chi, zeta, momentum_map, G_mapping, Luv, mf)
     res = thc_objective_regularized(
-        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty_param=0.0
+        jnp.array(buffer), num_mo, num_interp_points, momentum_map, G_mapping,
+        jnp.array(Luv_cont), penalty_param=0.0
     )
-    assert error == res
-    opt_param = lbfgsb_opt_thc_l2reg(
+    # assert error-res < 1e-12
+    # eri = np.einsum("npq,nrs->pqrs", Luv[0,0], Luv[0,0])
+    # # eri = eri_pqrs
+    # print(chi[0].shape)
+    # SPQ = np.dot(chi[0].T, chi[0])
+    # cP = np.diag(np.diag(SPQ))
+    # MPQ = np.dot(cP, np.dot(zeta[0][0,0], cP)) 
+    # print("zeta init: ", np.sum(np.abs(MPQ)))
+    # buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    # print("imag zeta ", np.max(np.abs(zeta[0].imag)))
+    # eri_thc = np.einsum("pn,qn,nm,rm,sm->pqrs", chi[0], chi[0], zeta[0][0,0], chi[0],
+                        # chi[0], optimize=True)
+    # print("delta eri: ", np.linalg.norm(eri_thc-eri))
+    # buffer[:chi.size] = chi.T.real.ravel()
+    # buffer[chi.size:] = zeta[iq].real.ravel()
+    # opt_param = lbfgsb_opt_thc_l2reg(
+            # eri,
+            # num_interp_points,
+            # chkfile_name="thc_opt_gamma.h5",
+            # maxiter=10000,
+            # initial_guess=buffer,
+            # penalty_param=1e-3,
+            # )
+    # nthc = num_interp_points
+    # norb = num_mo
+    # eta = opt_param[:nthc*norb].reshape((nthc, norb))
+    # zeta_out = opt_param[nthc*norb:].reshape((nthc, nthc))
+    # eri_thc = np.einsum("np,nq,nm,mr,ms->pqrs", eta, eta, zeta_out, eta,
+                        # eta, optimize=True)
+    # SPQ = np.dot(eta, eta.T)
+    # cP = np.diag(np.diag(SPQ))
+    # MPQ = np.dot(cP, np.dot(zeta_out, cP))
+    # print("norm post: ", np.sum(np.abs(MPQ)))
+    # print("delta eri: ", np.linalg.norm(eri_thc-eri))
+    # opt_param = adagrad_opt_thc(
+            # eri,
+            # num_interp_points,
+            # chkfile_name="thc_opt_gamma.h5",
+            # maxiter=10000,
+            # initial_guess=opt_param,
+            # )
+    # nthc = num_interp_points
+    # norb = num_mo
+    # eta = opt_param[:nthc*norb].reshape((nthc, norb))
+    # zeta_out = opt_param[nthc*norb:].reshape((nthc, nthc))
+    # eri_thc = np.einsum("np,nq,nm,mr,ms->pqrs", eta, eta, zeta_out, eta,
+                        # eta, optimize=True)
+    # SPQ = np.dot(eta, eta.T)
+    # cP = np.diag(np.diag(SPQ))
+    # MPQ = np.dot(cP, np.dot(zeta_out, cP)) 
+    # print("norm post ada: ", np.sum(np.abs(MPQ)))
+    # print("delta eri: ", np.linalg.norm(eri_thc-eri))
+    cP = np.einsum("kpP,kpP->P", chi, chi)
+    norm = 0.0
+    for iq in range(num_kpts):
+        for Gpq in range(zeta[iq].shape[0]):
+            for Gsr in range(zeta[iq].shape[1]):
+                MPQ = np.dot(cP, np.dot(zeta[iq][Gpq,Gsr], cP)) 
+                norm += np.sum(np.abs(MPQ))
+    print(norm)
+    opt_param = lbfgsb_opt_kpthc_l2reg(
             chi,
             zeta,
             momentum_map,
             G_mapping,
-            Luv,
+            jnp.array(Luv_cont),
             chkfile_name="thc_opt.h5",
-            maxiter=100,
+            maxiter=1000,
             penalty_param=1e-3,
             )
+    chi_unpacked, zeta_unpacked = unpack_thc_factors(
+        opt_param, num_interp_points, num_mo, num_kpts, num_G_per_Q
+    )
+    cP = np.einsum("kpP,kpP->P", chi_unpacked, chi_unpacked)
+    norm = 0.0
+    for iq in range(num_kpts):
+        for Gpq in range(zeta[iq].shape[0]):
+            for Gsr in range(zeta[iq].shape[1]):
+                MPQ = np.dot(cP, np.dot(zeta_unpacked[iq][Gpq,Gsr], cP)) 
+                norm += np.sum(np.abs(MPQ))
+    print(norm)
+    # print(np.max(np.abs(chi_unpacked.imag)))
 
 
 if __name__ == "__main__":

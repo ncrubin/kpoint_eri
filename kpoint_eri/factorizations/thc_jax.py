@@ -2,6 +2,9 @@ import h5py
 import numpy as np
 from scipy.optimize import minimize
 
+import jax
+import jax.numpy as jnp
+
 # from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
 
 # from kpoint_eri.factorizations.isdf import build_eri_isdf_double_translation
@@ -112,7 +115,7 @@ def thc_objective_regularized(
     num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
     chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
     num_kpts = momentum_map.shape[0]
-    cP = np.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+    cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
     for iq in range(num_kpts):
         for ik in range(num_kpts):
             ik_minus_q = momentum_map[iq, ik]
@@ -120,35 +123,32 @@ def thc_objective_regularized(
             for ik_prime in range(num_kpts):
                 ik_prime_minus_q = momentum_map[iq, ik_prime]
                 Gsr = Gpq_map[iq, ik_prime]
-                eri_thc = np.einsum(
+                eri_thc = jnp.einsum(
                     "pm,qm,mn,rn,sn->pqrs",
                     chi[ik].conj(),
                     chi[ik_minus_q],
                     zeta[iq][Gpq, Gsr],
                     chi[ik_prime_minus_q].conj(),
                     chi[ik_prime],
-                    optimize=True,
                 )
-                eri_ref = np.einsum(
+                eri_ref = jnp.einsum(
                     "npq,nsr->pqrs",
                     chol[ik, ik_minus_q],
                     chol[ik_prime, ik_prime_minus_q].conj(),
-                    optimize=True,
                 )
                 deri = eri_thc - eri_ref
-                MPQ_normalized = np.einsum(
-                    "P,PQ,Q->PQ", cP, zeta[iq][Gpq, Gsr], cP, optimize=True
+                MPQ_normalized = jnp.einsum(
+                    "P,PQ,Q->PQ", cP, zeta[iq][Gpq, Gsr], cP
                 )
 
-                lambda_z = np.sum(np.abs(MPQ_normalized)) * 0.5
+                lambda_z = jnp.sum(jnp.abs(MPQ_normalized)) * 0.5
 
-                res += 0.5 * np.sum((np.abs(deri)) ** 2) + penalty_param * (lambda_z**2)
+                res += 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * (lambda_z**2)
 
-    print("residual: ", res)
     return res / num_kpts
 
 
-def lbfgsb_opt_thc_l2reg(
+def lbfgsb_opt_kpthc_l2reg(
     chi,
     zeta,
     momentum_map,
@@ -192,11 +192,14 @@ def lbfgsb_opt_thc_l2reg(
     assert zeta[0].shape[-1] == num_thc
     assert zeta[0].shape[-2] == num_thc
     loss = thc_objective_regularized(
-        initial_guess, num_orb, num_thc, momentum_map, Gpq_map, chol, penalty_param=0.0
+        jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
+        jnp.array(chol), penalty_param=0.0
     )
     reg_loss = thc_objective_regularized(
-        initial_guess, num_orb, num_thc, momentum_map, Gpq_map, chol, penalty_param=1.0
+        jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
+        jnp.array(chol), penalty_param=1.0
     )
+    print(loss, reg_loss-loss)
     # set penalty
     if penalty_param is None:
         # loss + lambda_z^2 - loss
@@ -206,14 +209,16 @@ def lbfgsb_opt_thc_l2reg(
         print("penalty_param {}".format(penalty_param))
 
     # L-BFGS-B optimization
-    # thc_grad = jax.grad(thc_objective_regularized, argnums=[0])
-    # print("Initial Grad")
-    # print(thc_grad(jnp.array(x), norb, nthc, jnp.array(eri), penalty_param))
+    thc_grad = jax.grad(thc_objective_regularized, argnums=[0])
+    print("Initial Grad")
+    print(thc_grad(jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
+                   jnp.array(chol), penalty_param))
     # print()
     res = minimize(
         thc_objective_regularized,
         initial_guess,
-        args=(num_orb, num_thc, momentum_map, Gpq_map, chol, penalty_param),
+        args=(num_orb, num_thc, momentum_map, Gpq_map, jnp.array(chol), penalty_param),
+        jac=thc_grad,
         method="L-BFGS-B",
         options={"disp": None, "iprint": disp_freq, "maxiter": maxiter},
         callback=callback_func,
@@ -224,8 +229,8 @@ def lbfgsb_opt_thc_l2reg(
     if chkfile_name is not None:
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(params, num_thc, num_orb, num_kpts, num_G_per_Q)
-        with h5py.File(chkfile_name, "w+") as fh5:
+        with h5py.File(chkfile_name, "w") as fh5:
             fh5["etaPp"] = chi
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
-    return params
+    return np.array(params)
