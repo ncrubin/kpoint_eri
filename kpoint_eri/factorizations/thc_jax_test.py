@@ -2,6 +2,7 @@ from numpy.linalg import solve
 import h5py
 import numpy as np
 import jax.numpy as jnp
+import jax
 
 from pyscf.pbc import gto, scf, mp
 
@@ -11,40 +12,26 @@ from kpoint_eri.factorizations.isdf import (
 )
 from kpoint_eri.resource_estimates.utils import build_momentum_transfer_mapping
 from kpoint_eri.factorizations.thc_jax import (
-    compute_eri_error,
     pack_thc_factors,
     thc_objective_regularized,
+    thc_objective_regularized_batched,
     unpack_thc_factors,
     get_zeta_size,
     lbfgsb_opt_kpthc_l2reg,
+    lbfgsb_opt_kpthc_l2reg_batched,
 )
 
 from openfermion.resource_estimates.thc.utils.thc_factorization import (
-        lbfgsb_opt_thc_l2reg,
-        adagrad_opt_thc
-        )
+    lbfgsb_opt_thc_l2reg,
+    adagrad_opt_thc,
+)
+from openfermion.resource_estimates.thc.utils.thc_factorization import (
+    thc_objective_regularized as thc_obj_mol,
+)
 
-def test_kpoint_thc_reg():
-    cell = gto.Cell()
-    cell.atom = """
-    C 0.000000000000   0.000000000000   0.000000000000
-    C 1.685068664391   1.685068664391   1.685068664391
-    """
-    cell.basis = "gth-szv"
-    cell.pseudo = "gth-hf-rev"
-    cell.a = """
-    0.000000000, 3.370137329, 3.370137329
-    3.370137329, 0.000000000, 3.370137329
-    3.370137329, 3.370137329, 0.000000000"""
-    cell.unit = "B"
-    cell.verbose = 4
-    cell.build()
 
-    kmesh = [1, 2, 3]
-    kpts = cell.make_kpts(kmesh)
-    num_kpts = len(kpts)
-    mf = scf.KRHF(cell, kpts)
-    mf.chkfile = "test_thc_kpoint_build.chk"
+def chkpoint_helper(mf, num_interp_points):
+    num_kpts = len(mf.kpts)
     try:
         _, scf_dict = scf.chkfile.load_scf(mf.chkfile)
         mf.mo_coeff = scf_dict["mo_coeff"]
@@ -63,12 +50,12 @@ def test_kpoint_thc_reg():
                     Luv[k1, k2] = fh5[f"chol_{k1}_{k2}"][:]
     except:
         mf.kernel()
-        rsmf = scf.KRHF(cell, kpts).rs_density_fit()
+        rsmf = scf.KRHF(mf.cell, mf.kpts).rs_density_fit()
         mf.with_df._cderi_to_save = mf.chkfile
         rsmf.mo_occ = mf.mo_occ
         rsmf.mo_coeff = mf.mo_coeff
         rsmf.mo_energy = mf.mo_energy
-        rsmf.with_df.mesh = cell.mesh
+        rsmf.with_df.mesh = mf.cell.mesh
         mymp = mp.KMP2(rsmf)
         Luv = cholesky_from_df_ints(mymp)
         with h5py.File(mf.chkfile, "r+") as fh5:
@@ -77,7 +64,6 @@ def test_kpoint_thc_reg():
                     fh5[f"chol_{k1}_{k2}"] = Luv[k1, k2]
 
     num_mo = mf.mo_coeff[0].shape[-1]
-    num_interp_points = 10 * mf.mo_coeff[0].shape[-1]
     try:
         with h5py.File(mf.chkfile, "r") as fh5:
             chi = fh5["chi"][:]
@@ -97,28 +83,9 @@ def test_kpoint_thc_reg():
             assert G_mapping.shape[0] == zeta.shape[0]
             for iq in range(zeta.shape[0]):
                 fh5[f"zeta_{iq}"] = zeta[iq]
-    momentum_map = build_momentum_transfer_mapping(cell, kpts)
-    # print(mf.mo_coeff[0].shape)
-    # kpt_pqrs = [kpts[0], kpts[0], kpts[0], kpts[0]]
-    # mos_pqrs = [
-    # mf.mo_coeff[0],
-    # mf.mo_coeff[0],
-    # mf.mo_coeff[0],
-    # mf.mo_coeff[0],
-    # ]
-    # eri_pqrs = mf.with_df.ao2mo(mos_pqrs, kpt_pqrs, compact=False).reshape(
-    # (num_mo,) * 4
-    # )
-    buffer = np.zeros(2*(chi.size + get_zeta_size(zeta)), dtype=np.float64)
-    pack_thc_factors(chi, zeta, buffer)
-    num_G_per_Q = [z.shape[0] for z in zeta]
-    chi_unpacked, zeta_unpacked = unpack_thc_factors(
-        buffer, num_interp_points, num_mo, num_kpts, num_G_per_Q
-    )
-    assert np.allclose(chi_unpacked, chi)
-    for iq in range(num_kpts):
-        assert np.allclose(zeta[iq], zeta_unpacked[iq])
+
     naux = min([Luv[k1, k1].shape[0] for k1 in range(num_kpts)])
+    # force contiguous
     Luv_cont = np.zeros(
         (
             num_kpts,
@@ -132,94 +99,174 @@ def test_kpoint_thc_reg():
     for ik1 in range(num_kpts):
         for ik2 in range(num_kpts):
             Luv_cont[ik1, ik2] = Luv[ik1, ik2][:naux]
-    error = compute_eri_error(chi, zeta, momentum_map, G_mapping, Luv, mf)
-    res = thc_objective_regularized(
-        jnp.array(buffer), num_mo, num_interp_points, momentum_map, G_mapping,
-        jnp.array(Luv_cont), penalty_param=0.0
+    return chi, zeta, G_mapping, Luv_cont
+
+
+def test_kpoint_thc_reg_gamma():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 1, 1]
+    kpts = cell.make_kpts(kmesh)
+    num_kpts = len(kpts)
+    mf = scf.KRHF(cell, kpts)
+    mf.chkfile = "test_thc_kpoint_build.chk"
+    num_mo = mf.mo_coeff[0].shape[-1]
+    num_interp_points = 10 * mf.mo_coeff[0].shape[-1]
+    chi, zeta, G_mapping, Luv_cont = chkpoint_helper(mf, num_interp_points)
+    momentum_map = build_momentum_transfer_mapping(cell, kpts)
+    buffer = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    pack_thc_factors(chi, zeta, buffer)
+    num_G_per_Q = [z.shape[0] for z in zeta]
+    chi_unpacked, zeta_unpacked = unpack_thc_factors(
+        buffer, num_interp_points, num_mo, num_kpts, num_G_per_Q
     )
-    # assert error-res < 1e-12
-    # eri = np.einsum("npq,nrs->pqrs", Luv[0,0], Luv[0,0])
-    # # eri = eri_pqrs
-    # print(chi[0].shape)
-    # SPQ = np.dot(chi[0].T, chi[0])
-    # cP = np.diag(np.diag(SPQ))
-    # MPQ = np.dot(cP, np.dot(zeta[0][0,0], cP)) 
-    # print("zeta init: ", np.sum(np.abs(MPQ)))
-    # buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
-    # print("imag zeta ", np.max(np.abs(zeta[0].imag)))
-    # eri_thc = np.einsum("pn,qn,nm,rm,sm->pqrs", chi[0], chi[0], zeta[0][0,0], chi[0],
-                        # chi[0], optimize=True)
-    # print("delta eri: ", np.linalg.norm(eri_thc-eri))
-    # buffer[:chi.size] = chi.T.real.ravel()
-    # buffer[chi.size:] = zeta[iq].real.ravel()
-    # opt_param = lbfgsb_opt_thc_l2reg(
-            # eri,
-            # num_interp_points,
-            # chkfile_name="thc_opt_gamma.h5",
-            # maxiter=10000,
-            # initial_guess=buffer,
-            # penalty_param=1e-3,
-            # )
-    # nthc = num_interp_points
-    # norb = num_mo
-    # eta = opt_param[:nthc*norb].reshape((nthc, norb))
-    # zeta_out = opt_param[nthc*norb:].reshape((nthc, nthc))
-    # eri_thc = np.einsum("np,nq,nm,mr,ms->pqrs", eta, eta, zeta_out, eta,
-                        # eta, optimize=True)
-    # SPQ = np.dot(eta, eta.T)
-    # cP = np.diag(np.diag(SPQ))
-    # MPQ = np.dot(cP, np.dot(zeta_out, cP))
-    # print("norm post: ", np.sum(np.abs(MPQ)))
-    # print("delta eri: ", np.linalg.norm(eri_thc-eri))
-    # opt_param = adagrad_opt_thc(
-            # eri,
-            # num_interp_points,
-            # chkfile_name="thc_opt_gamma.h5",
-            # maxiter=10000,
-            # initial_guess=opt_param,
-            # )
-    # nthc = num_interp_points
-    # norb = num_mo
-    # eta = opt_param[:nthc*norb].reshape((nthc, norb))
-    # zeta_out = opt_param[nthc*norb:].reshape((nthc, nthc))
-    # eri_thc = np.einsum("np,nq,nm,mr,ms->pqrs", eta, eta, zeta_out, eta,
-                        # eta, optimize=True)
-    # SPQ = np.dot(eta, eta.T)
-    # cP = np.diag(np.diag(SPQ))
-    # MPQ = np.dot(cP, np.dot(zeta_out, cP)) 
-    # print("norm post ada: ", np.sum(np.abs(MPQ)))
-    # print("delta eri: ", np.linalg.norm(eri_thc-eri))
-    cP = np.einsum("kpP,kpP->P", chi, chi)
-    norm = 0.0
+    assert np.allclose(chi_unpacked, chi)
     for iq in range(num_kpts):
-        for Gpq in range(zeta[iq].shape[0]):
-            for Gsr in range(zeta[iq].shape[1]):
-                MPQ = np.dot(cP, np.dot(zeta[iq][Gpq,Gsr], cP)) 
-                norm += np.sum(np.abs(MPQ))
-    print(norm)
+        assert np.allclose(zeta[iq], zeta_unpacked[iq])
+    # force contiguous
+    eri = np.einsum("npq,nrs->pqrs", Luv_cont[0, 0], Luv_cont[0, 0]).real
+    buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    eri_thc = np.einsum(
+        "pn,qn,nm,rm,sm->pqrs",
+        chi[0],
+        chi[0],
+        zeta[0][0, 0],
+        chi[0],
+        chi[0],
+        optimize=True,
+    )
+    # transposed in openfermion
+    buffer[: chi.size] = chi.T.real.ravel()
+    buffer[chi.size :] = zeta[iq].real.ravel()
+    np.random.seed(7)
+    opt_param = lbfgsb_opt_thc_l2reg(
+        eri,
+        num_interp_points,
+        chkfile_name="thc_opt_gamma.h5",
+        maxiter=10,
+        initial_guess=buffer,
+        penalty_param=1e-3,
+    )
+    chi_unpacked_mol = opt_param[: chi.size].reshape((num_interp_points, num_mo)).T
+    zeta_unpacked_mol = opt_param[chi.size :].reshape(zeta[0].shape)
+    # print("delta mol: ", np.linalg.norm(chi_unpacked_mol_2-chi_unpacked_mol))
+    # np.random.seed(7)
     opt_param = lbfgsb_opt_kpthc_l2reg(
-            chi,
-            zeta,
-            momentum_map,
-            G_mapping,
-            jnp.array(Luv_cont),
-            chkfile_name="thc_opt.h5",
-            maxiter=1000,
-            penalty_param=1e-3,
-            )
+        chi,
+        zeta,
+        momentum_map,
+        G_mapping,
+        jnp.array(Luv_cont),
+        chkfile_name="thc_opt.h5",
+        maxiter=10,
+        penalty_param=1e-3,
+    )
     chi_unpacked, zeta_unpacked = unpack_thc_factors(
         opt_param, num_interp_points, num_mo, num_kpts, num_G_per_Q
     )
-    cP = np.einsum("kpP,kpP->P", chi_unpacked, chi_unpacked)
-    norm = 0.0
+    assert np.allclose(chi_unpacked[0], chi_unpacked_mol)
+    assert np.allclose(zeta_unpacked[0], zeta_unpacked_mol)
+    mol_obj = thc_obj_mol(buffer, num_mo, num_interp_points, eri, 1e-3)
+    buffer = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    pack_thc_factors(chi, zeta, buffer)
+    gam_obj = thc_objective_regularized(
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv_cont, 1e-3
+    )
+    assert mol_obj - gam_obj < 1e-12
+
+
+def test_kpoint_thc_reg_batched():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 2, 2]
+    kpts = cell.make_kpts(kmesh)
+    num_kpts = len(kpts)
+    mf = scf.KRHF(cell, kpts)
+    mf.chkfile = "test_thc_kpoint_build_batched.chk"
+    momentum_map = build_momentum_transfer_mapping(cell, kpts)
+    num_interp_points = 10 * cell.nao
+    chi, zeta, G_mapping, Luv = chkpoint_helper(mf, num_interp_points)
+    buffer = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    # Pack THC factors into flat array
+    pack_thc_factors(chi, zeta, buffer)
+    num_G_per_Q = [z.shape[0] for z in zeta]
+    num_mo = mf.mo_coeff[0].shape[-1]
+    chi_unpacked, zeta_unpacked = unpack_thc_factors(
+        buffer, num_interp_points, num_mo, num_kpts, num_G_per_Q
+    )
+    # Test packing/unpacking operation
+    assert np.allclose(chi_unpacked, chi)
     for iq in range(num_kpts):
-        for Gpq in range(zeta[iq].shape[0]):
-            for Gsr in range(zeta[iq].shape[1]):
-                MPQ = np.dot(cP, np.dot(zeta_unpacked[iq][Gpq,Gsr], cP)) 
-                norm += np.sum(np.abs(MPQ))
-    print(norm)
-    # print(np.max(np.abs(chi_unpacked.imag)))
+        assert np.allclose(zeta[iq], zeta_unpacked[iq])
+    # Test objective is the same batched/non-batched
+    penalty = 1e-3
+    obj_ref = thc_objective_regularized(
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
+    )
+    # Test gradient is the same
+    obj_batched = thc_objective_regularized_batched(
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
+    )
+    assert abs(obj_ref - obj_batched) < 1e-12
+    grad_ref_fun = jax.grad(thc_objective_regularized)
+    grad_ref = grad_ref_fun(
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
+    )
+    # Test gradient is the same
+    grad_batched_fun = jax.grad(thc_objective_regularized_batched)
+    grad_batched = grad_batched_fun(
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
+    )
+    assert np.allclose(grad_batched, grad_ref)
+    opt_param = lbfgsb_opt_kpthc_l2reg(
+        chi,
+        zeta,
+        momentum_map,
+        G_mapping,
+        jnp.array(Luv),
+        chkfile_name="thc_opt.h5",
+        maxiter=2,
+        penalty_param=1e-3,
+    )
+    opt_param_batched = lbfgsb_opt_kpthc_l2reg_batched(
+        chi,
+        zeta,
+        momentum_map,
+        G_mapping,
+        jnp.array(Luv),
+        chkfile_name="thc_opt.h5",
+        maxiter=2,
+        penalty_param=1e-3,
+    )
+    assert np.allclose(opt_param, opt_param_batched)
 
 
 if __name__ == "__main__":
-    test_kpoint_thc_reg()
+    # test_kpoint_thc_reg_gamma()
+    test_kpoint_thc_reg_batched()
