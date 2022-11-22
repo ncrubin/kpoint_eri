@@ -1,8 +1,10 @@
 import h5py
 import numpy as np
-import math
 from scipy.optimize import minimize
-import time
+from uuid import uuid4
+
+from openfermion.resource_estimates.thc.utils import adagrad
+from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
 
 
 import jax
@@ -104,7 +106,7 @@ def get_batched_data_2indx(array, indxa, indxb):
 
 
 def thc_objective_regularized_batched(
-# def thc_objective_regularized_batched_loop_q(
+    # def thc_objective_regularized_batched_loop_q(
     xcur,
     num_orb,
     num_thc,
@@ -149,47 +151,47 @@ def thc_objective_regularized_batched(
 
 
 # def thc_objective_regularized_batched(
-    # xcur,
-    # num_orb,
-    # num_thc,
-    # momentum_map,
-    # Gpq_map,
-    # chol,
-    # indx_arrays,
-    # penalty_param=0.0,
+# xcur,
+# num_orb,
+# num_thc,
+# momentum_map,
+# Gpq_map,
+# chol,
+# indx_arrays,
+# penalty_param=0.0,
 # ):
-    # num_kpts = momentum_map.shape[0]
-    # num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
-    # chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
-    # nthc = zeta[0].shape[-1]
-    # # Normalization factor, no factor of sqrt as their are 4 chis in total when
-    # # building ERI.
-    # cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
-    # indx_pqrs, indx_zeta = indx_arrays
-    # objective = 0.0
-    # # process Nk^2 data at once
-    # nkpts = indx_pqrs.shape[0]
-    # indx_pqrs = indx_pqrs.reshape((nkpts**3, 4))
-    # chi_p = get_batched_data_1indx(chi, indx_pqrs[:, 0])
-    # chi_q = get_batched_data_1indx(chi, indx_pqrs[:, 1])
-    # chi_r = get_batched_data_1indx(chi, indx_pqrs[:, 2])
-    # chi_s = get_batched_data_1indx(chi, indx_pqrs[:, 3])
-    # zeta_batch = jnp.array(
-        # [
-            # get_batched_data_2indx(zeta[iq], indx_zeta[iq, :, 0], indx_zeta[iq, :, 1])
-            # for iq in range(nkpts)
-        # ]
-    # ).reshape((nkpts**3, nthc, nthc))
-    # chol_batch_pq = get_batched_data_2indx(chol, indx_pqrs[:, 0], indx_pqrs[:, 1])
-    # chol_batch_rs = get_batched_data_2indx(chol, indx_pqrs[:, 2], indx_pqrs[:, 3])
-    # objective += compute_objective_batched(
-            # (chi_p, chi_q, chi_r, chi_s),
-            # zeta_batch,
-            # (chol_batch_pq, chol_batch_rs),
-        # cP,
-        # penalty_param=penalty_param,
-    # )
-    # return objective / num_kpts
+# num_kpts = momentum_map.shape[0]
+# num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
+# chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
+# nthc = zeta[0].shape[-1]
+# # Normalization factor, no factor of sqrt as their are 4 chis in total when
+# # building ERI.
+# cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+# indx_pqrs, indx_zeta = indx_arrays
+# objective = 0.0
+# # process Nk^2 data at once
+# nkpts = indx_pqrs.shape[0]
+# indx_pqrs = indx_pqrs.reshape((nkpts**3, 4))
+# chi_p = get_batched_data_1indx(chi, indx_pqrs[:, 0])
+# chi_q = get_batched_data_1indx(chi, indx_pqrs[:, 1])
+# chi_r = get_batched_data_1indx(chi, indx_pqrs[:, 2])
+# chi_s = get_batched_data_1indx(chi, indx_pqrs[:, 3])
+# zeta_batch = jnp.array(
+# [
+# get_batched_data_2indx(zeta[iq], indx_zeta[iq, :, 0], indx_zeta[iq, :, 1])
+# for iq in range(nkpts)
+# ]
+# ).reshape((nkpts**3, nthc, nthc))
+# chol_batch_pq = get_batched_data_2indx(chol, indx_pqrs[:, 0], indx_pqrs[:, 1])
+# chol_batch_rs = get_batched_data_2indx(chol, indx_pqrs[:, 2], indx_pqrs[:, 3])
+# objective += compute_objective_batched(
+# (chi_p, chi_q, chi_r, chi_s),
+# zeta_batch,
+# (chol_batch_pq, chol_batch_rs),
+# cP,
+# penalty_param=penalty_param,
+# )
+# return objective / num_kpts
 
 
 def thc_objective_regularized(
@@ -460,3 +462,93 @@ def lbfgsb_opt_kpthc_l2reg_batched(
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     return np.array(params)
+
+
+def adagrad_opt_kpthc_batched(
+    chi,
+    zeta,
+    momentum_map,
+    Gpq_map,
+    chol,
+    chkfile_name=None,
+    random_seed=None,
+    stepsize=0.01,
+    momentum=0.9,
+    maxiter=50_000,
+    gtol=1.0e-5,
+):
+    """
+    THC opt usually starts with BFGS and then is completed with Adagrad or other
+    first order solver.  This  function implements an Adagrad optimization.
+
+    Optimization runs for 50 K iterations.  This is the ONLY stopping cirteria
+    used in the FT-THC paper by Lee et al.
+    """
+    assert len(chi.shape) == 3
+    assert len(zeta[0].shape) == 4
+    num_kpts = chi.shape[0]
+    num_orb = chi.shape[1]
+    num_thc = chi.shape[-1]
+    assert zeta[0].shape[-1] == num_thc
+    assert zeta[0].shape[-2] == num_thc
+    if chkfile_name is None:
+        chkfile_name = str(uuid4()) + ".h5"
+
+    # callback func stores checkpoints
+    callback_func = CallBackStore(chkfile_name)
+    # set initial guess
+    initial_guess = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    pack_thc_factors(chi, zeta, initial_guess)
+    opt_init, opt_update, get_params = adagrad(step_size=stepsize, momentum=momentum)
+    opt_state = opt_init(initial_guess)
+    thc_grad = jax.grad(thc_objective_regularized_batched, argnums=[0])
+
+    indx_arrays = prepare_batched_data_indx_arrays(momentum_map, Gpq_map)
+
+    def update(i, opt_state):
+        params = get_params(opt_state)
+        gradient = thc_grad(
+            params,
+            num_orb,
+            num_thc,
+            momentum_map,
+            Gpq_map,
+            chol,
+            indx_arrays,
+        )
+        grad_norm_l1 = np.linalg.norm(gradient[0], ord=1)
+        return opt_update(i, gradient[0], opt_state), grad_norm_l1
+
+    for t in range(maxiter):
+        opt_state, grad_l1 = update(t, opt_state)
+        params = get_params(opt_state)
+        if t % callback_func.freq == 0:
+            # callback_func(params)
+            fval = thc_objective_regularized_batched(
+                params,
+                num_orb,
+                num_thc,
+                momentum_map,
+                Gpq_map,
+                chol,
+                indx_arrays,
+            )
+            outline = "Objective val {: 5.15f}".format(fval)
+            outline += "\tGrad L1-norm {: 5.15f}".format(grad_l1)
+            print(outline)
+        if grad_l1 <= gtol:
+            # break out of loop
+            # which sends to save
+            break
+    else:
+        print("Maximum number of iterations reached")
+    # save results before returning
+    x = np.array(params)
+    if chkfile_name is not None:
+        num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
+        chi, zeta = unpack_thc_factors(x, num_thc, num_orb, num_kpts, num_G_per_Q)
+        with h5py.File(chkfile_name, "w") as fh5:
+            fh5["etaPp"] = chi
+            for iq in range(num_kpts):
+                fh5[f"zeta_{iq}"] = zeta[iq]
+    return params
