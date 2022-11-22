@@ -2,9 +2,12 @@ import h5py
 import numpy as np
 import math
 from scipy.optimize import minimize
+import time
+
 
 import jax
 import jax.numpy as jnp
+
 
 def get_zeta_size(zeta):
     return sum([z.size for z in zeta])
@@ -17,7 +20,7 @@ def unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q):
     chi_imag = xcur[chi_size : 2 * chi_size].reshape(num_kpts, num_orb, num_thc)
     chi = chi_real + 1j * chi_imag
     zeta_packed = xcur[2 * chi_size :]
-    zeta = np.zeros((num_kpts,), dtype=object)
+    zeta = []
     start = 0
     for iQ in range(num_kpts):
         num_G = num_G_per_Q[iQ]
@@ -28,7 +31,7 @@ def unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q):
         zeta_imag = zeta_packed[start + size : start + 2 * size].reshape(
             (num_G, num_G, num_thc, num_thc)
         )
-        zeta[iQ] = zeta_real + 1j * zeta_imag
+        zeta.append(zeta_real + 1j * zeta_imag)
         start += 2 * size
     return chi, zeta
 
@@ -46,13 +49,9 @@ def pack_thc_factors(chi, zeta, buffer):
         buffer[start + size : start + 2 * size] = zeta[iQ].imag.ravel()
         start += 2 * size
 
-def compute_ojective_batched(
-        chis,
-        zetas,
-        chols,
-        cP,
-        penalty_param=0
-        ):
+
+@jax.jit
+def compute_objective_batched(chis, zetas, chols, cP, penalty_param=0):
     eri_thc = jnp.einsum(
         "Jpm,Jqm,Jmn,Jrn,Jsn->Jpqrs",
         chis[0].conj(),
@@ -62,82 +61,135 @@ def compute_ojective_batched(
         chis[3],
         optimize=True,
     )
-    eri_ref = jnp.einsum(
-        "Jnpq,Jnsr->Jpqrs",
-        chols[0],
-        chols[1].conj(),
-        optimize=True
-    )
+    eri_ref = jnp.einsum("Jnpq,Jnrs->Jpqrs", chols[0], chols[1], optimize=True)
     deri = eri_thc - eri_ref
-    MPQ_normalized = jnp.einsum(
-        "P,JPQ,Q->JPQ", cP, zetas, cP
-    )
+    MPQ_normalized = jnp.einsum("P,JPQ,Q->JPQ", cP, zetas, cP)
 
-    lambda_z = jnp.sum(jnp.einsum("JPQ->J", 0.5*jnp.abs(MPQ_normalized))**2.0)
+    lambda_z = jnp.sum(jnp.einsum("JPQ->J", 0.5 * jnp.abs(MPQ_normalized)) ** 2.0)
 
     res = 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * lambda_z
-    return res
+    return res.conj()
 
-def prepare_batched_data(
-    xcur,
-    num_orb,
-    num_thc,
+
+def prepare_batched_data_indx_arrays(
     momentum_map,
     Gpq_map,
-    chol):
+):
     """Create arrays to batch over."""
     num_kpts = momentum_map.shape[0]
-    num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
-    chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
-    num_kpts = momentum_map.shape[0]
-    chis_p = []
-    chis_q = []
-    chis_r = []
-    chis_s = []
-    zetas = []
-    chols_pq = []
-    chols_rs = []
+    indx_pqrs = np.zeros((num_kpts, num_kpts**2, 4), dtype=jnp.int32)
+    zetas = np.zeros((num_kpts, num_kpts**2, 2), dtype=jnp.int32)
     for iq in range(num_kpts):
+        indx = 0
         for ik in range(num_kpts):
             ik_minus_q = momentum_map[iq, ik]
             Gpq = Gpq_map[iq, ik]
             for ik_prime in range(num_kpts):
                 ik_prime_minus_q = momentum_map[iq, ik_prime]
                 Gsr = Gpq_map[iq, ik_prime]
-                chis_p.append(chi[ik])
-                chis_q.append(chi[ik_minus_q])
-                chis_r.append(chi[ik_prime_minus_q])
-                chis_s.append(chi[ik_prime])
-                zetas.append(zeta[iq][Gpq, Gsr])
-                chols_pq.append(chol[ik, ik_minus_q])
-                chols_rs.append(chol[ik_prime, ik_prime_minus_q])
-    chis = (jnp.array(chis_p), jnp.array(chis_q), jnp.array(chis_r), jnp.array(chis_s))
-    chols = (jnp.array(chols_pq), jnp.array(chols_rs))
-    return chis, jnp.array(zetas), chols
+                indx_pqrs[iq, indx] = [ik, ik_minus_q, ik_prime_minus_q, ik_prime]
+                zetas[iq, indx] = [Gpq, Gsr]
+                indx += 1
+    return indx_pqrs, zetas
+
+
+@jax.jit
+def get_batched_data_1indx(array, indx):
+    return array[indx]
+
+
+@jax.jit
+def get_batched_data_2indx(array, indxa, indxb):
+    return array[indxa, indxb]
 
 
 def thc_objective_regularized_batched(
+# def thc_objective_regularized_batched_loop_q(
     xcur,
     num_orb,
     num_thc,
     momentum_map,
     Gpq_map,
     chol,
+    indx_arrays,
     penalty_param=0.0,
-    batch_size=100,
 ):
     num_kpts = momentum_map.shape[0]
     num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
     chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
+    nthc = zeta[0].shape[-1]
     # Normalization factor, no factor of sqrt as their are 4 chis in total when
     # building ERI.
     cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
 
-    num_batch = math.ceil(num_kpts ** 3 / batch_size)
-    chis, zetas, chols = prepare_batched_data(xcur, num_orb, num_thc,
-                                              momentum_map, Gpq_map, chol)
-    objective = compute_ojective_batched(chis, zetas, chols, cP, penalty_param=penalty_param)
+    indx_pqrs, indx_zeta = indx_arrays
+    objective = 0.0
+    for iq in range(num_kpts):
+        chi_p = get_batched_data_1indx(chi, indx_pqrs[iq, :, 0])
+        chi_q = get_batched_data_1indx(chi, indx_pqrs[iq, :, 1])
+        chi_r = get_batched_data_1indx(chi, indx_pqrs[iq, :, 2])
+        chi_s = get_batched_data_1indx(chi, indx_pqrs[iq, :, 3])
+        zeta_batch = get_batched_data_2indx(
+            zeta[iq], indx_zeta[iq, :, 0], indx_zeta[iq, :, 1]
+        )
+        chol_batch_pq = get_batched_data_2indx(
+            chol, indx_pqrs[iq, :, 0], indx_pqrs[iq, :, 1]
+        )
+        chol_batch_rs = get_batched_data_2indx(
+            chol, indx_pqrs[iq, :, 2], indx_pqrs[iq, :, 3]
+        )
+        objective += compute_objective_batched(
+            (chi_p, chi_q, chi_r, chi_s),
+            zeta_batch,
+            (chol_batch_pq, chol_batch_rs),
+            cP,
+            penalty_param=penalty_param,
+        )
     return objective / num_kpts
+
+
+# def thc_objective_regularized_batched(
+    # xcur,
+    # num_orb,
+    # num_thc,
+    # momentum_map,
+    # Gpq_map,
+    # chol,
+    # indx_arrays,
+    # penalty_param=0.0,
+# ):
+    # num_kpts = momentum_map.shape[0]
+    # num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
+    # chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
+    # nthc = zeta[0].shape[-1]
+    # # Normalization factor, no factor of sqrt as their are 4 chis in total when
+    # # building ERI.
+    # cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+    # indx_pqrs, indx_zeta = indx_arrays
+    # objective = 0.0
+    # # process Nk^2 data at once
+    # nkpts = indx_pqrs.shape[0]
+    # indx_pqrs = indx_pqrs.reshape((nkpts**3, 4))
+    # chi_p = get_batched_data_1indx(chi, indx_pqrs[:, 0])
+    # chi_q = get_batched_data_1indx(chi, indx_pqrs[:, 1])
+    # chi_r = get_batched_data_1indx(chi, indx_pqrs[:, 2])
+    # chi_s = get_batched_data_1indx(chi, indx_pqrs[:, 3])
+    # zeta_batch = jnp.array(
+        # [
+            # get_batched_data_2indx(zeta[iq], indx_zeta[iq, :, 0], indx_zeta[iq, :, 1])
+            # for iq in range(nkpts)
+        # ]
+    # ).reshape((nkpts**3, nthc, nthc))
+    # chol_batch_pq = get_batched_data_2indx(chol, indx_pqrs[:, 0], indx_pqrs[:, 1])
+    # chol_batch_rs = get_batched_data_2indx(chol, indx_pqrs[:, 2], indx_pqrs[:, 3])
+    # objective += compute_objective_batched(
+            # (chi_p, chi_q, chi_r, chi_s),
+            # zeta_batch,
+            # (chol_batch_pq, chol_batch_rs),
+        # cP,
+        # penalty_param=penalty_param,
+    # )
+    # return objective / num_kpts
 
 
 def thc_objective_regularized(
@@ -176,18 +228,15 @@ def thc_objective_regularized(
                     chol[ik_prime, ik_prime_minus_q].conj(),
                 )
                 deri = eri_thc - eri_ref
-                MPQ_normalized = jnp.einsum(
-                    "P,PQ,Q->PQ", cP, zeta[iq][Gpq, Gsr], cP
-                )
+                MPQ_normalized = jnp.einsum("P,PQ,Q->PQ", cP, zeta[iq][Gpq, Gsr], cP)
 
                 lambda_z = jnp.sum(jnp.abs(MPQ_normalized)) * 0.5
-                # if iq == 0 and ik == 0 and ik_prime == 0:
-                    # print(jnp.sum(jnp.abs(MPQ_normalized)))
-
-                    # print(lambda_z**2)
-                res += 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * (lambda_z**2)
+                res += 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * (
+                    lambda_z**2
+                )
 
     return res / num_kpts
+
 
 def lbfgsb_opt_kpthc_l2reg(
     chi,
@@ -222,8 +271,7 @@ def lbfgsb_opt_kpthc_l2reg(
         # callback_func = CallBackStore(chkfile_name)
         callback_func = None
 
-    initial_guess = np.zeros(2*(chi.size + get_zeta_size(zeta)),
-                             dtype=np.float64)
+    initial_guess = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
     pack_thc_factors(chi, zeta, initial_guess)
     assert len(chi.shape) == 3
     assert len(zeta[0].shape) == 4
@@ -234,12 +282,22 @@ def lbfgsb_opt_kpthc_l2reg(
     assert zeta[0].shape[-2] == num_thc
     print(initial_guess)
     loss = thc_objective_regularized(
-        jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
-        jnp.array(chol), penalty_param=0.0
+        jnp.array(initial_guess),
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        jnp.array(chol),
+        penalty_param=0.0,
     )
     reg_loss = thc_objective_regularized(
-        jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
-        jnp.array(chol), penalty_param=1.0
+        jnp.array(initial_guess),
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        jnp.array(chol),
+        penalty_param=1.0,
     )
     print(loss, reg_loss)
     # set penalty
@@ -253,8 +311,17 @@ def lbfgsb_opt_kpthc_l2reg(
     # L-BFGS-B optimization
     thc_grad = jax.grad(thc_objective_regularized, argnums=[0])
     print("Initial Grad")
-    print(thc_grad(jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
-                   jnp.array(chol), penalty_param))
+    print(
+        thc_grad(
+            jnp.array(initial_guess),
+            num_orb,
+            num_thc,
+            momentum_map,
+            Gpq_map,
+            jnp.array(chol),
+            penalty_param,
+        )
+    )
     # print()
     res = minimize(
         thc_objective_regularized,
@@ -312,8 +379,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         # callback_func = CallBackStore(chkfile_name)
         callback_func = None
 
-    initial_guess = np.zeros(2*(chi.size + get_zeta_size(zeta)),
-                             dtype=np.float64)
+    initial_guess = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
     pack_thc_factors(chi, zeta, initial_guess)
     assert len(chi.shape) == 3
     assert len(zeta[0].shape) == 4
@@ -322,14 +388,26 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     num_thc = chi.shape[-1]
     assert zeta[0].shape[-1] == num_thc
     assert zeta[0].shape[-2] == num_thc
-    print(initial_guess)
+    indx_arrays = prepare_batched_data_indx_arrays(momentum_map, Gpq_map)
     loss = thc_objective_regularized_batched(
-        jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
-        jnp.array(chol), penalty_param=0.0
+        jnp.array(initial_guess),
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        jnp.array(chol),
+        indx_arrays,
+        penalty_param=0.0,
     )
     reg_loss = thc_objective_regularized_batched(
-        jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
-        jnp.array(chol), penalty_param=1.0
+        jnp.array(initial_guess),
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        jnp.array(chol),
+        indx_arrays,
+        penalty_param=1.0,
     )
     print(loss, reg_loss)
     # set penalty
@@ -343,20 +421,36 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     # L-BFGS-B optimization
     thc_grad = jax.grad(thc_objective_regularized_batched, argnums=[0])
     print("Initial Grad")
-    print(thc_grad(jnp.array(initial_guess), num_orb, num_thc, momentum_map, Gpq_map,
-                   jnp.array(chol), penalty_param))
-    # print()
+    print(
+        thc_grad(
+            jnp.array(initial_guess),
+            num_orb,
+            num_thc,
+            momentum_map,
+            Gpq_map,
+            jnp.array(chol),
+            indx_arrays,
+            penalty_param,
+        )
+    )
     res = minimize(
-        thc_objective_regularized,
+        thc_objective_regularized_batched,
         initial_guess,
-        args=(num_orb, num_thc, momentum_map, Gpq_map, jnp.array(chol), penalty_param),
+        args=(
+            num_orb,
+            num_thc,
+            momentum_map,
+            Gpq_map,
+            jnp.array(chol),
+            indx_arrays,
+            penalty_param,
+        ),
         jac=thc_grad,
         method="L-BFGS-B",
         options={"disp": None, "iprint": disp_freq, "maxiter": maxiter},
         callback=callback_func,
     )
 
-    # print(res)
     params = np.array(res.x)
     if chkfile_name is not None:
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]

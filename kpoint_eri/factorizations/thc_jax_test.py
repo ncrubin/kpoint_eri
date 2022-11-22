@@ -19,6 +19,7 @@ from kpoint_eri.factorizations.thc_jax import (
     get_zeta_size,
     lbfgsb_opt_kpthc_l2reg,
     lbfgsb_opt_kpthc_l2reg_batched,
+    prepare_batched_data_indx_arrays,
 )
 
 from openfermion.resource_estimates.thc.utils.thc_factorization import (
@@ -230,8 +231,10 @@ def test_kpoint_thc_reg_batched():
         buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
     )
     # Test gradient is the same
+    indx_arrays = prepare_batched_data_indx_arrays(momentum_map, G_mapping)
     obj_batched = thc_objective_regularized_batched(
-        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv,
+        indx_arrays, penalty
     )
     assert abs(obj_ref - obj_batched) < 1e-12
     grad_ref_fun = jax.grad(thc_objective_regularized)
@@ -241,7 +244,8 @@ def test_kpoint_thc_reg_batched():
     # Test gradient is the same
     grad_batched_fun = jax.grad(thc_objective_regularized_batched)
     grad_batched = grad_batched_fun(
-        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv,
+        indx_arrays, penalty
     )
     assert np.allclose(grad_batched, grad_ref)
     opt_param = lbfgsb_opt_kpthc_l2reg(
