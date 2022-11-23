@@ -1,4 +1,5 @@
 import numpy as np
+from pyscf.pbc import tools
 from itertools import product
 
 from kpoint_eri.resource_estimates import utils, sparse
@@ -75,8 +76,8 @@ def compute_lambda(
     return lambda_tot, lambda_T, lambda_V, num_nnz, 1-num_nnz/tot_size
 
 
-def compute_lambda_ncr(hcore, sf_obj):
-    kpts = sf_obj.kmf.kpts
+def compute_lambda_ncr(hcore, sparse_int_obj):
+    kpts = sparse_int_obj.kmf.kpts
     nkpts = len(kpts)
     one_body_mat = np.empty((len(kpts)), dtype=object)
     lambda_one_body = 0.
@@ -88,26 +89,26 @@ def compute_lambda_ncr(hcore, sf_obj):
         h1_neg = np.zeros_like(hcore[kidx])
         for qidx in range(len(kpts)):
             # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
-            eri_kqqk_pqrs = sf_obj.get_eri([kidx, qidx, qidx, kidx]) 
+            eri_kqqk_pqrs = sparse_int_obj.get_eri([kidx, qidx, qidx, kidx]) 
             h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
-            # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
-            eri_kkqq_pqrs = sf_obj.get_eri([kidx, kidx, qidx, qidx])  
+            # + sum_{Q}sum_{r}(pkqk|rQrQ)
+            eri_kkqq_pqrs = sparse_int_obj.get_eri([kidx, kidx, qidx, qidx])  
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
-        one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + 0.5 * h1_pos
-        one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
-        lambda_one_body += np.sum(np.abs(one_eigs))
+        one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + h1_pos
+        lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real)) + np.sum(np.abs(one_body_mat[kidx].imag))
     
     lambda_two_body = 0
-    for qidx in range(len(kpts)):
-        # A and B are W
-        A, B = sf_obj.build_AB_from_chol(qidx) # [naux, nao * nk, nao * nk]
-        A /= np.sqrt(nkpts)
-        B /= np.sqrt(nkpts)
-        # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
-        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A.real) + np.abs(A.imag))**2)
-        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B.real) + np.abs(B.imag))**2)
-    lambda_two_body *= 0.25
+    kconserv = tools.get_kconserv(sparse_int_obj.kmf.cell, kpts)
+    nkpts = len(kpts)
+    # recall (k, k-q|k'-q, k')
+    for kidx in range(nkpts):
+        for kpidx in range(nkpts):
+            for qidx in range(nkpts):                 
+                kmq_idx = sparse_int_obj.k_transfer_map[qidx, kidx]
+                kpmq_idx = sparse_int_obj.k_transfer_map[qidx, kpidx]
+                test_eri_block = sparse_int_obj.get_eri([kidx, kmq_idx, kpmq_idx, kpidx])
+                lambda_two_body += np.sum(np.abs(test_eri_block.real)) + np.sum(np.abs(test_eri_block.imag))
 
     lambda_tot = lambda_one_body + lambda_two_body
     return lambda_tot, lambda_one_body, lambda_two_body
