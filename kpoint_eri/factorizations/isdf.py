@@ -406,7 +406,7 @@ def kpoint_isdf_double_translation(
         and num_interp_points is the number of interpolating points. Zeta (the
         central tensor) is of dimension [num_kpts, 27, 27, num_interp_points, num_interp_points]
         if only_unique_G is False otherwise it is of shape [num_kpts,
-        num_unique[Q], num_unique[Q], 27, num_interp_points, num_interp_points].
+        num_unique[Q], num_unique[Q], num_interp_points, num_interp_points].
         G_mapping maps k-points to the appropriate delta_G index, i.e.
         G_mapping[iq, ik] = i_delta_G. if only_unique_G is True the index will
         map to the appropriate index in the reduced set of G vectors.
