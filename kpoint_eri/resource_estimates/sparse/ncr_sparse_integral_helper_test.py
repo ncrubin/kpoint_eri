@@ -151,16 +151,28 @@ def get_num_unique():
                 tally[kp,kq,kr] += 1 
                 tally[kr,ks,kp] += 1 
 
+                fulltally[kp, kq, kr] += 1
+                fulltally[kr, ks, kp] += 1
+
             elif kp == ks and kq == kr:
                 completed[kp,kq,kr] = True
                 completed[kr,ks,kp] = True
                 tally[kp,kq,kr] += 1 
                 tally[kr,ks,kp] += 1 
+
+                fulltally[kp, kq, kr] += 1
+                fulltally[kr, ks, kp] += 1
+
+
             elif kp == kr and kq == ks:
                 completed[kp,kq,kr] = True
                 completed[kq,kp,ks] = True
                 tally[kp,kq,kr] += 1 
                 tally[kq,kp,ks] += 1 
+                # symmetry takes account of [kq, kp, ks] only need to do one of the blocks
+                fulltally[kp, kq, kr] += 1
+                fulltally[kq, kp, ks] += 1
+
             else:
                 completed[kp,kq,kr] = True
                 completed[kr,ks,kp] = True
@@ -171,12 +183,14 @@ def get_num_unique():
                 tally[kr,ks,kp] += 1 
                 tally[kq,kp,ks] += 1 
                 tally[ks,kr,kq] += 1 
-                for ftuple in unique_iter(nmo):
-                    p, q, r, s = ftuple
-                    fulltally[kp, kq, kr, p, q, r, s] += 1
-                    fulltally[kq, kp, ks, q, p, s, r] += 1
-                    fulltally[ks, kr, kq, s, r, q, p] += 1
-                    fulltally[kr, ks, kp, r, s, p, q] += 1
+
+                # just assign entire 4-tensor +1 value because each pqrs is unique because
+                # kp, kq, kr, ks is unique for this case we would only need to grab one of
+                # these blocks of 4.
+                fulltally[kp, kq, kr] += 1
+                fulltally[kq, kp, ks] += 1
+                fulltally[ks, kr, kq] += 1
+                fulltally[kr, ks, kp] += 1
 
     assert np.allclose(completed, True)
     assert np.allclose(tally, 1)
@@ -184,16 +198,21 @@ def get_num_unique():
     for kvals in loop_kkk(nk):
         kp, kq, kr = kvals
         ks = kpts_helper.kconserv[kp, kq, kr]
-        # if len(set([kp, kq, kr ,ks])) == 4:
-        #         print(kp, kq, kr, np.allclose(fulltally[kp, kq, kr], 1))
+        if len(set([kp, kq, kr ,ks])) == 4:
+                # print(kp, kq, kr, np.allclose(fulltally[kp, kq, kr], 1))
+                assert np.allclose(fulltally[kp, kq, kr], 1)
+        elif kp == kr and kq == ks:
+            assert np.allclose(fulltally[kp, kq, kr], 1)
+            assert np.allclose(fulltally[kq, kp, ks], 1)
+        elif kp == ks and kq == kr:
+            assert np.allclose(fulltally[kp, kq, kr], 1)
+            assert np.allclose(fulltally[kr, ks, kp], 1)
+        elif kp == kq and kr == ks:
+            assert np.allclose(fulltally[kp, kq, kr], 1)
+            assert np.allclose(fulltally[kr, ks, kp], 1)
 
-        # else:
-        #     print("seen ", kp, kq, kr)
         assert np.allclose(fulltally[kp, kp, kp], 1)
-        print(np.allclose(fulltally[kp, kp, kp], 1)
-)
 
-    exit()
 
 if __name__ == "__main__":
     get_num_unique()
