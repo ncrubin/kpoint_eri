@@ -1077,7 +1077,7 @@ def test_kpoint_isdf_symmetries():
     G_dict, _ = build_G_vectors(cell)
     num_kpts = len(kpts)
     # Test symmetries from F30-F33
-    # Test LHS for sanity too
+    # Test LHS for sanity too (need to uncomment)
     grid_points = cell.gen_uniform_grids(mf.with_df.mesh)
     lattice_vectors = cell.lattice_vectors()
     from pyscf.pbc.lib.kpts_helper import conj_mapping
@@ -1097,15 +1097,16 @@ def test_kpoint_isdf_symmetries():
                 assert np.allclose(kpts[ik_prime] - kpts[ik_prime_minus_q] - kpts[iq], Gsr)
                 # F30. (pk qk-Q | rk'-Q sk') = (q k-Q p k | sk' rk'-Q)*
                 ik_prime_minus_q = momentum_map[iq, ik_prime]
-                kpt_pqrs = [ik, ik_minus_q, ik_prime_minus_q, ik_prime]
-                eri_pqrs = build_eri(mf, kpt_pqrs)
-                kpt_pqrs = [ik, ik_minus_q, ik_prime_minus_q, ik_prime]
-                kpt_pqrs = [ik_minus_q, ik, ik_prime, ik_prime_minus_q]
-                eri_qpsr = build_eri(mf, kpt_pqrs).transpose((1, 0, 3, 2))
+                # uncomment to check normal eris
+                # kpt_pqrs = [ik, ik_minus_q, ik_prime_minus_q, ik_prime]
+                # eri_pqrs = build_eri(mf, kpt_pqrs)
+                # kpt_pqrs = [ik, ik_minus_q, ik_prime_minus_q, ik_prime]
+                # kpt_pqrs = [ik_minus_q, ik, ik_prime, ik_prime_minus_q]
+                # eri_qpsr = build_eri(mf, kpt_pqrs).transpose((1, 0, 3, 2))
                 # Sanity check relationship
-                assert np.allclose(eri_pqrs, eri_qpsr.conj())
+                # assert np.allclose(eri_pqrs, eri_qpsr.conj())
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = zeta[-Q,G1_comp,G2_comp,m, n].conj()
-                # Build refernce point zeta[Q,G1,G2,m,n] 
+                # Build refernce point zeta[Q,G1,G2,m,n]
                 zeta_ref = build_kpoint_zeta(mf.with_df, kpts[iq], Gpq, Gsr, grid_points, xi)
                 # Get -Q index
                 minus_iq = minus_k_map[iq]
@@ -1117,13 +1118,15 @@ def test_kpoint_isdf_symmetries():
                 # so G_pq_comp = -((-Q) - (Q+Gpq))
                 Gpq_comp = -(kpts[minus_iq] + kpts[iq] + Gpq)
                 Gsr_comp = -(kpts[minus_iq] + kpts[iq] + Gsr)
-                assert np.allclose(kpts[minus_iq] + kpts[iq] + Gpq + Gpq_comp, zero) 
-                assert np.allclose(kpts[minus_iq] + kpts[iq] + Gsr + Gsr_comp, zero) 
-                # Compare this "complement G" to overleaf 
+                assert np.allclose(kpts[minus_iq] + kpts[iq] + Gpq + Gpq_comp, zero)
+                assert np.allclose(kpts[minus_iq] + kpts[iq] + Gsr + Gsr_comp, zero)
+                # Compare this "complement G" to overleaf
+                print("iq = {}, ik = {}, ik_prime = {}".format(iq, ik, ik_prime))
                 print("G {} new !G: {}".format(get_miller(lattice_vectors, Gpq), get_miller(lattice_vectors, Gpq_comp)))
                 print("G' {} new !G': {}".format(get_miller(lattice_vectors, Gsr), get_miller(lattice_vectors, Gpq_comp)))
                 print("G {} ovleaf !G: {}".format(get_miller(lattice_vectors, Gpq), overleaf_Gpq_comp_tuple))
                 print("G' {} ovleaf !G': {}".format(get_miller(lattice_vectors, Gsr), overleaf_Gsr_comp_tuple))
+                print()
                 zeta_test = build_kpoint_zeta(mf.with_df,
                                                       kpts[minus_iq], Gpq_comp,
                                                       Gsr_comp, grid_points, xi)
@@ -1134,18 +1137,20 @@ def test_kpoint_isdf_symmetries():
                 zeta_test = build_kpoint_zeta(mf.with_df, -kpts[iq], -Gpq, -Gsr, grid_points, xi)
                 assert np.allclose(zeta_ref, zeta_test.conj())
                 # F32 (pk qk-Q | rk'-Q sk') = (rk'-Q s k'| pk qk-Q)
-                kpt_pqrs = [ik_prime_minus_q, ik_prime, ik, ik_minus_q]
-                eri_rspq = build_eri(mf, kpt_pqrs).transpose((2, 3, 0, 1))
-                assert np.allclose(eri_pqrs, eri_rspq)
+                # uncomment to check normal eris
+                # kpt_pqrs = [ik_prime_minus_q, ik_prime, ik, ik_minus_q]
+                # eri_rspq = build_eri(mf, kpt_pqrs).transpose((2, 3, 0, 1))
+                # assert np.allclose(eri_pqrs, eri_rspq)
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = # zeta[-Q,G2_comp,G1_comp,m, n]
                 zeta_test = build_kpoint_zeta(mf.with_df,
                                                       kpts[minus_iq], Gsr_comp,
                                                       Gpq_comp, grid_points, xi)
                 assert np.allclose(zeta_ref, zeta_test.T)
                 # F33 (pk qk-Q | rk'-Q sk') = (sk' r k'-Q| qk-Q pk)
-                kpt_pqrs = [ik_prime, ik_prime_minus_q, ik_minus_q, ik]
-                eri_srqp = build_eri(mf, kpt_pqrs).transpose((3, 2, 1, 0))
-                assert np.allclose(eri_pqrs, eri_srqp.conj())
+                # uncomment to check normal eris
+                # kpt_pqrs = [ik_prime, ik_prime_minus_q, ik_minus_q, ik]
+                # eri_srqp = build_eri(mf, kpt_pqrs).transpose((3, 2, 1, 0))
+                # assert np.allclose(eri_pqrs, eri_srqp.conj())
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = zeta[Q,G2,G1,n, m].conj()
                 zeta_test = build_kpoint_zeta(mf.with_df, kpts[iq],
                                                  Gsr, Gpq, grid_points, xi)
