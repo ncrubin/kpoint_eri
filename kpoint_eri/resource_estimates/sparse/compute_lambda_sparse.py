@@ -1,5 +1,4 @@
 import numpy as np
-from pyscf.pbc import tools
 from itertools import product
 
 from kpoint_eri.resource_estimates import utils, sparse
@@ -99,7 +98,6 @@ def compute_lambda_ncr(hcore, sparse_int_obj):
         lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real)) + np.sum(np.abs(one_body_mat[kidx].imag))
     
     lambda_two_body = 0
-    kconserv = tools.get_kconserv(sparse_int_obj.kmf.cell, kpts)
     nkpts = len(kpts)
     # recall (k, k-q|k'-q, k')
     for kidx in range(nkpts):
