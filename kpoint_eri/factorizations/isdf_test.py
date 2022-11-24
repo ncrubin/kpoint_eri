@@ -1157,6 +1157,62 @@ def test_kpoint_isdf_symmetries():
                 assert np.allclose(zeta_ref, zeta_test.conj().T)
 
 
+def test_symmetry_of_G_maps():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [4, 3, 3]
+    kpts = cell.make_kpts(kmesh)
+    mf = scf.KRHF(cell, kpts)
+    # mf.chkfile = "test_isdf_kpoint_build_symmetries.chk"
+    # chi, zeta, xi, _ = build_kisdf_helper(mf)
+    momentum_map = build_momentum_transfer_mapping(cell, kpts)
+    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_double_translation(
+        cell, kpts, momentum_map
+    )
+    G_dict, _ = build_G_vectors(cell)
+    num_kpts = len(kpts)
+    # Test symmetries from F30-F33
+    # Test LHS for sanity too (need to uncomment)
+    # grid_points = cell.gen_uniform_grids(mf.with_df.mesh)
+    lattice_vectors = cell.lattice_vectors()
+    from pyscf.pbc.lib.kpts_helper import conj_mapping
+    minus_k_map = conj_mapping(cell, kpts)
+    # Sanity check xi is real
+    # print("max xi.imag: ", np.max(np.abs(xi.imag)))
+    zero = np.zeros(3)
+    for iq in range(1, num_kpts):
+        for ik in range(num_kpts):
+            ik_minus_q = momentum_map[iq, ik]
+            Gpq = G_vecs[G_map[iq, ik]]
+            for ik_prime in range(num_kpts):
+                Gsr = G_vecs[G_map[iq, ik_prime]]
+                ik_prime_minus_q = momentum_map[iq, ik_prime]
+                minus_iq = minus_k_map[iq]
+                Gpq_comp = -(kpts[minus_iq] + kpts[iq] + Gpq)
+                Gsr_comp = -(kpts[minus_iq] + kpts[iq] + Gsr)
+                # Get indx of "complement" G in original set of 27
+                iGpq_comp = G_dict[tuple(get_miller(lattice_vectors, Gpq_comp))]
+                iGsr_comp = G_dict[tuple(get_miller(lattice_vectors, Gpq_comp))]
+                # Get index of unique Gs in original set of 27
+                G_indx_unique = [G_dict[tuple(get_miller(lattice_vectors, G))] for G in delta_Gs[iq]]
+                # Check complement is in set corresponding to zeta[-Q]
+                assert iGpq_comp in G_indx_unique
+                assert iGsr_comp in G_indx_unique
+
+
 def test_G_vector_mapping_double():
     cell = gto.Cell()
     cell.atom = """
@@ -1291,7 +1347,8 @@ if __name__ == "__main__":
     # test_supercell_isdf_gamma()
     # test_supercell_isdf_complex()
     # test_kpoint_isdf_build()
-    test_kpoint_isdf_symmetries()
+    # test_kpoint_isdf_symmetries()
+    test_symmetry_of_G_maps()
     # test_kpoint_isdf_build_single_translation()
     # test_G_vector_mapping()
     # test_G_vector_mapping_single_translation()
