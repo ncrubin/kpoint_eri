@@ -6,6 +6,25 @@ from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk, get_kconserv
 
 from kpoint_eri.resource_estimates.utils.misc_utils import build_momentum_transfer_mapping
 
+def _symmetric_two_body_terms(quad, complex_valued):
+    p, q, r, s = quad
+    yield p, q, r, s
+    yield q, p, s, r
+    yield s, r, q, p
+    yield r, s, p, q
+    if not complex_valued:
+        yield p, s, r, q
+        yield q, r, s, p
+        yield s, p, q, r
+        yield r, q, p, s 
+
+def unique_iter(nmo):
+    seen = set()
+    for quad in itertools.product(range(nmo), repeat=4):
+        if quad not in seen:
+            seen |= set(_symmetric_two_body_terms(quad, True))
+            yield tuple(quad)
+
 
 
 class NCRSSparseFactorizationHelper:
@@ -30,7 +49,7 @@ class NCRSSparseFactorizationHelper:
         self.k_transfer_map = k_transfer_map
         self.threshold = threshold
 
-    def get_total_symm_unique_termsh(self,):
+    def get_total_unique_terms_above_thresh(self,):
         """
         Determine all unique (pkp, qkq|rkr, sks) given momentum conservation and four fold symmetry
 
@@ -39,19 +58,74 @@ class NCRSSparseFactorizationHelper:
         """
         kpts_helper = KptsHelper(self.kmf.cell, self.kmf.kpts)
         nkpts = len(self.kmf.kpts)
-        fulltally = np.zeros((nkpts,nkpts,nkpts, self.nao, self.nao, self.nao, self.nao), dtype=int)
-        seven_tuple_set = set() 
-        for kvals in loop_kkk(self.nk):
+        completed = np.zeros((nkpts,nkpts,nkpts), dtype=bool)
+        counter = 0
+        for kvals in loop_kkk(nkpts):
             kp, kq, kr = kvals
             ks = kpts_helper.kconserv[kp, kq, kr]
-            for p, q, r, s in itertools.product(range(self.nao), repeat=4):
-                seven_tuple_set |= {(kp, kq, kr, p, q, r, s),
-                                     (kq, kp, ks, q, p, s, r),
-                                     (kr, ks, kp, r, s, p, q),
-                                     (ks, kr, kq, s, r, q, p)}
-        return seven_tuple_set
+            if not completed[kp,kq,kr]:
+                eri_block = self.get_eri([kp, kq, kr, ks])
+                if kp == kq == kr == ks:
+                    completed[kp,kq,kr] = True
+                    for ftuple in unique_iter(self.nao):
+                        p, q, r, s = ftuple
+                        if p == q == r == s:
+                            counter += np.count_nonzero(eri_block[p, q, r, s])
+                            # fulltally[kp, kq, kr, p, q, r, s] += 1
+                        elif p == r and q == s:
+                            counter += np.count_nonzero(eri_block[p, q, r, s])
+                            # fulltally[kp, kq, kr, p, q, r, s] += 1
+                            # fulltally[kp, kq, kr, q, p, s, r] += 1
+                        elif p == s and q == r:
+                            counter += np.count_nonzero(eri_block[p, q, r, s])
+                            # fulltally[kp, kq, kr, p, q, r, s] += 1
+                            # fulltally[kp, kq, kr, q, p, s, r] += 1
+                        elif p == q and r == s:
+                            counter += np.count_nonzero(eri_block[p, q, r, s])
+                            # fulltally[kp, kq, kr, p, q, r, s] += 1
+                            # fulltally[kp, kq, kr, r, s, p, q] += 1
+                        else:
+                            counter += np.count_nonzero(eri_block[p, q, r, s])
+                            # fulltally[kp, kq, kr, p, q, r, s] += 1
+                            # fulltally[kp, kq, kr, q, p, s, r] += 1
+                            # fulltally[kp, kq, kr, s, r, q, p] += 1
+                            # fulltally[kp, kq, kr, r, s, p, q] += 1
+
+                elif kp == kq and kr == ks:
+                    completed[kp,kq,kr] = True
+                    completed[kr,ks,kp] = True
+                    counter += np.count_nonzero(eri_block)
+                    # fulltally[kp, kq, kr] += 1
+                    # fulltally[kr, ks, kp] += 1
+
+                elif kp == ks and kq == kr:
+                    completed[kp,kq,kr] = True
+                    completed[kr,ks,kp] = True
+                    counter += np.count_nonzero(eri_block)
+                    # fulltally[kp, kq, kr] += 1
+                    # fulltally[kr, ks, kp] += 1
 
 
+            elif kp == kr and kq == ks:
+                completed[kp,kq,kr] = True
+                completed[kq,kp,ks] = True
+                counter += np.count_nonzero(eri_block)
+                # tally[kp,kq,kr] += 1 
+                # tally[kq,kp,ks] += 1 
+                # # symmetry takes account of [kq, kp, ks] only need to do one of the blocks
+                # fulltally[kp, kq, kr] += 1
+                # fulltally[kq, kp, ks] += 1
+
+            else:
+                counter += np.count_nonzero(eri_block)
+                completed[kp,kq,kr] = True
+                completed[kr,ks,kp] = True
+                completed[kq,kp,ks] = True
+                completed[ks,kr,kq] = True
+        return counter
+
+
+        
     def get_eri(self, ikpts, check_eq=False):
         """
         Construct (pkp qkq| rkr sks) via \\sum_{n}L_{pkp,qkq,n}L_{sks, rkr, n}^{*}
