@@ -343,7 +343,8 @@ def lbfgsb_opt_kpthc_l2reg(
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(params, num_thc, num_orb, num_kpts, num_G_per_Q)
         with h5py.File(chkfile_name, "w") as fh5:
-            fh5["etaPp"] = chi
+            fh5["chi"] = chi
+            fh5["G_mapping"] = Gpq_map
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     return np.array(params)
@@ -460,7 +461,8 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(params, num_thc, num_orb, num_kpts, num_G_per_Q)
         with h5py.File(chkfile_name, "w") as fh5:
-            fh5["etaPp"] = chi
+            fh5["chi"] = chi
+            fh5["G_mapping"] = Gpq_map
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     return np.array(params)
@@ -550,7 +552,8 @@ def adagrad_opt_kpthc_batched(
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(x, num_thc, num_orb, num_kpts, num_G_per_Q)
         with h5py.File(chkfile_name, "w") as fh5:
-            fh5["etaPp"] = chi
+            fh5["chi"] = chi
+            fh5["G_mapping"] = Gpq_map
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     return params
