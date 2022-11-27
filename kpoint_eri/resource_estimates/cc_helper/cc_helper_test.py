@@ -1,5 +1,6 @@
 from pyscf.pbc import gto, scf, mp
 import numpy as np
+import h5py
 
 
 def test_eri_helpers():
@@ -24,12 +25,10 @@ def test_eri_helpers():
     mf.chkfile = "uccsd_test.chk"
     mf.init_guess = "chkfile"
     mf.with_df._cderi_to_save = mf.chkfile
+    mf.with_df.mesh = cell.mesh
     mf.kernel()
 
-    nk = np.prod(kmesh)
-
-    from pyscf.pbc.mp.kump2 import KUMP2
-
+    mf.with_df._cderi = mf.chkfile
     u_from_ro = scf.addons.convert_to_uhf(mf)
     mymp = mp.KMP2(mf)
 
