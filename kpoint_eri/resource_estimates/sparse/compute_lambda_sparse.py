@@ -105,7 +105,7 @@ def compute_lambda_ncr(hcore, sparse_int_obj):
             for qidx in range(nkpts):                 
                 kmq_idx = sparse_int_obj.k_transfer_map[qidx, kidx]
                 kpmq_idx = sparse_int_obj.k_transfer_map[qidx, kpidx]
-                test_eri_block = sparse_int_obj.get_eri([kidx, kmq_idx, kpmq_idx, kpidx])
+                test_eri_block = sparse_int_obj.get_eri([kidx, kmq_idx, kpmq_idx, kpidx]) / nkpts
                 lambda_two_body += np.sum(np.abs(test_eri_block.real)) + np.sum(np.abs(test_eri_block.imag))
 
     lambda_tot = lambda_one_body + lambda_two_body
