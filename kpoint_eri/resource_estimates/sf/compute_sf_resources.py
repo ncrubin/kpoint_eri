@@ -5,7 +5,10 @@ an LCU formed from a symmeterized Cholesky decomposition of the integrals
 """
 from typing import Tuple
 import numpy as np
+
 from numpy.lib.scimath import arccos, arcsin  # has analytic continutn to cplx
+from sympy import factorint
+
 from openfermion.resource_estimates.utils import (QR, QI, power_two,)
 from openfermion.resource_estimates.utils import QR2 as QR2_of
 
@@ -42,7 +45,8 @@ def QI2(L1, Lv2):
 
 def kpoint_single_factorization_costs(n: int, 
                                       lam: float, 
-                                      L: int, 
+                                      M: int, 
+                                      Nk: int,
                                       dE: float, 
                                       chi: int, 
                                       stps: int, 
@@ -53,11 +57,9 @@ def kpoint_single_factorization_costs(n: int,
         n (int) - the number of spin-orbitals. When using this for 
                   k-point sampling, this is equivalent to N times N_k.
         lam (float) - the lambda-value for the Hamiltonian
+        M (int) - The combined number of values of n
+        Nk (int) - Number of k-points
         dE (float) - allowable error in phase estimation
-        L (int) - the rank in the decomposition When using this for 
-                  k-point sampling, the value of L needs to be the 
-                  combined number of values of n (denoted M in the 
-                  document) and values of Q (denoted N_k), so L=MN_k.
         chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
             number of bits for the representation of the coefficients
         stps (int) - an approximate number of steps to choose the precision of
@@ -69,22 +71,28 @@ def kpoint_single_factorization_costs(n: int,
         total_cost (int) - Total number of Toffolis
         total_qubit_count (int) - Total qubit count
     """
+    L = Nk * n * (n + 2) / 4
+
     # Number of trailing zeros by computing smallest prime factor exponent
     # Number of trailing zeros
-    eta = power_two(L + 1) if L % 2 == 1 else 0
+    factors = factorint(L)
+    eta = factors[min(list(sorted(factors.keys())))]
+    if L % 2 == 1:
+        eta = 0
 
     # Number of qubits for the first register
-    nL = np.ceil(np.log2(L + 1))
+    nL = np.ceil(np.log2(L))
 
     # Number of qubits for p and q registers
     nN = np.ceil(np.log2(n // 2))
+
+    nMN = np.ceil[np.log2[M * Nk + 1]]
 
     oh = [0] * 20
     for p in range(20):
         # JJG note: arccos arg may be > 1
         # v = Round[2^p/(2*\[Pi])*ArcCos[2^nL/Sqrt[(L + 1)/2^\[Eta]]/2]];
-        v = np.round(np.power(2,p+1) / (2 * np.pi) * arccos(np.power(2,nL) /\
-            np.sqrt((L + 1)/2**eta)/2))
+        v = np.round(np.power(2,p+1) / (2 * np.pi) * arccos(np.power(2,nMN) / np.sqrt(M * Nk + 1) / 2))
         #   oh[[p]] = stps*(1/N[Sin[3*ArcSin[Cos[v*2*\[Pi]/2^p]*Sqrt[(L + 1)/2^\[Eta]]/2^nL]]^2] - 1) + 4*p];
         oh[p] = np.real(stps * (1 / (np.sin(3 * arcsin(np.cos(v * 2 * np.pi / \
             np.power(2,p+1)) * \
@@ -222,3 +230,15 @@ def kpoint_single_factorization_costs(n: int,
     total_qubit_count = int(total_qubit_count)
 
     return step_cost, total_cost, total_qubit_count
+
+
+
+if __name__ == "__main__":
+    from sympy import factorint
+    L = 52
+    # print(power_two(L + 1) if L % 2 == 1 else power_two(L))
+    # print(power_two(L))
+    print(factorint(L))
+    factors = factorint(L)
+    eta = factors[min(list(sorted(factors.keys())))]
+    print(eta)
