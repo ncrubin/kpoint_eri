@@ -3,6 +3,17 @@ from pyscf.pbc import cc, scf
 from kpoint_eri.resource_estimates import cc_helper
 from kpoint_eri.resource_estimates import utils
 
+
+def build_ucc(approx_cc, helper):
+    eris = cc_helper._custom_make_df_eris(approx_cc, helper, approx_cc.mo_coeff)
+
+    def ao2mo(self, mo_coeff=None):
+        return eris
+
+    approx_cc.ao2mo = ao2mo
+    return approx_cc
+
+
 def build_cc(approx_cc, helper):
     eris = cc_helper._ERIS(
             approx_cc,

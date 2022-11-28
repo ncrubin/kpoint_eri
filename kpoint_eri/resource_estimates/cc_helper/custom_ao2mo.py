@@ -3,16 +3,11 @@ import numpy as np
 import h5py
 
 from pyscf import lib
-import pyscf.ao2mo
 from pyscf.lib import logger
-import pyscf.cc
-import pyscf.cc.ccsd
-from pyscf.pbc import scf
-from pyscf.pbc.mp.kmp2 import (get_frozen_mask, get_nocc, get_nmo,
-                               padded_mo_coeff, padding_k_idx)  # noqa
-from pyscf.pbc.cc import kintermediates_rhf as imdk
-from pyscf.lib.parameters import LOOSE_ZERO_TOL, LARGE_DENOM  # noqa
 from pyscf.pbc.lib import kpts_helper
+from pyscf.cc import uccsd
+from pyscf.pbc.mp.kmp2 import (get_nocc,
+                               padded_mo_coeff, padding_k_idx)  # noqa
 from pyscf.pbc.lib.kpts_helper import gamma_point
 from pyscf import __config__
 
@@ -128,3 +123,168 @@ class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
                 self.vvvv[kp, kr, kq] = eri_kpt_symm[nocc:, nocc:, nocc:, nocc:] / nkpts
 
         self.dtype = dtype
+
+
+def _custom_make_df_eris(cc, eri_helper, mo_coeff=None):
+    from pyscf.pbc.df import df
+    from pyscf.ao2mo import _ao2mo
+    cell = cc._scf.cell
+    if cell.dimension == 2:
+        raise NotImplementedError
+
+    eris = uccsd._ChemistsERIs()
+    if mo_coeff is None:
+        mo_coeff = cc.mo_coeff
+    from pyscf.pbc.mp.kump2 import padded_mo_coeff
+    mo_coeff = padded_mo_coeff(cc, mo_coeff)
+    eris.mo_coeff = mo_coeff
+    eris.nocc = cc.nocc
+    thisdf = cc._scf.with_df
+
+    kpts = cc.kpts
+    nkpts = cc.nkpts
+    nocca, noccb = cc.nocc
+    nmoa, nmob = cc.nmo
+    nvira, nvirb = nmoa - nocca, nmob - noccb
+    #if getattr(thisdf, 'auxcell', None):
+    #    naux = thisdf.auxcell.nao_nr()
+    #else:
+    #    naux = thisdf.get_naoaux()
+    nao = cell.nao_nr()
+    mo_kpts_a, mo_kpts_b = eris.mo_coeff
+
+    if gamma_point(kpts):
+        dtype = np.double
+    else:
+        dtype = np.complex128
+    dtype = np.result_type(dtype, *mo_kpts_a)
+
+    eris.feri = feri = lib.H5TmpFile()
+
+    eris.oooo = feri.create_dataset('oooo', (nkpts,nkpts,nkpts,nocca,nocca,nocca,nocca), dtype)
+    eris.ooov = feri.create_dataset('ooov', (nkpts,nkpts,nkpts,nocca,nocca,nocca,nvira), dtype)
+    eris.oovv = feri.create_dataset('oovv', (nkpts,nkpts,nkpts,nocca,nocca,nvira,nvira), dtype)
+    eris.ovov = feri.create_dataset('ovov', (nkpts,nkpts,nkpts,nocca,nvira,nocca,nvira), dtype)
+    eris.voov = feri.create_dataset('voov', (nkpts,nkpts,nkpts,nvira,nocca,nocca,nvira), dtype)
+    eris.vovv = feri.create_dataset('vovv', (nkpts,nkpts,nkpts,nvira,nocca,nvira,nvira), dtype)
+    eris.vvvv = None
+
+    eris.OOOO = feri.create_dataset('OOOO', (nkpts,nkpts,nkpts,noccb,noccb,noccb,noccb), dtype)
+    eris.OOOV = feri.create_dataset('OOOV', (nkpts,nkpts,nkpts,noccb,noccb,noccb,nvirb), dtype)
+    eris.OOVV = feri.create_dataset('OOVV', (nkpts,nkpts,nkpts,noccb,noccb,nvirb,nvirb), dtype)
+    eris.OVOV = feri.create_dataset('OVOV', (nkpts,nkpts,nkpts,noccb,nvirb,noccb,nvirb), dtype)
+    eris.VOOV = feri.create_dataset('VOOV', (nkpts,nkpts,nkpts,nvirb,noccb,noccb,nvirb), dtype)
+    eris.VOVV = feri.create_dataset('VOVV', (nkpts,nkpts,nkpts,nvirb,noccb,nvirb,nvirb), dtype)
+    eris.VVVV = None
+
+    eris.ooOO = feri.create_dataset('ooOO', (nkpts,nkpts,nkpts,nocca,nocca,noccb,noccb), dtype)
+    eris.ooOV = feri.create_dataset('ooOV', (nkpts,nkpts,nkpts,nocca,nocca,noccb,nvirb), dtype)
+    eris.ooVV = feri.create_dataset('ooVV', (nkpts,nkpts,nkpts,nocca,nocca,nvirb,nvirb), dtype)
+    eris.ovOV = feri.create_dataset('ovOV', (nkpts,nkpts,nkpts,nocca,nvira,noccb,nvirb), dtype)
+    eris.voOV = feri.create_dataset('voOV', (nkpts,nkpts,nkpts,nvira,nocca,noccb,nvirb), dtype)
+    eris.voVV = feri.create_dataset('voVV', (nkpts,nkpts,nkpts,nvira,nocca,nvirb,nvirb), dtype)
+    eris.vvVV = None
+
+    eris.OOoo = None
+    eris.OOov = feri.create_dataset('OOov', (nkpts,nkpts,nkpts,noccb,noccb,nocca,nvira), dtype)
+    eris.OOvv = feri.create_dataset('OOvv', (nkpts,nkpts,nkpts,noccb,noccb,nvira,nvira), dtype)
+    eris.OVov = feri.create_dataset('OVov', (nkpts,nkpts,nkpts,noccb,nvirb,nocca,nvira), dtype)
+    eris.VOov = feri.create_dataset('VOov', (nkpts,nkpts,nkpts,nvirb,noccb,nocca,nvira), dtype)
+    eris.VOvv = feri.create_dataset('VOvv', (nkpts,nkpts,nkpts,nvirb,noccb,nvira,nvira), dtype)
+    eris.VVvv = None
+
+    _custom_kuccsd_eris_common_(cc, eris, eri_helper)
+
+    # Assuming spin-free integrals (RHF/ROHF)
+    eris.Lpv = np.empty((nkpts, nkpts), dtype=object)
+    eris.LPV = np.empty((nkpts, nkpts), dtype=object)
+    for ki in range(nkpts):
+        for kj in range(nkpts):
+            eris.Lpv[ki,kj] = eri_helper.chol[ki,kj][:,:,nocca:]
+            eris.LPV[ki,kj] = eri_helper.chol[ki,kj][:,:,noccb:]
+
+    return eris
+
+def _custom_kuccsd_eris_common_(cc, eris, eri_helper):
+    from pyscf.pbc import tools
+    from pyscf.pbc.cc.ccsd import _adjust_occ
+    #if not (cc.frozen is None or cc.frozen == 0):
+    #    raise NotImplementedError('cc.frozen = %s' % str(cc.frozen))
+
+    cput0 = (logger.process_clock(), logger.perf_counter())
+    log = logger.new_logger(cc)
+    cell = cc._scf.cell
+
+    kpts = cc.kpts
+    nkpts = cc.nkpts
+    mo_coeff = eris.mo_coeff
+    nocca, noccb = eris.nocc
+    mo_a, mo_b = mo_coeff
+
+    # Re-make our fock MO matrix elements from density and fock AO
+    dm = cc._scf.make_rdm1(cc.mo_coeff, cc.mo_occ)
+    hcore = cc._scf.get_hcore()
+    with lib.temporary_env(cc._scf, exxdiv=None):
+        vhf = cc._scf.get_veff(cell, dm)
+    focka = [reduce(np.dot, (mo.conj().T, hcore[k]+vhf[0][k], mo))
+             for k, mo in enumerate(mo_a)]
+    fockb = [reduce(np.dot, (mo.conj().T, hcore[k]+vhf[1][k], mo))
+             for k, mo in enumerate(mo_b)]
+    eris.fock = (np.asarray(focka), np.asarray(fockb))
+
+    madelung = tools.madelung(cell, kpts)
+    mo_ea = [focka[k].diagonal().real for k in range(nkpts)]
+    mo_eb = [fockb[k].diagonal().real for k in range(nkpts)]
+    mo_ea = [_adjust_occ(e, nocca, -madelung) for e in mo_ea]
+    mo_eb = [_adjust_occ(e, noccb, -madelung) for e in mo_eb]
+    eris.mo_energy = (mo_ea, mo_eb)
+
+    # The momentum conservation array
+    kconserv = cc.khelper.kconserv
+
+    for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
+        ks = kconserv[kp,kq,kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        eris.oooo[kp,kq,kr] = tmp[:nocca,:nocca,:nocca,:nocca]
+        eris.ooov[kp,kq,kr] = tmp[:nocca,:nocca,:nocca,nocca:]
+        eris.oovv[kp,kq,kr] = tmp[:nocca,:nocca,nocca:,nocca:]
+        eris.ovov[kp,kq,kr] = tmp[:nocca,nocca:,:nocca,nocca:]
+        eris.voov[kq,kp,ks] = tmp[:nocca,nocca:,nocca:,:nocca].conj().transpose(1,0,3,2)
+        eris.vovv[kq,kp,ks] = tmp[:nocca,nocca:,nocca:,nocca:].conj().transpose(1,0,3,2)
+
+    for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
+        ks = kconserv[kp,kq,kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        eris.OOOO[kp,kq,kr] = tmp[:noccb,:noccb,:noccb,:noccb]
+        eris.OOOV[kp,kq,kr] = tmp[:noccb,:noccb,:noccb,noccb:]
+        eris.OOVV[kp,kq,kr] = tmp[:noccb,:noccb,noccb:,noccb:]
+        eris.OVOV[kp,kq,kr] = tmp[:noccb,noccb:,:noccb,noccb:]
+        eris.VOOV[kq,kp,ks] = tmp[:noccb,noccb:,noccb:,:noccb].conj().transpose(1,0,3,2)
+        eris.VOVV[kq,kp,ks] = tmp[:noccb,noccb:,noccb:,noccb:].conj().transpose(1,0,3,2)
+
+    for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
+        ks = kconserv[kp,kq,kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        eris.ooOO[kp,kq,kr] = tmp[:nocca,:nocca,:noccb,:noccb]
+        eris.ooOV[kp,kq,kr] = tmp[:nocca,:nocca,:noccb,noccb:]
+        eris.ooVV[kp,kq,kr] = tmp[:nocca,:nocca,noccb:,noccb:]
+        eris.ovOV[kp,kq,kr] = tmp[:nocca,nocca:,:noccb,noccb:]
+        eris.voOV[kq,kp,ks] = tmp[:nocca,nocca:,noccb:,:noccb].conj().transpose(1,0,3,2)
+        eris.voVV[kq,kp,ks] = tmp[:nocca,nocca:,noccb:,noccb:].conj().transpose(1,0,3,2)
+
+    for kp, kq, kr in kpts_helper.loop_kkk(nkpts):
+        ks = kconserv[kp,kq,kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        # eris.OOoo[kp,kq,kr] = tmp[:noccb,:noccb,:nocca,:nocca]
+        eris.OOov[kp,kq,kr] = tmp[:noccb,:noccb,:nocca,nocca:]
+        eris.OOvv[kp,kq,kr] = tmp[:noccb,:noccb,nocca:,nocca:]
+        eris.OVov[kp,kq,kr] = tmp[:noccb,noccb:,:nocca,nocca:]
+        eris.VOov[kq,kp,ks] = tmp[:noccb,noccb:,nocca:,:nocca].conj().transpose(1,0,3,2)
+        eris.VOvv[kq,kp,ks] = tmp[:noccb,noccb:,nocca:,nocca:].conj().transpose(1,0,3,2)
+
+    log.timer('CCSD integral transformation', *cput0)
+    return eris
