@@ -140,6 +140,6 @@ class NCRSSparseFactorizationHelper:
             assert np.allclose(np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True),
                                np.einsum('npq,nrs->pqrs', self.chol[ikp, ikq], self.chol[ikr, iks], optimize=True))
         kpoint_eri_tensor = np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
-        zero_mask = kpoint_eri_tensor < self.threshold
+        zero_mask = np.abs(kpoint_eri_tensor) < self.threshold
         kpoint_eri_tensor[zero_mask] = 0
         return kpoint_eri_tensor
