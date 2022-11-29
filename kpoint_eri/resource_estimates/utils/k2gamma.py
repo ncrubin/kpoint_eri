@@ -183,6 +183,9 @@ def k2gamma(kmf, kmesh=None, make_real=True):
             mf = scf.KRHF(scell, kpts=scell.make_kpts([1, 1, 1])).rs_density_fit()
         else:
             mf = scf.KRHF(scell, kpts=scell.make_kpts([1, 1, 1]))
+        mf.mo_coeff = [C_gamma]
+        mf.mo_energy = [E_g]
+        mf.mo_occ = [mo_occ]
     elif isinstance(kmf, scf.kuhf.KUHF):
         scell, Ea, Ca, occ_a = transform(kmf.mo_energy[0], kmf.mo_coeff[0], kmf.mo_occ[0])
         scell, Eb, Cb, occ_b = transform(kmf.mo_energy[1], kmf.mo_coeff[1], kmf.mo_occ[1])
@@ -190,15 +193,12 @@ def k2gamma(kmf, kmesh=None, make_real=True):
             mf = scf.KUHF(scell, kpts=scell.make_kpts([1, 1, 1])).rs_density_fit
         else:
             mf = scf.KUHF(scell, kpts=scell.make_kpts([1, 1, 1]))
-        E_g = [Ea, Eb]
-        C_gamma = [Ca, Cb]
-        mo_occ = [occ_a, occ_b]
+        mf.mo_energy = [[Ea], [Eb]]
+        mf.mo_coeff = [[Ca], [Cb]]
+        mf.mo_occ = [[occ_a], [occ_b]]
     else:
         raise NotImplementedError('SCF object %s not supported' % kmf)
 
-    mf.mo_coeff = C_gamma
-    mf.mo_energy = E_g
-    mf.mo_occ = mo_occ
     return mf
 
 
