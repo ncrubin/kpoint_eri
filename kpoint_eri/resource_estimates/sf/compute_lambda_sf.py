@@ -153,14 +153,13 @@ def compute_lambda_ncr2(hcore, sf_obj: NCRSingleFactorizationHelper):
             # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
             eri_kqqk_pqrs = sf_obj.get_eri([kidx, qidx, qidx, kidx]) 
             h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
-            # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+            # + sum_{Q}sum_{r}(pkqk|rQrQ)
             eri_kkqq_pqrs = sf_obj.get_eri([kidx, kidx, qidx, qidx])  
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
-        one_body_mat[kidx] = hcore[kidx] + 0.5 * h1_neg + h1_pos
-        one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
-        lambda_one_body += np.sum(np.abs(one_eigs))
-
+        one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + h1_pos
+        lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real)) + np.sum(np.abs(one_body_mat[kidx].imag))
+ 
     ##############################################################################
     #
     # \lambda_{V} = \frac 12 \sum_{\Q}\sum_{n}^{M}\left
