@@ -168,7 +168,7 @@ def k2gamma(kmf, kmesh=None, make_real=True):
          \e^{\ii \veck\cdot\vecR} C^{\veck}_{\mu  m}
     '''
     from pyscf.pbc import scf
-    from pyscf.pbc.df import RSDF
+    from pyscf.pbc.df import RSDF, GDF
     def transform(mo_energy, mo_coeff, mo_occ):
         scell, E_g, C_gamma = mo_k2gamma(kmf.cell, mo_energy, mo_coeff,
                                          kmf.kpts, kmesh,
@@ -181,7 +181,10 @@ def k2gamma(kmf, kmesh=None, make_real=True):
         scell, E_g, C_gamma, mo_occ = transform(kmf.mo_energy, kmf.mo_coeff, kmf.mo_occ)
         if isinstance(kmf.with_df, RSDF):
             mf = scf.KRHF(scell, kpts=scell.make_kpts([1, 1, 1])).rs_density_fit()
+        elif isinstance(kmf.with_df, GDF):
+            mf = scf.KRHF(scell, kpts=scell.make_kpts([1, 1, 1])).density_fit()
         else:
+            print("in fftdf")
             mf = scf.KRHF(scell, kpts=scell.make_kpts([1, 1, 1]))
         mf.mo_coeff = [C_gamma]
         mf.mo_energy = [E_g]
