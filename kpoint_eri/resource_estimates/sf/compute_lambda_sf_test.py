@@ -76,8 +76,6 @@ def lambda_calc():
     supercell_mf.e_tot = supercell_mf.energy_tot()
     # supercell_mf.kernel()
     assert np.isclose(mf.e_tot, supercell_mf.e_tot / np.prod(kmesh))
-    exit()
-    # WIP
 
     supercell_mymp = mp.KMP2(supercell_mf)
     supercell_Luv = cholesky_from_df_ints(supercell_mymp)
@@ -90,15 +88,37 @@ def lambda_calc():
 
     # check l2 norm of one-body
     assert np.isclose(np.linalg.norm(supercell_hcore_mo), np.linalg.norm(np.array(hcore_mo).ravel()))
-    print(np.linalg.norm(np.abs(supercell_Luv[0, 0]).ravel()))
-    abs_squared_sum = 0
-    for kidx, qidx in product(range(nkpts), repeat=2):
-        abs_squared_sum += np.sum(np.abs(Luv[kidx, qidx])**2)
-    print(np.sqrt(abs_squared_sum))
-    exit()
-    assert np.isclose(sc_lambda_one_body, lambda_one_body)
-    assert np.isclose(sc_lambda_two_body, lambda_two_body)
 
+    # this part needs to change 
+    lambda_two_body = 0
+    for qidx in range(len(kpts)):
+        # A and B are W
+        A, B = helper.build_AB_from_chol(qidx) # [naux, nao * nk, nao * nk]
+        A /= np.sqrt(nkpts)
+        B /= np.sqrt(nkpts)
+        # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
+        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A.real) + np.abs(A.imag))**2)
+        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B.real) + np.abs(B.imag))**2)
+        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A)**2))
+        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B)**2))
+
+    lambda_two_body *= 0.5
+
+    # this part needs to change 
+    lambda_two_body_v2 = 0
+    for qidx in range(1):
+        # A and B are W
+        A, B = supercell_helper.build_AB_from_chol(qidx) # [naux, nao * nk, nao * nk]
+        A /= np.sqrt(1)
+        B /= np.sqrt(1)
+        # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
+        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A.real) + np.abs(A.imag))**2)
+        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B.real) + np.abs(B.imag))**2)
+        lambda_two_body_v2 += np.sum(np.einsum('npq->n', np.abs(A)**2))
+        lambda_two_body_v2 += np.sum(np.einsum('npq->n', np.abs(B)**2))
+
+    lambda_two_body_v2 *= 0.5
+    assert np.isclose(lambda_two_body_v2, lambda_two_body)
 
 
 if __name__ == "__main__":
