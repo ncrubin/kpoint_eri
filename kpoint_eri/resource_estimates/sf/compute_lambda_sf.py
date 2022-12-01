@@ -181,6 +181,9 @@ def compute_lambda_ncr2(hcore, sf_obj: NCRSingleFactorizationHelper):
         # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
         lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A.real) + np.abs(A.imag))**2)
         lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B.real) + np.abs(B.imag))**2)
+        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A)**2))
+        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B)**2))
+
     lambda_two_body *= 0.5
 
     lambda_tot = lambda_one_body + lambda_two_body
