@@ -158,7 +158,9 @@ def compute_lambda_ncr2(hcore, sf_obj: NCRSingleFactorizationHelper):
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
         one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + h1_pos
-        lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real)) + np.sum(np.abs(one_body_mat[kidx].imag))
+        # lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real)) + np.sum(np.abs(one_body_mat[kidx].imag))
+        lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real) + np.abs(one_body_mat[kidx].imag))
+
  
     ##############################################################################
     #
