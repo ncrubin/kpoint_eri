@@ -30,14 +30,20 @@ def test_ncr_lambda_sparse():
     3.370137329, 0.000000000, 3.370137329
     3.370137329, 3.370137329, 0.000000000'''
     cell.unit = 'B'
-    cell.verbose = 3
+    cell.verbose = 0
     cell.build()
 
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = 'ncr_test_C_density_fitints.chk'
-    mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
+    from pyscf.pbc.scf.chkfile import load_scf
+    _, scf_dict = load_scf(mf.chkfile)
+    mf.mo_coeff = scf_dict['mo_coeff']
+    mf.mo_occ = scf_dict['mo_occ']
+    mf.mo_energy = scf_dict['mo_energy']
+    mf.e_tot = scf_dict['e_tot']
+    # mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
     mf.init_guess = 'chkfile'
     mf.kernel()
 
@@ -75,6 +81,13 @@ def test_ncr_lambda_sparse():
     supercell_hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), supercell_hcore_ao[k], mo)) for k, mo in enumerate(supercell_mf.mo_coeff)])
 
     sc_lambda_tot, sc_lambda_one_body, sc_lambda_two_body = compute_lambda_ncr(supercell_hcore_mo, supercell_helper)
+    print(sc_lambda_one_body)
+    print(lambda_one_body)
+    print(np.sum(np.abs(supercell_hcore_mo.real)) + np.sum(np.abs(supercell_hcore_mo.imag))  )
+    print(np.sum([np.abs(hcore_mo[kk].real) + np.abs(hcore_mo[kk].imag) for kk in range(len(kpts))]))
+    print(np.linalg.norm(supercell_hcore_mo))
+    print(np.linalg.norm(np.array(hcore_mo).ravel()))
+
 
     # Sanity check Tpq by itself without any eri contribution
     norm_uc_T = sum(np.sum(np.abs(hk.real)+np.abs(hk.imag)) for hk in hcore_mo)
@@ -91,7 +104,7 @@ def test_ncr_lambda_sparse():
         eris_uc[k1, k2, k3] = helper.get_eri(kpts)
 
     eris_uc = eris_uc / nkpts
-    norm_uc = np.linalg.norm(eris_uc.ravel())
+    norm_uc = np.linalg.norm(eris_uc.ravel())  # this computs sqrt(sum_i abs(i)) which is not what we want to do.
     eris_sc = supercell_helper.get_eri([0,0,0,0])
     norm_sc = np.linalg.norm(eris_sc.ravel())
     # Test 2-norm should be invariant wrt unitary.

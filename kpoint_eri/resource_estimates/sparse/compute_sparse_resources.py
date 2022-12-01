@@ -4,6 +4,7 @@ Compute resource estimates for sparse LCU of k-point Hamiltonian
 from typing import Tuple
 import numpy as np
 from numpy.lib.scimath import arccos, arcsin  # has analytc continuation to cplx
+from sympy import factorint
 from openfermion.resource_estimates.utils import QI, power_two
 
 
@@ -34,8 +35,10 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     # 2 is a factor first, which it should, cf. the similar function in
     # costingdf.nb Below is correct using the power_two() function, to give
     # power of 2 that is a factor of d.
-    eta = power_two(d) # 0 if power_two(d) == 0 else power_two(d)
-    if d % 2 == 0:
+    factors = factorint(d)
+    eta = factors[min(list(sorted(factors.keys())))]
+    # eta = power_two(d) # 0 if power_two(d) == 0 else power_two(d)
+    if d % 2 == 1:
         eta = 0
 
     nN = np.ceil(np.log2(n // 2))
@@ -62,8 +65,8 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     k1 = 32
 
     # Equation (A17)
-    cost = np.ceil(d/k1) + m * (k1 -1) + QI(d)[1] + 6 * n * nNk + 8 * nN + 10 * nNk + 2 * chi + \
-        7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 13
+    cost = np.ceil(d/k1) + m * (k1 -1) + QI(d)[1] + 6 * n * Nk + 8 * nN + 10 * nNk + 2 * chi + \
+        7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 8
 
     # Number of iterations needed for the phase estimation.
     iters = np.ceil(np.pi * lam / (dE * 2))
@@ -81,7 +84,7 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
 
     # The qubit used for flagging the success of the equal superposition state
     # preparation and the ancilla qubit for rotation
-    ac45 = 2
+    # ac45 = 2
 
     # The phase gradient state
     ac6 = br
@@ -92,9 +95,9 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     # The ancillas used for QROM
     ac8 = np.ceil(np.log2(d / k1)) + m * k1
 
-    ac9 = 5
+    ac9 = 9
 
-    ancilla_cost = ac1 + ac2 + ac3 + ac45 + ac6 + ac7 + ac8 + ac9
+    ancilla_cost = ac1 + ac2 + ac3 + ac6 + ac7 + ac8 + ac9
 
     # Sanity checks before returning as int
     assert cost.is_integer()
