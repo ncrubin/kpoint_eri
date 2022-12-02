@@ -7,6 +7,8 @@ from openfermion.resource_estimates.thc.utils import adagrad
 from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
 
 
+from jax.config import config
+config.update("jax_enable_x64", True)
 import jax
 import jax.numpy as jnp
 

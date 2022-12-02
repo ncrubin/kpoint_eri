@@ -2,8 +2,8 @@ import itertools
 import numpy as np
 
 from pyscf.pbc import tools, df, gto
-from pyscf.pbc.lib.kpts_helper import unique, get_kconserv
-from pyscf.pbc.dft import gen_grid, numint
+from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, conj_mapping
+from pyscf.pbc.dft import numint
 
 from kpoint_eri.resource_estimates.utils.misc_utils import (
     build_momentum_transfer_mapping,
@@ -241,9 +241,62 @@ def build_G_vector_mappings_double_translation(
                 np.einsum("wx,x->w", lattice_vectors, delta_Gpq) / (2 * np.pi)
             )
             Gpq_mapping[iq, ikp] = G_dict[tuple(miller_indx)]
-
     Gpq_mapping_unique, delta_Gs = find_unique_G_vectors(G_vectors, Gpq_mapping)
     return G_vectors, Gpq_mapping, Gpq_mapping_unique, delta_Gs
+
+
+def get_miller(lattice_vectors, G):
+    """Convert G to miller indx"""
+    miller_indx = np.rint(
+        np.einsum("wx,x->w", lattice_vectors, G) / (2 * np.pi)
+    ).astype(np.int32)
+    return miller_indx
+
+
+def build_minus_Q_G_mapping(cell: gto.Cell, kpts: np.ndarray, momentum_map: np.ndarray):
+    """Build mapping for G that satisfied (-Q) + G + (Q + Gpq) = 0 (*)
+    and kp - kq = Q + Gpq.
+
+    :param cell: pyscf.pbc.gto.Cell object.
+    :param kpts: array of kpoints.
+    :param momentum_map: momentum mapping to satisfy Q = (k_p - k_q) mod G.
+        momentum_map[iq, ikp] = ikq.
+    :returns tuple: (minus_Q_mapping, minus_Q_mapping_unique),
+        minus_Q_mapping[indx_minus_Q, k] yields index for G satisfying (*)
+        above, where indx_minus_Q is given by indx_minus_Q = minus_k[Q], and
+        minus_k = conj_mapping(cell, kpts). minus_Q_mapping_unique indexes the
+        appropriate G vector given by delta_Gs[indx_minus_Q][indx] = G, where
+        indx = minus_Q_mapping_unique[indx_minus_Q, k], and deltaGs is built by
+        build_G_vector_mappings_double_translation.
+    """
+    G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_double_translation(
+        cell, kpts, momentum_map
+    )
+    G_dict, _ = build_G_vectors(cell)
+    num_kpts = len(kpts)
+    lattice_vectors = cell.lattice_vectors()
+    minus_k_map = conj_mapping(cell, kpts)
+    minus_Q_mapping = np.zeros((num_kpts, num_kpts), dtype=np.int32)
+    minus_Q_mapping_unique = np.zeros((num_kpts, num_kpts), dtype=np.int32)
+    for iq in range(num_kpts):
+        minus_iq = minus_k_map[iq]
+        for ik in range(num_kpts):
+            Gpq = G_vecs[G_map[iq, ik]]
+            # Complementary Gpq (G in (*) in docstring)
+            Gpq_comp = -(kpts[minus_iq] + kpts[iq] + Gpq)
+            # find index in original set of 27
+            iGpq_comp = G_dict[tuple(get_miller(lattice_vectors, Gpq_comp))]
+            minus_Q_mapping[minus_iq, ik] = iGpq_comp
+        indx_delta_Gs = np.array(
+            [G_dict[tuple(get_miller(lattice_vectors, G))] for G in delta_Gs[minus_iq]]
+        )
+        minus_Q_mapping_unique[minus_iq] = [
+            ix
+            for el in minus_Q_mapping[minus_iq]
+            for ix in np.where(el == indx_delta_Gs)[0]
+        ]
+
+    return minus_Q_mapping, minus_Q_mapping_unique
 
 
 def build_G_vector_mappings_single_translation(
@@ -281,6 +334,51 @@ def build_G_vector_mappings_single_translation(
 
     Gpqr_mapping_unique, delta_Gs = find_unique_G_vectors(G_vectors, Gpqr_mapping)
     return G_vectors, Gpqr_mapping, Gpqr_mapping_unique, delta_Gs
+
+
+def inverse_G_map_double_translation(
+    cell: gto.Cell,
+    kpts: np.ndarray,
+    momentum_map: np.ndarray,
+):
+    """For given Q and G figure out all k which satisfy Q - k + G = 0
+
+    :param cell: pyscf.pbc.gto.Cell object.
+    :param kpts: array of kpoints.
+    :param momentum_map: momentum mapping to satisfy Q = (k_p - k_q) mod G.
+        momentum_map[iq, ikp] = ikq.
+    :returns inverse_map: ragged numpy array. inverse_map[iq, iG] returns array
+        of size in range(0, num_kpts) and lists all k-point indices that
+        satisfy G_pq[iq, ik] = iG, i.e. an array of all ik.
+    """
+    G_dict, G_vectors = build_G_vectors(cell)
+    lattice_vectors = cell.lattice_vectors()
+    num_kpts = len(kpts)
+    Gpq_mapping = np.zeros((num_kpts, num_kpts), dtype=np.int32)
+    num_kpts = len(kpts)
+    for iq in range(num_kpts):
+        for ikp in range(num_kpts):
+            ikq = momentum_map[iq, ikp]
+            delta_Gpq = (kpts[ikp] - kpts[ikq]) - kpts[iq]
+            miller_indx = np.rint(
+                np.einsum("wx,x->w", lattice_vectors, delta_Gpq) / (2 * np.pi)
+            )
+            Gpq_mapping[iq, ikp] = G_dict[tuple(miller_indx)]
+
+    inverse_map = np.zeros(
+        (
+            num_kpts,
+            27,
+        ),
+        dtype=object,
+    )
+    for iq in range(num_kpts):
+        for iG in range(len(G_vectors)):
+            inverse_map[iq, iG] = np.array(
+                [ik for ik in range(num_kpts) if Gpq_mapping[iq, ik] == iG]
+            )
+
+    return inverse_map
 
 
 def build_eri_isdf_double_translation(chi, zeta, q_indx, kpts_indx, G_mapping):
@@ -370,7 +468,7 @@ def kpoint_isdf_double_translation(
         and num_interp_points is the number of interpolating points. Zeta (the
         central tensor) is of dimension [num_kpts, 27, 27, num_interp_points, num_interp_points]
         if only_unique_G is False otherwise it is of shape [num_kpts,
-        num_unique[Q], num_unique[Q], 27, num_interp_points, num_interp_points].
+        num_unique[Q], num_unique[Q], num_interp_points, num_interp_points].
         G_mapping maps k-points to the appropriate delta_G index, i.e.
         G_mapping[iq, ik] = i_delta_G. if only_unique_G is True the index will
         map to the appropriate index in the reduced set of G vectors.
@@ -382,9 +480,12 @@ def kpoint_isdf_double_translation(
     num_kpts = len(kpts)
     num_interp_points = xi.shape[1]
     assert xi.shape == (num_grid_points, num_interp_points)
-    G_vectors, G_mapping, G_mapping_unique, delta_Gs_unique = build_G_vector_mappings_double_translation(
-        df_inst.cell, kpts, momentum_map
-    )
+    (
+        G_vectors,
+        G_mapping,
+        G_mapping_unique,
+        delta_Gs_unique,
+    ) = build_G_vector_mappings_double_translation(df_inst.cell, kpts, momentum_map)
     if only_unique_G:
         G_mapping = G_mapping_unique
         delta_Gs = delta_Gs_unique
@@ -484,11 +585,11 @@ def kpoint_isdf_single_translation(
 
 
 def solve_kmeans_kpisdf(
-        mf_inst,
-        num_interp_points,
-        max_kmeans_iteration=500,
-        single_translation=True,
-        ):
+    mf_inst,
+    num_interp_points,
+    max_kmeans_iteration=500,
+    single_translation=True,
+):
     cell = mf_inst.cell
     kpts = mf_inst.kpts
     grid_points = cell.gen_uniform_grids(mf_inst.with_df.mesh)
@@ -506,9 +607,7 @@ def solve_kmeans_kpisdf(
     )
     num_mo = mf_inst.mo_coeff[0].shape[-1]  # assuming the same for each k-point
     kmeans = KMeansCVT(grid_points, max_iteration=max_kmeans_iteration)
-    interp_indx = kmeans.find_interpolating_points(
-        num_interp_points, density.real
-    )
+    interp_indx = kmeans.find_interpolating_points(num_interp_points, density.real)
     num_kpts = len(kpts)
     # Cell periodic part
     # u = e^{-ik.r} phi(r)
@@ -536,7 +635,7 @@ def solve_kmeans_kpisdf(
             cell_periodic_mo,
             grid_points,
         )
-    assert chi.shape == (num_interp_points, num_kpts*num_mo)
+    assert chi.shape == (num_interp_points, num_kpts * num_mo)
     # go from Rki -> kiR
     chi = chi.reshape((num_interp_points, num_kpts, num_mo))
     chi = chi.transpose((1, 2, 0))

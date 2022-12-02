@@ -168,6 +168,7 @@ def k2gamma(kmf, kmesh=None, make_real=True):
          \e^{\ii \veck\cdot\vecR} C^{\veck}_{\mu  m}
     '''
     from pyscf.pbc import scf
+    from pyscf.pbc.df import RSDF
     def transform(mo_energy, mo_coeff, mo_occ):
         scell, E_g, C_gamma = mo_k2gamma(kmf.cell, mo_energy, mo_coeff,
                                          kmf.kpts, kmesh,
@@ -178,11 +179,17 @@ def k2gamma(kmf, kmesh=None, make_real=True):
 
     if isinstance(kmf, scf.khf.KRHF):
         scell, E_g, C_gamma, mo_occ = transform(kmf.mo_energy, kmf.mo_coeff, kmf.mo_occ)
-        mf = scf.RHF(scell)
+        if isinstance(kmf.with_df, RSDF):
+            mf = scf.KRHF(scell, kpts=scell.make_kpts([1, 1, 1])).rs_density_fit()
+        else:
+            mf = scf.KRHF(scell, kpts=scell.make_kpts([1, 1, 1]))
     elif isinstance(kmf, scf.kuhf.KUHF):
         scell, Ea, Ca, occ_a = transform(kmf.mo_energy[0], kmf.mo_coeff[0], kmf.mo_occ[0])
         scell, Eb, Cb, occ_b = transform(kmf.mo_energy[1], kmf.mo_coeff[1], kmf.mo_occ[1])
-        mf = scf.UHF(scell)
+        if isinstance(kmf.with_df, RSDF):
+            mf = scf.KUHF(scell, kpts=scell.make_kpts([1, 1, 1])).rs_density_fit
+        else:
+            mf = scf.KUHF(scell, kpts=scell.make_kpts([1, 1, 1]))
         E_g = [Ea, Eb]
         C_gamma = [Ca, Cb]
         mo_occ = [occ_a, occ_b]

@@ -15,13 +15,10 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
         n (int) - the number of spin-orbitals
         Nk (int) - the number of k-points
         lam (float) - the lambda-value for the Hamiltonian
+        d (int) - number of symmetry unique terms kept in the sparse Hamiltonian
         dE (float) - allowable error in phase estimation
-        L (int) - the rank of the first decomposition
-        Lxi (int) - the total number of eigenvectors
         chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
             number of bits for the representation of the coefficients
-        beta (int) - equivalent to beth in the document, the number of bits
-            for the rotations
         stps (int) - an approximate number of steps to choose the precision
             of single qubit rotations in preparation of the equal superposition
             state
@@ -30,19 +27,21 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
         total_cost (int) - Total number of Toffolis
         ancilla_cost (int) - Total ancilla cost
     """
+    if n % 2 != 0:
+        raise ValueError("The number of spin orbitals is always even!")
 
     # I think there is a bug in the mathematica notebook. It does not check if
     # 2 is a factor first, which it should, cf. the similar function in
     # costingdf.nb Below is correct using the power_two() function, to give
     # power of 2 that is a factor of d.
     eta = power_two(d) # 0 if power_two(d) == 0 else power_two(d)
+    if d % 2 == 0:
+        eta = 0
 
     nN = np.ceil(np.log2(n // 2))
     nNk = np.ceil(np.log2(Nk))
 
-    m = chi + 8 * nN + 4  # Eq (A13)
-    m = m + 4 # in the case where spin values need to be output, the size of the QROM is increased by 4 bits
-    m = m + 6 * nNk + 1 # where we need to ouoput the k,k', Q values, and a bit to select between real and imaginary parts
+    m = chi + 8 * nN + 6 * nNk + 5  # Eq 26
 
     oh = [0] * 20
 
@@ -63,11 +62,8 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     k1 = 32
 
     # Equation (A17)
-    cost = np.ceil(d/k1) + m * (k1 -1) + QI(d)[1] + 4 * n + 8 * nN + 2 * chi + \
-        7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 19
-    cost = cost + 3 # as well as the increase in the number of output qubits where we modfiied m, we need to do a controlled SWAP of the two pairs of spin qubits (cost 2) as well as perform the controlled swap of thw two spin for symmetry
-    cost = cost + 3 * nNk + 3 * nNk + 4 * nNk # We have an extra cost of 3*nNk for swapping the k, k', and Q values in the state preparation,  then 3*nNk for computing k - Q and k' -  Q (one is controlled), then 4*nNk for the controlled swaps to generate the symmetries
-    cost = cost + 4 * n - 2 + 5 # Previously we had a cost of 4 N - 6 since one didn' t need to be controlled (reducing the cost by 2). Now we are needing to select between X and Y as well, which doubles the selected cost of 4 (N - 1).  We also have another 3 Toffolis for phase factors and 2 for selecting between X and Y
+    cost = np.ceil(d/k1) + m * (k1 -1) + QI(d)[1] + 6 * n * nNk + 8 * nN + 10 * nNk + 2 * chi + \
+        7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 13
 
     # Number of iterations needed for the phase estimation.
     iters = np.ceil(np.pi * lam / (dE * 2))
