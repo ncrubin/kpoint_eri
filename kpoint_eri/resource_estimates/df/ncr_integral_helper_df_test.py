@@ -288,8 +288,9 @@ def test_supercell_df_amat_bmat():
     
     from pyscf.pbc.tools.k2gamma import k2gamma
     from kpoint_eri.resource_estimates.utils.k2gamma import k2gamma
-    supercell_mf = k2gamma(mf)
-    supercell_mf.kernel()
+    supercell_mf = k2gamma(mf, make_real=False)
+    # supercell_mf.kernel()
+    supercell_mf.e_tot = supercell_mf.energy_tot()
     assert np.isclose(mf.e_tot, supercell_mf.e_tot / np.prod(kmesh))
     
     supercell_mymp = mp.KMP2(supercell_mf)
@@ -317,11 +318,10 @@ def test_supercell_df_amat_bmat():
                 bmat_n_eigs, bmat_n_eigv = get_df_factor(Bmats[nc], 1.0E-13)
                 print(sc_help.amat_lambda_vecs[kidx, qidx, nc])
                 print(sc_help.bmat_lambda_vecs[kidx, qidx, nc])
-
     
     print("SUPERCELL TESTS PASSED")
 
 if __name__ == "__main__":
-    test_supercell_df_amat_bmat()
-    # test_df_amat_bmat()
+    # test_supercell_df_amat_bmat()
+    test_df_amat_bmat()
     # test_alphabeta_decomp()

@@ -161,8 +161,8 @@ def compute_lambda_ncr_v2(hcore, df_obj: DFABV2KpointIntegrals):
                     second_number_to_square += np.sum(np.abs(eigs_b_fixed_n_q))
                     num_eigs += len(eigs_b_fixed_n_q)
 
-            lambda_two_body += first_number_to_square**2 # / nkpts
-            lambda_two_body += second_number_to_square**2  # / nkpts
+            lambda_two_body += first_number_to_square**2 
+            lambda_two_body += second_number_to_square**2  
 
     lambda_two_body *= 0.25 
 
