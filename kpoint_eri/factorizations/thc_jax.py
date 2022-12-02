@@ -2,12 +2,14 @@ import h5py
 import numpy as np
 from scipy.optimize import minimize
 from uuid import uuid4
+import math
 
 from openfermion.resource_estimates.thc.utils import adagrad
 from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
 
 
 from jax.config import config
+
 config.update("jax_enable_x64", True)
 import jax
 import jax.numpy as jnp
@@ -76,8 +78,7 @@ def compute_objective_batched(chis, zetas, chols, cP, penalty_param=0):
 
 
 def prepare_batched_data_indx_arrays(
-    momentum_map,
-    Gpq_map,
+    momentum_map, Gpq_map, num_thc, num_mo, batch_size=None, verbose=False
 ):
     """Create arrays to batch over."""
     num_kpts = momentum_map.shape[0]
@@ -116,6 +117,7 @@ def thc_objective_regularized_batched(
     Gpq_map,
     chol,
     indx_arrays,
+    batch_size,
     penalty_param=0.0,
 ):
     num_kpts = momentum_map.shape[0]
@@ -125,75 +127,35 @@ def thc_objective_regularized_batched(
     # Normalization factor, no factor of sqrt as their are 4 chis in total when
     # building ERI.
     cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+    num_batches = math.ceil(num_kpts**2 / batch_size)
 
     indx_pqrs, indx_zeta = indx_arrays
     objective = 0.0
     for iq in range(num_kpts):
-        chi_p = get_batched_data_1indx(chi, indx_pqrs[iq, :, 0])
-        chi_q = get_batched_data_1indx(chi, indx_pqrs[iq, :, 1])
-        chi_r = get_batched_data_1indx(chi, indx_pqrs[iq, :, 2])
-        chi_s = get_batched_data_1indx(chi, indx_pqrs[iq, :, 3])
-        zeta_batch = get_batched_data_2indx(
-            zeta[iq], indx_zeta[iq, :, 0], indx_zeta[iq, :, 1]
-        )
-        chol_batch_pq = get_batched_data_2indx(
-            chol, indx_pqrs[iq, :, 0], indx_pqrs[iq, :, 1]
-        )
-        chol_batch_rs = get_batched_data_2indx(
-            chol, indx_pqrs[iq, :, 2], indx_pqrs[iq, :, 3]
-        )
-        objective += compute_objective_batched(
-            (chi_p, chi_q, chi_r, chi_s),
-            zeta_batch,
-            (chol_batch_pq, chol_batch_rs),
-            cP,
-            penalty_param=penalty_param,
-        )
+        for ibatch in range(num_batches):
+            start = ibatch * batch_size
+            end = (ibatch + 1) * batch_size
+            chi_p = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 0])
+            chi_q = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 1])
+            chi_r = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 2])
+            chi_s = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 3])
+            zeta_batch = get_batched_data_2indx(
+                zeta[iq], indx_zeta[iq, start:end, 0], indx_zeta[iq, start:end, 1]
+            )
+            chol_batch_pq = get_batched_data_2indx(
+                chol, indx_pqrs[iq, start:end, 0], indx_pqrs[iq, start:end, 1]
+            )
+            chol_batch_rs = get_batched_data_2indx(
+                chol, indx_pqrs[iq, start:end, 2], indx_pqrs[iq, start:end, 3]
+            )
+            objective += compute_objective_batched(
+                (chi_p, chi_q, chi_r, chi_s),
+                zeta_batch,
+                (chol_batch_pq, chol_batch_rs),
+                cP,
+                penalty_param=penalty_param,
+            )
     return objective / num_kpts
-
-
-# def thc_objective_regularized_batched(
-# xcur,
-# num_orb,
-# num_thc,
-# momentum_map,
-# Gpq_map,
-# chol,
-# indx_arrays,
-# penalty_param=0.0,
-# ):
-# num_kpts = momentum_map.shape[0]
-# num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
-# chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
-# nthc = zeta[0].shape[-1]
-# # Normalization factor, no factor of sqrt as their are 4 chis in total when
-# # building ERI.
-# cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
-# indx_pqrs, indx_zeta = indx_arrays
-# objective = 0.0
-# # process Nk^2 data at once
-# nkpts = indx_pqrs.shape[0]
-# indx_pqrs = indx_pqrs.reshape((nkpts**3, 4))
-# chi_p = get_batched_data_1indx(chi, indx_pqrs[:, 0])
-# chi_q = get_batched_data_1indx(chi, indx_pqrs[:, 1])
-# chi_r = get_batched_data_1indx(chi, indx_pqrs[:, 2])
-# chi_s = get_batched_data_1indx(chi, indx_pqrs[:, 3])
-# zeta_batch = jnp.array(
-# [
-# get_batched_data_2indx(zeta[iq], indx_zeta[iq, :, 0], indx_zeta[iq, :, 1])
-# for iq in range(nkpts)
-# ]
-# ).reshape((nkpts**3, nthc, nthc))
-# chol_batch_pq = get_batched_data_2indx(chol, indx_pqrs[:, 0], indx_pqrs[:, 1])
-# chol_batch_rs = get_batched_data_2indx(chol, indx_pqrs[:, 2], indx_pqrs[:, 3])
-# objective += compute_objective_batched(
-# (chi_p, chi_q, chi_r, chi_s),
-# zeta_batch,
-# (chol_batch_pq, chol_batch_rs),
-# cP,
-# penalty_param=penalty_param,
-# )
-# return objective / num_kpts
 
 
 def thc_objective_regularized(
@@ -362,7 +324,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     disp_freq=98,
     penalty_param=None,
     disp=False,
-    num_batch=None,
+    batch_size=None,
 ):
     """
     Least-squares fit of two-electron integral tensors with  L-BFGS-B with
@@ -393,7 +355,16 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     num_thc = chi.shape[-1]
     assert zeta[0].shape[-1] == num_thc
     assert zeta[0].shape[-2] == num_thc
-    indx_arrays = prepare_batched_data_indx_arrays(momentum_map, Gpq_map)
+    if batch_size is None:
+        batch_size = num_kpts**2
+    indx_arrays = prepare_batched_data_indx_arrays(
+        momentum_map, Gpq_map, num_thc, num_orb
+    )
+    data_amount = batch_size * (
+        4 * num_orb * num_thc + num_thc * num_thc  # chi[p,m] + zeta[m,n]
+    )
+    data_size_gb = (data_amount * 16) / (1024**3)
+    print(f"Batch size in GB: {data_size_gb}")
     loss = thc_objective_regularized_batched(
         jnp.array(initial_guess),
         num_orb,
@@ -402,6 +373,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         Gpq_map,
         jnp.array(chol),
         indx_arrays,
+        batch_size,
         penalty_param=0.0,
     )
     reg_loss = thc_objective_regularized_batched(
@@ -412,6 +384,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         Gpq_map,
         jnp.array(chol),
         indx_arrays,
+        batch_size,
         penalty_param=1.0,
     )
     print(loss, reg_loss)
@@ -435,6 +408,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
             Gpq_map,
             jnp.array(chol),
             indx_arrays,
+            batch_size,
             penalty_param,
         )
     )
@@ -448,6 +422,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
             Gpq_map,
             jnp.array(chol),
             indx_arrays,
+            batch_size,
             penalty_param,
         ),
         jac=thc_grad,
@@ -474,6 +449,7 @@ def adagrad_opt_kpthc_batched(
     momentum_map,
     Gpq_map,
     chol,
+    batch_size=None,
     chkfile_name=None,
     random_seed=None,
     stepsize=0.01,
@@ -507,7 +483,11 @@ def adagrad_opt_kpthc_batched(
     opt_state = opt_init(initial_guess)
     thc_grad = jax.grad(thc_objective_regularized_batched, argnums=[0])
 
-    indx_arrays = prepare_batched_data_indx_arrays(momentum_map, Gpq_map)
+    if batch_size is None:
+        batch_size = num_kpts**2
+    indx_arrays = prepare_batched_data_indx_arrays(
+        momentum_map, Gpq_map, num_thc, num_orb
+    )
 
     def update(i, opt_state):
         params = get_params(opt_state)
@@ -519,6 +499,7 @@ def adagrad_opt_kpthc_batched(
             Gpq_map,
             chol,
             indx_arrays,
+            batch_size,
         )
         grad_norm_l1 = np.linalg.norm(gradient[0], ord=1)
         return opt_update(i, gradient[0], opt_state), grad_norm_l1
@@ -536,6 +517,7 @@ def adagrad_opt_kpthc_batched(
                 Gpq_map,
                 chol,
                 indx_arrays,
+                batch_size,
             )
             outline = "Objective val {: 5.15f}".format(fval)
             outline += "\tGrad L1-norm {: 5.15f}".format(grad_l1)
