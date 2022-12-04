@@ -70,8 +70,9 @@ def get_miller_indices(kmesh):
 
 def get_delta_kp_kq_Q(int_scaled_kpts):
     """
-    Generate kp - kq + G = Q as kp - kq - Q = G
-
+    Generate kp - kq - Q = S for kp, kq, and Q.  The difference of the three integers
+    is stored as a four tensor D_{kp, kq, Q} = S. where the dimension of D is 
+    (nkpts, nkpts, nkpts, 3).  The last dimension stores the x,y,z components of S.
 
     :param int_scaled_kpts: array of kpts represented as miller indices [[nkx, nky, nkz], ...]
     :returns: np.array nkpts x nkpts that corresponds to 
@@ -83,6 +84,13 @@ def build_transfer_map(kmesh, scaled_kpts):
     """
     Define mapping momentum_transfer_map[Q][k1] = k2 that satisfies
     k1 - k2 + G = Q.
+    where k1, k2, Q are all tuples of integers [[0, Nkx-1], [0, Nky-1], [0, Nkz-1]]
+    and G is [{0, Nkx}, {0, Nky}, {0, Nkz}].
+
+    This is computed from `get_delta_kp_kq_Q` which computes k1 - k2 -Q = S.
+    Thus k1 - k2 = Q + S which shows that S is [{0, Nkx}, {0, Nky}, {0, Nkz}].
+
+    Thus to compute map[Q, k1] = k2
 
     :param kmesh: kmesh [nkx, nky, nkz] the number of kpoints in each direction
     :param scaled_kpts: miller index representation [[0, nkx-1], [0, nky-1], [0, nkz-1]]
@@ -99,11 +107,28 @@ def build_transfer_map(kmesh, scaled_kpts):
                         np.rint(delta_k1_k2_Q_int[kpidx, kqidx, qidx][2]) % kmesh[2],
                        ], 0
                       ):
-            transfer_map[kqidx, kpidx] = qidx
+            transfer_map[qidx, kpidx] = kqidx
     return transfer_map
 
-def build_G_vectors():
-    """Build all 27 Gvectors
+def build_conjugate_map(kmesh, scaled_kpts):
+    """
+    build mapping that map[k1] = -k1 
+    """
+    nkpts = len(scaled_kpts)
+    kpoint_dict = dict(zip([tuple(map(int, scaled_kpts[x])) for x in range(nkpts)], range(nkpts)))
+    kconj_map = np.zeros((nkpts), dtype=int)
+    for kidx in range(nkpts):
+        negative_k_scaled = -scaled_kpts[kidx]
+        fb_negative_k_scaled = tuple((int(negative_k_scaled[0]) % kmesh[0],
+                                      int(negative_k_scaled[1]) % kmesh[1],
+                                      int(negative_k_scaled[2]) % kmesh[2],
+                                    ))
+        kconj_map[kidx] = kpoint_dict[fb_negative_k_scaled]
+    return kconj_map
+        
+
+def build_G_vectors(kmesh):
+    """Build all 8 Gvectors
 
     :param kmesh:     
     :returns tuple: G_dict a dictionary mapping miller index to appropriate
@@ -111,34 +136,51 @@ def build_G_vectors():
         np.einsum("x,wx->w", (n1, n2, n3), cell.reciprocal_vectors()
     """
     G_dict = {}
-    G_vectors = np.zeros((27, 3), dtype=np.float64)
+    G_vectors = np.zeros((8, 3), dtype=np.float64)
     indx = 0
-    for n1, n2, n3 in itertools.product(range(-1, 2), repeat=3):
-        G_dict[(n1, n2, n3)] = indx
-        # G_vectors[indx] = np.einsum("x,wx->w", (n1, n2, n3), cell.reciprocal_vectors())
-        # miller_indx = np.rint(
-        #     np.einsum("wx,x->w", lattice_vectors, G_vectors[indx]) / (2 * np.pi)
-        # )
-        # assert (miller_indx == (n1, n2, n3)).all()
+    for n1, n2, n3 in itertools.product([0, -1], repeat=3):
+        G_dict[(n1 * kmesh[0], n2 * kmesh[1], n3 * kmesh[2])] = indx
         indx += 1
-    return G_dict# , G_vectors
+    return G_dict
 
 def build_gpq_mapping(kmesh, int_scaled_kpts):
+    """
+    build map for kp - kq = Q + G where G is [{0, -Nkx}, {0, -Nky}, {0, -Nkz}] .
+    G will be 0 or Nkz because kp - kq takes on values between [-Nka + 1, Nka - 1]
+    in each component.
+
+    :param kmesh: number of k-points along each direction [Nkx, Nky, Nkz].
+    :param int_scaled_kpts: scaled_kpts. Each kpoint is a tuple of 3 integers
+                            where each integer is between [0, Nka-1].
+    :returns: array mapping where first two indices are the index of kp and kq 
+              and the last dimension holds the gval that is [{0, Nkx}, {0, Nky}, {0, Nkz}].
+    """
     momentum_map = build_transfer_map(kmesh, int_scaled_kpts)
     nkpts = len(int_scaled_kpts)
-    g_dict = build_G_vectors()
-    Gpq_mapping = np.zeros((nkpts, nkpts), dtype=np.int32)
+    g_dict = build_G_vectors(kmesh)
+    Gpq_mapping = np.zeros((nkpts, nkpts, 3), dtype=np.int32)
     for iq in range(nkpts):
         for ikp in range(nkpts):
             ikq = momentum_map[iq, ikp]
-            delta_Gpq = (int_scaled_kpts[ikp] - int_scaled_kpts[ikq]) - int_scaled_kpts[iq]
-            delta_Gpq[0] /= kmesh[0]
-            delta_Gpq[1] /= kmesh[1]
-            delta_Gpq[1] /= kmesh[2]
-            miller_indx = np.rint(delta_Gpq)
-            Gpq_mapping[iq, ikp] = g_dict[tuple(miller_indx)]
+            q_minus_g = int_scaled_kpts[ikp] - int_scaled_kpts[ikq]
+            g_val = (0 if q_minus_g[0] >= 0 else -kmesh[0], 
+                     0 if q_minus_g[1] >= 0 else -kmesh[1], 
+                     0 if q_minus_g[2] >= 0 else -kmesh[2], 
+                    )
+            Gpq_mapping[ikp, ikq, :] = np.array(g_val)
             
     return Gpq_mapping
 
 
-
+def compliment_g(g_val, q_val, kmesh, scaled_kpts):
+    """
+    Computes the compliment of g_val given q_val as
+    
+    !G1 = -(Q + G1 + (-Q)). 
+    """
+    nkpts = len(scaled_kpts)
+    kpoint_dict = dict(zip([tuple(map(int, scaled_kpts[x])) for x in range(nkpts)], range(nkpts)))
+    conj_map = build_conjugate_map(kmesh, scaled_kpts)
+    # compliment = -(q_val + g_val + -q_val)
+    qidx = kpoint_dict[tuple(map(int, q_val))]
+    complment_g_val = -(q_val + g_val + scaled_kpts[conj_map[qidx]])
