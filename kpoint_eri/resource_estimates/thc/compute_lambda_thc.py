@@ -2,6 +2,7 @@ import numpy as np
 from itertools import product
 
 from kpoint_eri.resource_estimates import sf
+from kpoint_eri.resource_estimates.thc.integral_helper import KPTHCHelperDoubleTranslation
 
 def compute_lambda_real(
         h1,
@@ -44,3 +45,41 @@ def compute_lambda_real(
     lambda_tot = lambda_z + lambda_T  # Eq. 20
 
     return lambda_tot, lambda_T, lambda_z
+
+
+def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
+    """
+    Compute one-body and two-body lambda for qubitization of 
+    tensor hypercontraction LUC
+
+    one-body term h_pq(k) = hcore_{pq}(k) 
+                            - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+    :param hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
+    :param thc_obj: Object of KPTHCHelperDoubleTranslation
+    """
+    kpts = thc_obj.kmf.kpts
+    nkpts = len(kpts)
+    one_body_mat = np.empty((len(kpts)), dtype=object)
+    lambda_one_body = 0.
+
+    for kidx in range(len(kpts)):
+        # matrices for - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+        # and  + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+        h1_pos = np.zeros_like(hcore[kidx])
+        h1_neg = np.zeros_like(hcore[kidx])
+        for qidx in range(len(kpts)):
+            # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+            eri_kkqq_pqrs = thc_obj.get_eri_exact([kidx, kidx, qidx, qidx])  
+            h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
+
+        one_body_mat[kidx] = hcore[kidx] + 0.5 * h1_neg
+        one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
+        lambda_one_body += np.sum(np.abs(one_eigs))
+    
+    lambda_two_body = 0
+    num_eigs = 0
+    lambda_two_body = np.sum(np.abs(thc_obj.zeta))
+    lambda_two_body *= 2 * nkpts**2
+
+    lambda_tot = lambda_one_body + lambda_two_body
+    return lambda_tot, lambda_one_body, lambda_two_body

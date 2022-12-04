@@ -21,6 +21,7 @@ class KPTHCHelperDoubleTranslation(object):
         chi: np.ndarray,
         zeta: np.ndarray,
         kmf: scf.HF,
+        cholesky_factor: np.ndarray,
         nthc: int = None,
     ):
         """
@@ -32,7 +33,11 @@ class KPTHCHelperDoubleTranslation(object):
         :param kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
                     must have an attribute kpts which len(self.kmf.kpts) returns number of
                     kpts.
+        :param cholesky_factor: Cholesky object for computing exact integrals
+
         """
+        self.chol = cholesky_factor
+        self.naux = self.chol[0, 0].shape[0]
         self.chi = chi
         self.zeta = zeta
         self.kmf = kmf
@@ -72,6 +77,16 @@ class KPTHCHelperDoubleTranslation(object):
             self.chi, self.zeta, q_indx, ikpts, self.G_mapping
         )
 
+    def get_eri_exact(self, ikpts):
+        """
+        Construct (pkp qkq| rkr sks) exactly from Cholesky vector.  This is for constructing the J and K like terms
+        needed for the one-body component lambda
+
+        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        """
+        ikp, ikq, ikr, iks = ikpts
+        return np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
+
 
 class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
     def __init__(
@@ -79,6 +94,7 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         chi: np.ndarray,
         zeta: np.ndarray,
         kmf: scf.HF,
+        cholesky_factor: np.ndarray,
         nthc: int = None,
     ):
         """
@@ -90,8 +106,9 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         :param kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
                     must have an attribute kpts which len(self.kmf.kpts) returns number of
                     kpts.
+        :param cholesky factor: for computing exact integrals
         """
-        super().__init__(chi, zeta, kmf, nthc)
+        super().__init__(chi, zeta, kmf, cholesky_factor, nthc)
         # one-translation ISDF zeta[iq, dG]
         num_kpts = len(self.kmf.kpts)
         kpts = self.kmf.kpts
