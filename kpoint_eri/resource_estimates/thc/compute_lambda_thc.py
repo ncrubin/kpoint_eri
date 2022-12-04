@@ -68,17 +68,21 @@ def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
         h1_pos = np.zeros_like(hcore[kidx])
         h1_neg = np.zeros_like(hcore[kidx])
         for qidx in range(len(kpts)):
-            # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
-            eri_kkqq_pqrs = thc_obj.get_eri_exact([kidx, kidx, qidx, qidx])  
-            h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
+            # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+            eri_kqqk_pqrs = thc_obj.get_eri_exact([kidx, qidx, qidx, kidx]) 
+            h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
+            # # + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
+            # eri_kkqq_pqrs = thc_obj.get_eri_exact([kidx, kidx, qidx, qidx])  
+            # h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
-        one_body_mat[kidx] = hcore[kidx] + 0.5 * h1_neg
+        one_body_mat[kidx] = hcore[kidx] + 0.5 * h1_neg # + h1_pos
         one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
         lambda_one_body += np.sum(np.abs(one_eigs))
-    
+ 
     lambda_two_body = 0
     num_eigs = 0
-    lambda_two_body = np.sum(np.abs(thc_obj.zeta))
+    lambda_two_body = np.sum(np.abs(thc_obj.zeta.real))
+    lambda_two_body = np.sum(np.abs(thc_obj.zeta.imag))
     lambda_two_body *= 2 * nkpts**2
 
     lambda_tot = lambda_one_body + lambda_two_body

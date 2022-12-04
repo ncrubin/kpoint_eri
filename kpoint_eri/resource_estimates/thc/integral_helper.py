@@ -21,7 +21,6 @@ class KPTHCHelperDoubleTranslation(object):
         chi: np.ndarray,
         zeta: np.ndarray,
         kmf: scf.HF,
-        cholesky_factor: np.ndarray,
         nthc: int = None,
     ):
         """
@@ -36,8 +35,6 @@ class KPTHCHelperDoubleTranslation(object):
         :param cholesky_factor: Cholesky object for computing exact integrals
 
         """
-        self.chol = cholesky_factor
-        self.naux = self.chol[0, 0].shape[0]
         self.chi = chi
         self.zeta = zeta
         self.kmf = kmf
@@ -77,15 +74,18 @@ class KPTHCHelperDoubleTranslation(object):
             self.chi, self.zeta, q_indx, ikpts, self.G_mapping
         )
 
-    def get_eri_exact(self, ikpts):
+    def get_eri_exact(self, kpts):
         """
-        Construct (pkp qkq| rkr sks) exactly from Cholesky vector.  This is for constructing the J and K like terms
+        Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
         needed for the one-body component lambda
 
-        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        :param kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
         """
-        ikp, ikq, ikr, iks = ikpts
-        return np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
+        kp, kq, kr, ks = kpts
+        eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (kp,kq,kr,ks)],
+                                        [kpts[i] for i in (kp,kq,kr,ks)])
+        eri_kpt = eri_kpt.reshape([self.nao]*4)
+        return eri_kpt
 
 
 class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
@@ -94,7 +94,6 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         chi: np.ndarray,
         zeta: np.ndarray,
         kmf: scf.HF,
-        cholesky_factor: np.ndarray,
         nthc: int = None,
     ):
         """
@@ -108,7 +107,7 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
                     kpts.
         :param cholesky factor: for computing exact integrals
         """
-        super().__init__(chi, zeta, kmf, cholesky_factor, nthc)
+        super().__init__(chi, zeta, kmf, nthc)
         # one-translation ISDF zeta[iq, dG]
         num_kpts = len(self.kmf.kpts)
         kpts = self.kmf.kpts
@@ -140,3 +139,17 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         return build_eri_isdf_single_translation(
             self.chi, self.zeta, q_indx, ikpts, self.G_mapping
         )
+
+    def get_eri_exact(self, kpts):
+        """
+        Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
+        needed for the one-body component lambda
+
+        :param kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        """
+        kp, kq, kr, ks = kpts
+        eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (kp,kq,kr,ks)],
+                                        [kpts[i] for i in (kp,kq,kr,ks)])
+        eri_kpt = eri_kpt.reshape([self.nao]*4)
+        return eri_kpt
+

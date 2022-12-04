@@ -86,3 +86,6 @@ def test_thc_helper():
     emp2, _, _ = approx_cc.init_amps(eris)
     delta = abs(emp2 - exact_emp2)
     print(" {:4d}  {:10.4e} {:10.4e} {:10.4e}".format(num_interp_points, delta, emp2, exact_emp2))
+
+if __name__ == "__main__":
+    test_thc_helper()
