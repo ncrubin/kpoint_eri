@@ -589,6 +589,7 @@ def solve_kmeans_kpisdf(
     num_interp_points,
     max_kmeans_iteration=500,
     single_translation=True,
+    verbose=True,
 ):
     cell = mf_inst.cell
     kpts = mf_inst.kpts
@@ -607,7 +608,8 @@ def solve_kmeans_kpisdf(
     )
     num_mo = mf_inst.mo_coeff[0].shape[-1]  # assuming the same for each k-point
     kmeans = KMeansCVT(grid_points, max_iteration=max_kmeans_iteration)
-    interp_indx = kmeans.find_interpolating_points(num_interp_points, density.real)
+    interp_indx = kmeans.find_interpolating_points(num_interp_points,
+                                                   density.real, verbose=verbose)
     num_kpts = len(kpts)
     # Cell periodic part
     # u = e^{-ik.r} phi(r)
