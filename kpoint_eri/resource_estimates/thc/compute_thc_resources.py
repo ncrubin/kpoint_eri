@@ -72,7 +72,6 @@ def compute_cost(n: int,
             np.power(2,p+1)) * \
             np.sqrt(d) / np.power(2,nc)))**2) - 1) + 4 * (p + 1)
 
-    print(oh)
     # Set it to be the number of bits that minimises the cost, usually 7.
     # Python is 0-index, so need to add the one back in vs mathematica nb
     br = np.argmin(oh) + 1
@@ -95,7 +94,9 @@ def compute_cost(n: int,
     # the cost of inequality test and controlled swap of mu and nu registers
     cp5 = 2 * (2 * nM + nk + 4)
 
-    CPCP = cp1 + cp3 + cp4 + cp5 # + cp6
+    cp6 = 4 * nM
+
+    CPCP = cp1 + cp3 + cp4 + cp5  + cp6
 
     # The cost of preparing the k superposition. The 7 here is the assumed number 
     # of bits for the ancilla rotation which makes the probability of 
@@ -197,7 +198,7 @@ if __name__ == "__main__":
     beta = 16
     M = 350
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 2, 1, 20_000)
-    print(res) # , 23991644223, 8693
-    assert np.isclose(res[0], 49641)
-    assert np.isclose(res[1], 23991644223)
+    print(res) #{49677, 24009043131, 8693
+    assert np.isclose(res[0], 49677)
+    assert np.isclose(res[1], 24009043131)
     assert np.isclose(res[2], 8693)
