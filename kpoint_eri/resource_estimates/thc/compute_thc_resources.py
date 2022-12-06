@@ -181,7 +181,7 @@ def compute_cost(n: int,
 
     # These are the temporary ancillas in between erasing the first
     #  QROM ancillas and inverting that QROM.
-    acc = ac6 + ac7 + ac8 + ac8 + ac9 + ac10 + ac11 
+    acc = ac6 + ac7 + ac8 + ac9 + ac10 + ac11 
 
     step_cost = int(cost)
     total_cost = int(cost * iters)
