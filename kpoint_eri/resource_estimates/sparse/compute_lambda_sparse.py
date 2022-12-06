@@ -2,6 +2,7 @@ import numpy as np
 from itertools import product
 
 from kpoint_eri.resource_estimates import utils, sparse
+from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import NCRSSparseFactorizationHelper
 
 def compute_lambda(
         pyscf_mf,
@@ -75,7 +76,18 @@ def compute_lambda(
     return lambda_tot, lambda_T, lambda_V, num_nnz, 1-num_nnz/tot_size
 
 
-def compute_lambda_ncr(hcore, sparse_int_obj):
+def compute_lambda_ncr(hcore, sparse_int_obj: NCRSSparseFactorizationHelper):
+    """
+    Compute lambda value for sparse method
+
+    :param hcore: array of hcore(k) by kpoint. k-point order 
+                  is pyscf order generated for this problem.
+    :sparse_int_obj: The sparse integral object that is used
+                     to compute eris and the number of unique
+                     terms.
+    :returns: total-lambda, one-Body lambda, two-body lambda, 
+              number of unique terms above threshold
+    """
     kpts = sparse_int_obj.kmf.kpts
     nkpts = len(kpts)
     one_body_mat = np.empty((len(kpts)), dtype=object)
@@ -88,10 +100,10 @@ def compute_lambda_ncr(hcore, sparse_int_obj):
         h1_neg = np.zeros_like(hcore[kidx])
         for qidx in range(len(kpts)):
             # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
-            eri_kqqk_pqrs = sparse_int_obj.get_eri([kidx, qidx, qidx, kidx]) 
+            eri_kqqk_pqrs = sparse_int_obj.get_eri_exact([kidx, qidx, qidx, kidx]) 
             h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
             # + sum_{Q}sum_{r}(pkqk|rQrQ)
-            eri_kkqq_pqrs = sparse_int_obj.get_eri([kidx, kidx, qidx, qidx])  
+            eri_kkqq_pqrs = sparse_int_obj.get_eri_exact([kidx, kidx, qidx, qidx])  
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
         one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + h1_pos
@@ -109,4 +121,4 @@ def compute_lambda_ncr(hcore, sparse_int_obj):
                 lambda_two_body += np.sum(np.abs(test_eri_block.real)) + np.sum(np.abs(test_eri_block.imag))
 
     lambda_tot = lambda_one_body + lambda_two_body
-    return lambda_tot, lambda_one_body, lambda_two_body
+    return lambda_tot, lambda_one_body, lambda_two_body, sparse_int_obj.get_total_unique_terms_above_thresh()

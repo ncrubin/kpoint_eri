@@ -54,7 +54,7 @@ def test_ncr_lambda_sparse():
     hcore_ao = mf.get_hcore()
     hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo)) for k, mo in enumerate(mf.mo_coeff)])
 
-    lambda_tot, lambda_one_body, lambda_two_body = compute_lambda_ncr(hcore_mo, helper)
+    lambda_tot, lambda_one_body, lambda_two_body, num_unique = compute_lambda_ncr(hcore_mo, helper)
 
     from kpoint_eri.resource_estimates.utils.k2gamma import k2gamma, get_phase
     supercell_mf = k2gamma(mf, make_real=False)
@@ -80,7 +80,7 @@ def test_ncr_lambda_sparse():
     assert np.allclose(supercell_hcore_ao, kp_sc_hcore_ao)
     supercell_hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), supercell_hcore_ao[k], mo)) for k, mo in enumerate(supercell_mf.mo_coeff)])
 
-    sc_lambda_tot, sc_lambda_one_body, sc_lambda_two_body = compute_lambda_ncr(supercell_hcore_mo, supercell_helper)
+    sc_lambda_tot, sc_lambda_one_body, sc_lambda_two_body, sc_num_unique = compute_lambda_ncr(supercell_hcore_mo, supercell_helper)
     print(sc_lambda_one_body)
     print(lambda_one_body)
     print(np.sum(np.abs(supercell_hcore_mo.real)) + np.sum(np.abs(supercell_hcore_mo.imag))  )
@@ -115,6 +115,9 @@ def test_ncr_lambda_sparse():
 
     assert np.isclose(sc_lambda_one_body, lambda_one_body)
     assert np.isclose(sc_lambda_two_body, lambda_two_body)
+
+    print(num_unique)
+    print(sc_num_unique)
 
 
 def test_symmetric_ortho_localization():
@@ -173,4 +176,4 @@ def test_symmetric_ortho_localization():
 
 if __name__ == "__main__":
     test_ncr_lambda_sparse()
-    test_symmetric_ortho_localization()
+    # test_symmetric_ortho_localization()

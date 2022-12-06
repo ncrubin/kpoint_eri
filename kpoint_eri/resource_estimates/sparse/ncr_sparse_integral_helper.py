@@ -65,6 +65,8 @@ class NCRSSparseFactorizationHelper:
             ks = kpts_helper.kconserv[kp, kq, kr]
             if not completed[kp,kq,kr]:
                 eri_block = self.get_eri([kp, kq, kr, ks])
+                # zero_mask = np.abs(eri_block) < self.threshold
+                # eri_block[zero_mask] = 0
                 if kp == kq == kr == ks:
                     completed[kp,kq,kr] = True
                     for ftuple in unique_iter(self.nao):
@@ -143,3 +145,17 @@ class NCRSSparseFactorizationHelper:
         zero_mask = np.abs(kpoint_eri_tensor) < self.threshold
         kpoint_eri_tensor[zero_mask] = 0
         return kpoint_eri_tensor
+
+    def get_eri_exact(self, kpts):
+        """
+        Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
+        needed for the one-body component lambda
+
+        :param kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        """
+        kp, kq, kr, ks = kpts
+        eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (kp,kq,kr,ks)],
+                                        [self.kmf.kpts[i] for i in (kp,kq,kr,ks)])
+        shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (kp,kq,kr,ks)]
+        eri_kpt = eri_kpt.reshape(shape_pqrs)
+        return eri_kpt
