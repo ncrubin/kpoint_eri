@@ -79,10 +79,17 @@ def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
         one_eigs, _ = np.linalg.eigh(one_body_mat[kidx])
         lambda_one_body += np.sum(np.abs(one_eigs))
  
+    # projecting into the THC basis requires each THC factor mu to be normalized.
+    # we roll the normalization constant into the central tensor zeta
+    # no sqrts because we have two normalized thc vectors (index by mu and nu)
+    # on each side.
+    cP = np.einsum("kpP,kpP->P", thc_obj.chi.conj(), thc_obj.chi, optimize=True)
     lambda_two_body = 0
-    num_eigs = 0
-    lambda_two_body = np.sum(np.abs(thc_obj.zeta.real))
-    lambda_two_body = np.sum(np.abs(thc_obj.zeta.imag))
+    for zeta_Q in thc_obj.zeta:
+        # xy einsum subscript indexes G index.
+        MPQ_normalized = np.einsum("P,xyPQ,Q->xyPQ", cP, zeta_Q, cP)
+        lambda_two_body += np.sum(np.abs(MPQ_normalized.real))
+        lambda_two_body += np.sum(np.abs(MPQ_normalized.imag))
     lambda_two_body *= 2 * nkpts**2
 
     lambda_tot = lambda_one_body + lambda_two_body
