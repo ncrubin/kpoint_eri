@@ -138,6 +138,7 @@ def compute_cost(n: int,
     # The costs of the QROMs and their inverses in steps 4 (b) and (g).
     cost4bg = QR(Lxi + Nk * n // 2, 2 * n * beta + nk)[1] + QI(Lxi + Nk * n // 2)[1] + QR(
         Lxi, 4 * n)[1] + QI(Lxi)[1]
+    exit()
 
     # The cost of the controlled swaps based on the spin qubit in steps 4c and f
     cost4cf = 2 * n * Nk
@@ -237,6 +238,20 @@ def compute_cost(n: int,
     return step_cost, total_cost, ancilla_cost
 
 if __name__ == "__main__":
+    num_spin_orbs = 4 
+    lamH = 1.1270376988022122 
+    dE = 0.0016 
+    L = 24 
+    Lxi = 12 
+    chi = 10 
+    beta = 20 
+    nk = 1 
+    nk = 1
+    compute_cost(num_spin_orbs, lamH, dE, L, Lxi, chi, beta, nk, nk, 20_000) 
+
+    exit()
+
+
     nRe = 108
     lamRe = 294.8
     dE = 0.001
