@@ -7,11 +7,34 @@ from kpoint_eri.resource_estimates.thc.integral_helper import KPTHCHelperDoubleT
 def compute_lambda_real(
         h1,
         etaPp,
-        MPQ
+        MPQ,
+        eri_full
         ):
+    """
+    Compute lambda thc assuming real THC factors (molecular way) but without
+    needing a molecular object as in openfermion. Just pared down function from
+    openfermion.
+    """
+
+    nthc = etaPp.shape[0]
+
+    # computing Least-squares THC residual
     CprP = np.einsum("Pp,Pr->prP", etaPp,
                      etaPp)  # this is einsum('mp,mq->pqm', etaPp, etaPp)
     BprQ = np.tensordot(CprP, MPQ, axes=([2], [0]))
+    Iapprox = np.tensordot(CprP, np.transpose(BprQ), axes=([2], [0]))
+    deri = eri_full - Iapprox
+    res = 0.5 * np.sum((deri)**2)
+
+    # NOTE: remove in future once we resolve why it was used in the first place.
+    # NOTE: see T construction for details.
+    eri_thc = np.einsum("Pp,Pr,Qq,Qs,PQ->prqs",
+                        etaPp,
+                        etaPp,
+                        etaPp,
+                        etaPp,
+                        MPQ,
+                        optimize=True)
 
     # projecting into the THC basis requires each THC factor mu to be nrmlzd.
     # we roll the normalization constant into the central tensor zeta
@@ -26,24 +49,14 @@ def compute_lambda_real(
     lambda_z = np.sum(np.abs(MPQ_normalized)) * 0.5  # Eq. 13
     # NCR: originally Joonho's code add np.einsum('llij->ij', eri_thc)
     # NCR: I don't know how much this matters.
-    # (il|lj) = PiPl PQ Ql Qj ->ij
-    # FPQ = Pl Ql -> PQ
-    # Pi PQ Qj PQ -> ij
-    T  = h1
-    T -= 0.5 * np.einsum(
-            "Pi,Pl,PQ,Ql,Qj->ij",
-            etaPp, etaPp, MPQ, etaPp, etaPp,
-            optimize=True)
-    T += np.einsum(
-        "Pl,Pl,PQ,Qi,Qj->ij",
-        etaPp, etaPp, MPQ, etaPp, etaPp,
-        optimize=True)  # Eq. 3 + Eq. 18
+    T = h1 - 0.5 * np.einsum("illj->ij", eri_full) + np.einsum( "llij->ij", eri_full)  # Eq. 3 + Eq. 18
+    #e, v = np.linalg.eigh(T)
     e = np.linalg.eigvalsh(T)  # only need eigenvalues
-    lambda_T = np.sum(
-        np.abs(e))  # Eq. 19. NOTE: sum over spin orbitals removes 1/2 factor
+    lambda_T = np.sum(np.abs(e))  # Eq. 19. NOTE: sum over spin orbitals removes 1/2 factor
 
     lambda_tot = lambda_z + lambda_T  # Eq. 20
 
+    #return nthc, np.sqrt(res), res, lambda_T, lambda_z, lambda_tot
     return lambda_tot, lambda_T, lambda_z
 
 
