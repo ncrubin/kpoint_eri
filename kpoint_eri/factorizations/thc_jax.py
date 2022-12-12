@@ -109,7 +109,6 @@ def get_batched_data_2indx(array, indxa, indxb):
 
 
 def thc_objective_regularized_batched(
-    # def thc_objective_regularized_batched_loop_q(
     xcur,
     num_orb,
     num_thc,
@@ -124,7 +123,7 @@ def thc_objective_regularized_batched(
     num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
     chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
     nthc = zeta[0].shape[-1]
-    # Normalization factor, no factor of sqrt as their are 4 chis in total when
+    # Normalization factor, no factor of sqrt as there are 4 chis in total when
     # building ERI.
     cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
     num_batches = math.ceil(num_kpts**2 / batch_size)

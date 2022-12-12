@@ -83,7 +83,9 @@ class KPTHCHelperDoubleTranslation(object):
         """
         kp, kq, kr, ks = kpts
         eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (kp,kq,kr,ks)],
-                                        [self.kmf.kpts[i] for i in (kp,kq,kr,ks)])
+                                        [self.kmf.kpts[i] for i in
+                                         (kp,kq,kr,ks)],
+                                         compact=False)
         shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (kp,kq,kr,ks)]
         eri_kpt = eri_kpt.reshape(shape_pqrs)
         return eri_kpt
@@ -150,7 +152,8 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         """
         kp, kq, kr, ks = kpts
         eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (kp,kq,kr,ks)],
-                                        [self.kmf.kpts[i] for i in (kp,kq,kr,ks)])
+                                        [self.kmf.kpts[i] for i in (kp,kq,kr,ks)],
+                                         compact=False)
         shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (kp,kq,kr,ks)]
         eri_kpt = eri_kpt.reshape(shape_pqrs)
         return eri_kpt
