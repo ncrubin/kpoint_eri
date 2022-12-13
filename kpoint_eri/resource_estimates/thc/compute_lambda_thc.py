@@ -103,7 +103,10 @@ def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
         MPQ_normalized = np.einsum("P,xyPQ,Q->xyPQ", cP, zeta_Q, cP)
         lambda_two_body += np.sum(np.abs(MPQ_normalized.real))
         lambda_two_body += np.sum(np.abs(MPQ_normalized.imag))
-    lambda_two_body *= 2 * nkpts**2
+    # Nk^2 to account for k, k_prime sum. This multiplies a 1/Nk factor present
+    # in the definition of the eris in pyscf which the THC factors are
+    # constructed to reproduce.
+    lambda_two_body *= 2 * nkpts
 
     lambda_tot = lambda_one_body + lambda_two_body
     return lambda_tot, lambda_one_body, lambda_two_body
