@@ -109,7 +109,6 @@ def get_batched_data_2indx(array, indxa, indxb):
 
 
 def thc_objective_regularized_batched(
-    # def thc_objective_regularized_batched_loop_q(
     xcur,
     num_orb,
     num_thc,
@@ -124,7 +123,7 @@ def thc_objective_regularized_batched(
     num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
     chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
     nthc = zeta[0].shape[-1]
-    # Normalization factor, no factor of sqrt as their are 4 chis in total when
+    # Normalization factor, no factor of sqrt as there are 4 chis in total when
     # building ERI.
     cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
     num_batches = math.ceil(num_kpts**2 / batch_size)
@@ -394,7 +393,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         lambda_z = reg_loss - loss
         penalty_param = reg_loss / (lambda_z**0.5)
         print("lambda_z {}".format(lambda_z))
-        print("penalty_param {}".format(penalty_param))
+    print("penalty_param {}".format(penalty_param))
 
     # L-BFGS-B optimization
     thc_grad = jax.grad(thc_objective_regularized_batched, argnums=[0])
