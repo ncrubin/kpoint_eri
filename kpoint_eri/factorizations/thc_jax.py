@@ -393,7 +393,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         lambda_z = reg_loss - loss
         penalty_param = reg_loss / (lambda_z**0.5)
         print("lambda_z {}".format(lambda_z))
-        print("penalty_param {}".format(penalty_param))
+    print("penalty_param {}".format(penalty_param))
 
     # L-BFGS-B optimization
     thc_grad = jax.grad(thc_objective_regularized_batched, argnums=[0])
