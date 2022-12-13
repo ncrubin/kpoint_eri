@@ -56,7 +56,7 @@ def test_kpoint_thc_lambda():
     mf.chkfile = "test_thc_kpoint_build.chk"
     cthc = 4
     #
-    # Build kpoint eris from supercell
+    # Build kpoint THC eris
     #
     #
     momentum_map = build_momentum_transfer_mapping(cell, kpts)
@@ -69,7 +69,7 @@ def test_kpoint_thc_lambda():
         G_mapping,
         Luv_cont,
         chkfile_name="thc_opt.h5",
-        maxiter=3000,
+        maxiter=30,
         penalty_param=1e-3,
     )
     num_G_per_Q = [z.shape[0] for z in zeta]
@@ -84,7 +84,7 @@ def test_kpoint_thc_lambda():
         G_mapping,
         Luv_cont,
         chkfile_name="thc_adagrad.h5",
-        maxiter=3000,
+        maxiter=30,
     )
     chi_unpacked, zeta_unpacked = unpack_thc_factors(
         opt_param, num_interp_points, num_mo, num_kpts, num_G_per_Q
@@ -125,13 +125,6 @@ def test_kpoint_thc_lambda():
         "Ri,Ri->R", orbitals_mo[:, :nocc], orbitals_mo[:, :nocc].conj(), optimize=True
     )
     assert np.einsum("R,R->", density, grid_inst.weights) == pytest.approx(nocc)
-    with h5py.File(supercell_mf.chkfile, "r+") as fh5:
-        try:
-            interp_indx = fh5["interp_indx"][:]
-        except KeyError:
-            kmeans = KMeansCVT(grid_points, max_iteration=500)
-            interp_indx = kmeans.find_interpolating_points(num_interp_points, density)
-            fh5["interp_indx"] = interp_indx
 
     from kpoint_eri.factorizations.isdf import supercell_isdf
 
