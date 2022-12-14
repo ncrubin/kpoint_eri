@@ -4,15 +4,21 @@ from scipy.optimize import minimize
 from uuid import uuid4
 import math
 
-from openfermion.resource_estimates.thc.utils import adagrad
-from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
-
-
 from jax.config import config
 
 config.update("jax_enable_x64", True)
+
 import jax
 import jax.numpy as jnp
+
+
+from openfermion.resource_estimates.thc.utils import adagrad
+from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
+
+from kpoint_eri.factorizations.isdf import solve_kmeans_kpisdf
+from kpoint_eri.resource_estimates.utils.misc_utils import (
+    build_momentum_transfer_mapping,
+)
 
 
 def get_zeta_size(zeta):
@@ -538,3 +544,141 @@ def adagrad_opt_kpthc_batched(
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     return params
+
+
+def kpoint_thc_via_isdf(
+    kmf,
+    cholesky,
+    num_thc,
+    perform_bfgs_opt=True,
+    perform_adagrad_opt=True,
+    bfgs_maxiter=3000,
+    adagrad_maxiter=3000,
+    check_point_base_name="thc",
+    save_checkoints=True,
+    use_batched_algos=True,
+    penalty_param=None,
+    batch_size=None,
+):
+    """
+    Solve k-point THC using ISDF as an initial guess.
+
+    :param kmf: instance of pyscf.pbc.KRHF object. Must be using FFTDF density
+        fitting for integrals.
+    :param cholesky: 3-index cholesky integrals needed for BFGS optimization.
+    :param num_thc: THC dimensions (int), usually nthc = c_thc * n, where n is the
+        number of spatial orbitals in the unit cell and c_thc is some
+        poisiitve integer (typically <= 15).
+    :param perform_bfgs_opt: Perform subsequent BFGS optimization of THC
+        factors?
+    :param perform_adagrad_opt: Perform subsequent adagrad optimization of THC
+        factors? This is performed after BFGD if perform_bfgs_opt is True.
+    :param bfgs_maxiter: Maximum iteration for adagrad optimization.
+    :param adagrad_maxiter: Maximum iteration for adagrad optimization.
+    :param save_checkoints: Whether to save checkpoint files or not (which will
+        store THC factors. For each step we store checkpoints as
+        {check_point_base_name}_{thc_method}.h5, where thc_method is one of the
+        strings (isdf, bfgs or adagrad).
+    :param check_point_base_name: Base name for checkpoint files. string,
+        default "thc".
+    :param use_batched_algos: Whether to use batched algorithms which may be
+        faster but have higher memory cost. Bool. Default True.
+    :param penalty_param: Penalty parameter for l2 regularization. Float. Default None.
+    :returns (chi, zeta, G_map)
+    """
+    # Perform initial ISDF calculation of THC factors
+    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(kmf, num_thc, single_translation=False)
+    num_mo = kmf.mo_coeff[0].shape[-1]
+    num_kpts = len(kmf.kpts)
+    if save_checkoints:
+        chkfile_name = f"{check_point_base_name}_isdf.h5"
+        with h5py.File(chkfile_name, "w") as fh5:
+            fh5["chi"] = chi
+            fh5["G_mapping"] = G_mapping
+            for iq in range(num_kpts):
+                fh5[f"zeta_{iq}"] = zeta[iq]
+    momentum_map = build_momentum_transfer_mapping(kmf.cell, kmf.kpts)
+    if cholesky.dtype == object:
+        # Jax requires contiguous arrays so just truncate naux if it's not
+        # uniform hopefully shouldn't affect results dramatically as from
+        # experience the naux amount only varies by a few % per k-point
+        # Alternatively todo: padd with zeros
+        min_naux = min([cholesky[k1, k1].shape[0] for k1 in range(num_kpts)])
+        cholesky_contiguous = np.zeros(
+            (
+                num_kpts,
+                num_kpts,
+                min_naux,
+                num_mo,
+                num_mo,
+            ),
+            dtype=np.complex128,
+        )
+        for ik1 in range(num_kpts):
+            for ik2 in range(num_kpts):
+                cholesky_contiguous[ik1, ik2] = cholesky[ik1, ik2][:min_naux]
+    else:
+        cholesky_contiguous = cholesky
+    if perform_bfgs_opt:
+        if save_checkoints:
+            chkfile_name = f"{check_point_base_name}_bfgs.h5"
+        else:
+            chkfile_name = None
+        if use_batched_algos:
+            opt_params = lbfgsb_opt_kpthc_l2reg_batched(
+                chi,
+                zeta,
+                momentum_map,
+                G_mapping,
+                cholesky_contiguous,
+                chkfile_name=chkfile_name,
+                maxiter=bfgs_maxiter,
+                penalty_param=penalty_param,
+                batch_size=batch_size,
+            )
+        else:
+            opt_params = lbfgsb_opt_kpthc_l2reg(
+                chi,
+                zeta,
+                momentum_map,
+                G_mapping,
+                cholesky_contiguous,
+                chkfile_name=chkfile_name,
+                maxiter=bfgs_maxiter,
+                penalty_param=penalty_param,
+            )
+        num_G_per_Q = [len(np.unique(GQ)) for GQ in G_mapping]
+        chi, zeta = unpack_thc_factors(opt_params, num_thc, num_mo,
+                                               num_kpts, num_G_per_Q)
+    if perform_adagrad_opt:
+        if save_checkoints:
+            chkfile_name = f"{check_point_base_name}_adagrad.h5"
+        else:
+            chkfile_name = None
+        if use_batched_algos:
+            opt_params = lbfgsb_opt_kpthc_l2reg_batched(
+                chi,
+                zeta,
+                momentum_map,
+                G_mapping,
+                cholesky_contiguous,
+                chkfile_name=chkfile_name,
+                maxiter=bfgs_maxiter,
+                penalty_param=penalty_param,
+                batch_size=batch_size,
+            )
+        else:
+            opt_params = lbfgsb_opt_kpthc_l2reg(
+                chi,
+                zeta,
+                momentum_map,
+                G_mapping,
+                cholesky_contiguous,
+                chkfile_name=chkfile_name,
+                maxiter=bfgs_maxiter,
+                penalty_param=penalty_param,
+            )
+        num_G_per_Q = [len(np.unique(GQ)) for GQ in G_mapping]
+        chi, zeta = unpack_thc_factors(opt_params, num_thc, num_mo,
+                                               num_kpts, num_G_per_Q)
+    return chi, zeta

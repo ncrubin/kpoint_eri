@@ -20,11 +20,11 @@ from kpoint_eri.factorizations.thc_jax import (
     lbfgsb_opt_kpthc_l2reg,
     lbfgsb_opt_kpthc_l2reg_batched,
     prepare_batched_data_indx_arrays,
+    kpoint_thc_via_isdf,
 )
 
 from openfermion.resource_estimates.thc.utils.thc_factorization import (
     lbfgsb_opt_thc_l2reg,
-    adagrad_opt_thc,
 )
 from openfermion.resource_estimates.thc.utils.thc_factorization import (
     thc_objective_regularized as thc_obj_mol,
@@ -286,7 +286,42 @@ def test_kpoint_thc_reg_batched():
     )
     assert np.allclose(opt_param_batched, opt_param_batched_diff_batch)
 
+def test_kpoint_thc_utility_function():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 2, 2]
+    kpts = cell.make_kpts(kmesh)
+    num_kpts = len(kpts)
+    mf = scf.KRHF(cell, kpts)
+    mf.chkfile = "test_thc_kpoint_build_batched.chk"
+    mf.init = "chkfile"
+    mf.kernel()
+    rsmf = scf.KRHF(mf.cell, mf.kpts).rs_density_fit()
+    # Force same MOs as FFTDF at least
+    rsmf.mo_occ = mf.mo_occ
+    rsmf.mo_coeff = mf.mo_coeff
+    rsmf.mo_energy = mf.mo_energy
+    rsmf.with_df.mesh = mf.cell.mesh
+    mymp = mp.KMP2(rsmf)
+    Luv = cholesky_from_df_ints(mymp)
+    num_thc = 4 * mf.mo_coeff[0].shape[-1]
+    chi, zeta, G_mapping = kpoint_thc_via_isdf(mf, Luv, num_thc,
+                                               perform_adagrad_opt=False)
 
 if __name__ == "__main__":
-    # test_kpoint_thc_reg_gamma()
+    test_kpoint_thc_reg_gamma()
     test_kpoint_thc_reg_batched()
+    test_kpoint_thc_utility_function()
