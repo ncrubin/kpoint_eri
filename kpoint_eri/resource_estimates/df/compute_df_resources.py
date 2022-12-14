@@ -9,6 +9,26 @@ from sympy import factorint
 
 from openfermion.resource_estimates.utils import QR, QI, power_two
 
+def QR_ncr(L, M1):
+    """
+    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
+    """
+    k = 0.5 * np.log2(L / M1)
+    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
+    try:
+        assert k >= 0
+    except AssertionError:
+        k_opt = 0
+        val_opt = np.ceil(value(k_opt))
+        assert val_opt.is_integer()
+        return int(k_opt), int(val_opt)
+    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
+    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
+    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
+    assert k_opt.is_integer()
+    assert val_opt.is_integer()
+    return int(k_opt), int(val_opt)
+
 
 def compute_cost(n: int,
                  lam: float,
@@ -87,7 +107,7 @@ def compute_cost(n: int,
 
     # The cost of the QROM for the first state preparation in step 1 (b) and
     # its inverse.
-    cost1b = QR(L + 1, bp1)[1] + QI(L + 1)[1]
+    cost1b = QR_ncr(L + 1, bp1)[1] + QI(L + 1)[1]
 
     # The cost for the inequality test, controlled swap and their inverse in
     # steps 1 (c) and (d)
@@ -105,7 +125,7 @@ def compute_cost(n: int,
     # equal superposition on the second register. We will assume it is not
     # uncomputed, because we want to keep the offset for applying the QROM for
     # outputting the rotations.
-    cost2 = QR(L + 1, bo)[1] + QI(L + 1)[1]
+    cost2 = QR_ncr(L + 1, bo)[1] + QI(L + 1)[1]
 
     # The number of bits for rotating the ancilla for the second preparation.
     # We are just entering this manually because it is a typical value.
@@ -123,7 +143,7 @@ def compute_cost(n: int,
 
     # The cost of the QROMs and inverse QROMs for the state preparation, where
     # in the first one we need + n/2 to account for the one-electron terms.
-    cost3c = QR(Lxi + Nk * n // 2, bp2)[1] + QI(Lxi + Nk * n // 2)[1] + QR(
+    cost3c = QR_ncr(Lxi + Nk * n // 2, bp2)[1] + QI(Lxi + Nk * n // 2)[1] + QR_ncr(
         Lxi, bp2)[1] + QI(Lxi)[1]
 
     # The inequality test and state preparations.
@@ -136,7 +156,7 @@ def compute_cost(n: int,
     cost4ah = 4 * (nLxi - 1)
 
     # The costs of the QROMs and their inverses in steps 4 (b) and (g).
-    cost4bg = QR(Lxi + Nk * n // 2, 2 * n * beta + nk)[1] + QI(Lxi + Nk * n // 2)[1] + QR(
+    cost4bg = QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nk)[1] + QI(Lxi + Nk * n // 2)[1] + QR_ncr(
         Lxi, 4 * n)[1] + QI(Lxi)[1]
 
     # The cost of the controlled swaps based on the spin qubit in steps 4c and f
@@ -170,7 +190,7 @@ def compute_cost(n: int,
 
     # Now the number of qubits from the list on page 54.
 
-    k1 = np.power(2, QR(Lxi + Nk * n // 2, 2 * n * beta + nk)[0])
+    k1 = np.power(2, QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nk)[0])
 
     # The control register for phase estimation and iteration on it.
     ac1 = np.ceil(np.log2(iters + 1)) * 2 - 1
@@ -237,6 +257,19 @@ def compute_cost(n: int,
     return step_cost, total_cost, ancilla_cost
 
 if __name__ == "__main__":
+    num_spin_orbs = 4 
+    lamH = 1.1270376988022122 
+    dE = 0.0016 
+    L = 24 
+    Lxi = 12 
+    chi = 10 
+    beta = 20 
+    nk = 1 
+    nk = 1
+    res = compute_cost(num_spin_orbs, lamH, dE, L, Lxi, chi, beta, nk, nk, 20_000) 
+    print(res)
+
+
     nRe = 108
     lamRe = 294.8
     dE = 0.001

@@ -14,15 +14,16 @@ def test_cost_sparse():
 
     res = cost_sparse(nRe, nk, lam_re, dRe, dE, chi, 20_000)
     res = cost_sparse(nRe, nk, lam_re, dRe, dE, chi, res[0])
-    assert res[0] == 31733
-    assert res[1] == 106436353426
-    assert res[2] == 3562
+    print(res)
+    assert res[0] == 108487
+    assert res[1] == 363878633414
+    assert res[2] == 1540
 
     res = cost_sparse(nLi, nk, lam_Li, dLi, dE, chi, 20_000)
     res = cost_sparse(nLi, nk, lam_Li, dLi, dE, chi, res[0])
-    assert res[0] == 25461    
-    assert res[1] == 61882807734
-    assert res[2] == 4168
+    assert res[0] == 82798
+    assert res[1] == 201240042212
+    assert res[2] == 1857
 
 if __name__ == "__main__":
     test_cost_sparse()

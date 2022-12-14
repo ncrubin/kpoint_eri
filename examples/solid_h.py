@@ -84,6 +84,6 @@ def generate_sparse_cost_table(mf, Luv):
 
 if __name__ == "__main__":
     cell = hydrogen_in_diamond_config()
-    mf = run_scf(cell, [2, 2, 2])
+    mf = run_scf(cell, [1, 1, 2])
     Luv = get_cholesky(mf)
     generate_sparse_cost_table(mf, Luv)
