@@ -87,7 +87,7 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     k1 = QR_ncr(d, m)[0]
 
     # Equation (A17)
-    cost = np.ceil(d/k1) + m * (k1 -1) + QI(d)[1] + 6 * n * Nk + 8 * nN + 10 * nNk + 2 * chi + \
+    cost = QR_ncr(d, m)[1] + QI(d)[1] + 6 * n * Nk + 8 * nN + 10 * nNk + 2 * chi + \
         7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 8
 
     # Number of iterations needed for the phase estimation.
@@ -115,7 +115,7 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     ac7 = chi
 
     # The ancillas used for QROM
-    ac8 = np.ceil(np.log2(d / k1)) + m * k1
+    ac8 = np.ceil(np.log2(d / np.power(2, k1))) + m * np.power(2, k1)
 
     ac9 = 9
 
