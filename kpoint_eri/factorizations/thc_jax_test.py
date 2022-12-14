@@ -322,5 +322,6 @@ def test_kpoint_thc_utility_function():
                                                perform_adagrad_opt=False)
 
 if __name__ == "__main__":
-    # test_kpoint_thc_reg_batched()
+    test_kpoint_thc_reg_gamma()
+    test_kpoint_thc_reg_batched()
     test_kpoint_thc_utility_function()
