@@ -602,6 +602,7 @@ def kpoint_thc_via_isdf(
         # Jax requires contiguous arrays so just truncate naux if it's not
         # uniform hopefully shouldn't affect results dramatically as from
         # experience the naux amount only varies by a few % per k-point
+        # Alternatively todo: padd with zeros
         min_naux = min([cholesky[k1, k1].shape[0] for k1 in range(num_kpts)])
         cholesky_contiguous = np.zeros(
             (
