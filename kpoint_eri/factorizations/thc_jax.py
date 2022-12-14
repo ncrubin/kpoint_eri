@@ -21,6 +21,16 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
 )
 
 
+def load_thc_factors(chkfile_name):
+    with h5py.File(chkfile_name, "r") as fh5:
+        chi = fh5["chi"][:]
+        xi = fh5["xi"][:]
+        G_mapping = fh5["G_mapping"][:]
+        zeta = np.zeros((num_kpts,), dtype=object)
+        for iq in range(G_mapping.shape[0]):
+            zeta[iq] = fh5[f"zeta_{iq}"][:]
+    return chi, zeta, G_mapping
+
 def get_zeta_size(zeta):
     return sum([z.size for z in zeta])
 
