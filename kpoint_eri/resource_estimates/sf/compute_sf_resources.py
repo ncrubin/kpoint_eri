@@ -3,6 +3,7 @@ Estimate the physical, logical, and Toffoli gate requirements for
 single-factorization qubitization.  Single-Factorization uses
 an LCU formed from a symmeterized Cholesky decomposition of the integrals
 """
+import sys
 from typing import Tuple
 import numpy as np
 
@@ -12,6 +13,26 @@ from sympy import factorint
 from openfermion.resource_estimates.utils import (QR, QI, power_two,)
 from openfermion.resource_estimates.utils import QR2 as QR2_of
 
+
+def QR_ncr(L, M1):
+    """
+    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
+    """
+    k = 0.5 * np.log2(L / M1)
+    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
+    try:
+        assert k >= 0
+    except AssertionError:
+        k_opt = 0
+        val_opt = np.ceil(value(k_opt))
+        assert val_opt.is_integer()
+        return int(k_opt), int(val_opt)
+    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
+    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
+    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
+    assert k_opt.is_integer()
+    assert val_opt.is_integer()
+    return int(k_opt), int(val_opt)
 
 
 def QR2(L1, L2, M):
@@ -129,7 +150,7 @@ def kpoint_single_factorization_costs(n: int,
     bMN = 2*(np.ceil(np.log2(Nk)) + np.ceil(np.log2(M))) + chi + 2
 
     # QROM costs for first register preparation in step 1(b)
-    cost1b = QR(M * Nk + 1, bMN)[-1] + QI(M * Nk + 1)[-1]
+    cost1b = QR_ncr(M * Nk + 1, bMN)[-1] + QI(M * Nk + 1)[-1]
 
     # The inequality test of cost chi in step 1(c) and the controlled swap with
     # cost nL + 1 in step 1(d) (and their inversions).
