@@ -21,6 +21,16 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
 )
 
 
+def load_thc_factors(chkfile_name):
+    with h5py.File(chkfile_name, "r") as fh5:
+        chi = fh5["chi"][:]
+        G_mapping = fh5["G_mapping"][:]
+        num_kpts = G_mapping.shape[0]
+        zeta = np.zeros((num_kpts,), dtype=object)
+        for iq in range(G_mapping.shape[0]):
+            zeta[iq] = fh5[f"zeta_{iq}"][:]
+    return chi, zeta, G_mapping
+
 def get_zeta_size(zeta):
     return sum([z.size for z in zeta])
 
@@ -554,7 +564,7 @@ def kpoint_thc_via_isdf(
     perform_adagrad_opt=True,
     bfgs_maxiter=3000,
     adagrad_maxiter=3000,
-    check_point_base_name="thc",
+    checkpoint_basename="thc",
     save_checkoints=True,
     use_batched_algos=True,
     penalty_param=None,
@@ -577,9 +587,9 @@ def kpoint_thc_via_isdf(
     :param adagrad_maxiter: Maximum iteration for adagrad optimization.
     :param save_checkoints: Whether to save checkpoint files or not (which will
         store THC factors. For each step we store checkpoints as
-        {check_point_base_name}_{thc_method}.h5, where thc_method is one of the
+        {checkpoint_basename}_{thc_method}.h5, where thc_method is one of the
         strings (isdf, bfgs or adagrad).
-    :param check_point_base_name: Base name for checkpoint files. string,
+    :param checkpoint_basename: Base name for checkpoint files. string,
         default "thc".
     :param use_batched_algos: Whether to use batched algorithms which may be
         faster but have higher memory cost. Bool. Default True.
@@ -591,7 +601,7 @@ def kpoint_thc_via_isdf(
     num_mo = kmf.mo_coeff[0].shape[-1]
     num_kpts = len(kmf.kpts)
     if save_checkoints:
-        chkfile_name = f"{check_point_base_name}_isdf.h5"
+        chkfile_name = f"{checkpoint_basename}_isdf.h5"
         with h5py.File(chkfile_name, "w") as fh5:
             fh5["chi"] = chi
             fh5["G_mapping"] = G_mapping
@@ -621,7 +631,7 @@ def kpoint_thc_via_isdf(
         cholesky_contiguous = cholesky
     if perform_bfgs_opt:
         if save_checkoints:
-            chkfile_name = f"{check_point_base_name}_bfgs.h5"
+            chkfile_name = f"{checkpoint_basename}_bfgs.h5"
         else:
             chkfile_name = None
         if use_batched_algos:
@@ -652,7 +662,7 @@ def kpoint_thc_via_isdf(
                                                num_kpts, num_G_per_Q)
     if perform_adagrad_opt:
         if save_checkoints:
-            chkfile_name = f"{check_point_base_name}_adagrad.h5"
+            chkfile_name = f"{checkpoint_basename}_adagrad.h5"
         else:
             chkfile_name = None
         if use_batched_algos:

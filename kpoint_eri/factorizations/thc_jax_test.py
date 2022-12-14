@@ -13,6 +13,7 @@ from kpoint_eri.factorizations.isdf import (
 from kpoint_eri.resource_estimates.utils import build_momentum_transfer_mapping
 from kpoint_eri.factorizations.thc_jax import (
     pack_thc_factors,
+    load_thc_factors,
     thc_objective_regularized,
     thc_objective_regularized_batched,
     unpack_thc_factors,
@@ -318,8 +319,12 @@ def test_kpoint_thc_utility_function():
     mymp = mp.KMP2(rsmf)
     Luv = cholesky_from_df_ints(mymp)
     num_thc = 4 * mf.mo_coeff[0].shape[-1]
-    chi, zeta, G_mapping = kpoint_thc_via_isdf(mf, Luv, num_thc,
-                                               perform_adagrad_opt=False)
+    chi, zeta = kpoint_thc_via_isdf(mf, Luv, num_thc,
+                                    perform_adagrad_opt=False,
+                                    bfgs_maxiter=100,
+                                    )
+    chi_load, zeta_load, G_load = load_thc_factors("thc_bfgs.h5")
+    assert np.allclose(chi, chi_load)
 
 if __name__ == "__main__":
     test_kpoint_thc_reg_gamma()
