@@ -49,6 +49,7 @@ def test_thc_helper():
         print("Reading THC factors from file")
         with h5py.File(mf.chkfile, "r") as fh5:
             chi = fh5["chi"][:]
+            print(fh5.keys())
             qs = [int(s.split("_")[1]) for s in fh5.keys() if "zeta" in s]
             zeta = np.zeros(len(qs), dtype=object)
             for q in qs:
@@ -61,6 +62,7 @@ def test_thc_helper():
             fh5["chi"] = chi
             for q in range(zeta.shape[0]):
                 fh5[f"zeta_{q}"] = zeta[q]
+
     helper = KPTHCHelperDoubleTranslation(chi, zeta, mf)
     from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
     approx_cc = build_cc(approx_cc, helper)
