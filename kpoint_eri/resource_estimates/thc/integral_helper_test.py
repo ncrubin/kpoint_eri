@@ -127,9 +127,19 @@ def test_thc_convergence():
     Luv = cholesky_from_df_ints(mymp)
     cthc = 4
     num_thc =  cthc * mf.mo_coeff[0].shape[-1]
-    chi, zeta = kpoint_thc_via_isdf(mf, Luv, num_thc,
+    chi, zeta, _ = kpoint_thc_via_isdf(mf, Luv, num_thc,
                                     perform_adagrad_opt=False,
                                     perform_bfgs_opt=False,
+                                    )
+
+    helper = KPTHCHelperDoubleTranslation(chi, zeta, mf)
+    emp2 = compute_emp2_approx(mf, helper)
+    print(" {:4d}  {:10.4e} {:10.4e} {:10.4e}".format(cthc, emp2,
+                                                      exact_emp2,
+                                                      exact_emp2-emp2))
+    chi, zeta, _ = kpoint_thc_via_isdf(mf, Luv, num_thc,
+                                    perform_adagrad_opt=False,
+                                    perform_bfgs_opt=True,
                                     )
 
     helper = KPTHCHelperDoubleTranslation(chi, zeta, mf)
