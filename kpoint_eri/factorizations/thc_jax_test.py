@@ -10,7 +10,10 @@ from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.factorizations.isdf import (
     solve_kmeans_kpisdf,
 )
-from kpoint_eri.resource_estimates.utils import build_momentum_transfer_mapping
+from kpoint_eri.resource_estimates.utils import (
+        build_momentum_transfer_mapping,
+        k2gamma
+        )
 from kpoint_eri.factorizations.thc_jax import (
     pack_thc_factors,
     load_thc_factors,
@@ -308,7 +311,7 @@ def test_kpoint_thc_utility_function():
     num_kpts = len(kpts)
     mf = scf.KRHF(cell, kpts)
     mf.chkfile = "test_thc_kpoint_build_batched.chk"
-    mf.init = "chkfile"
+    mf.init_guess = "chkfile"
     mf.kernel()
     rsmf = scf.KRHF(mf.cell, mf.kpts).rs_density_fit()
     # Force same MOs as FFTDF at least
@@ -319,14 +322,113 @@ def test_kpoint_thc_utility_function():
     mymp = mp.KMP2(rsmf)
     Luv = cholesky_from_df_ints(mymp)
     num_thc = 4 * mf.mo_coeff[0].shape[-1]
+    # ISDF only
     chi, zeta = kpoint_thc_via_isdf(mf, Luv, num_thc,
                                     perform_adagrad_opt=False,
+                                    perform_bfgs_opt=False,
                                     bfgs_maxiter=100,
                                     )
-    chi_load, zeta_load, G_load = load_thc_factors("thc_bfgs.h5")
+    chi_load, zeta_load, G_load = load_thc_factors("thc_isdf.h5")
     assert np.allclose(chi, chi_load)
+    eri = np.einsum("xpq,xrs->pqrs", Luv[0,0], Luv[0,0])
+    buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    buffer[: chi.size] = chi.T.real.ravel()
+    buffer[chi.size :] = zeta[0][0,0].real.ravel()
+    lbfgsb_opt_thc_l2reg(
+        eri,
+        num_thc,
+        maxiter=10,
+        initial_guess=buffer,
+        )
+
+def test_kpoint_thc_utility_function_k2gamma():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 1, 2]
+    kpts = cell.make_kpts(kmesh)
+    num_kpts = len(kpts)
+    mf = scf.KRHF(cell, kpts)
+    mf.chkfile = "test_thc_kpoint_build_batched.chk"
+    mf.init_guess = "chkfile"
+    mf.kernel()
+    # print(mf.cell.lattice_vectors())
+    # print(mf.cell.reciprocal_vectors())
+    sc_mf = k2gamma(mf)
+    # print(mf.cell.lattice_vectors())
+    # print(mf.cell.reciprocal_vectors())
+    G = sc_mf.cell.reciprocal_vectors()
+    R = sc_mf.cell.lattice_vectors()
+    print(np.einsum("Gx,Rx->GR", G, R)/(2*np.pi))
+    rsmf = scf.KRHF(sc_mf.cell, sc_mf.kpts).rs_density_fit()
+    # Force same MOs as FFTDF at least
+    rsmf.mo_occ = sc_mf.mo_occ
+    rsmf.mo_coeff = sc_mf.mo_coeff
+    rsmf.mo_energy = sc_mf.mo_energy
+    rsmf.with_df.mesh = sc_mf.cell.mesh
+    mymp = mp.KMP2(rsmf)
+    Luv = cholesky_from_df_ints(mymp)
+    num_thc = 4 * sc_mf.mo_coeff[0].shape[-1]
+    # ISDF only
+    print(sc_mf.kpts)
+    print(len(Luv))
+    chi, zeta, G_mapping = kpoint_thc_via_isdf(sc_mf, Luv, num_thc,
+                                    perform_adagrad_opt=False,
+                                    perform_bfgs_opt=False,
+                                    bfgs_maxiter=100,
+                                    max_kmeans_iteration=1,
+                                    verbose=True
+                                    )
+    print(len(zeta))
+    print(chi.shape, zeta[0].shape, chi.size, zeta[0].size)
+    chi_load, zeta_load, G_load = load_thc_factors("thc_isdf.h5")
+    assert np.allclose(chi, chi_load)
+    eri = np.einsum("xpq,xrs->pqrs", Luv[0,0], Luv[0,0])
+    buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    buffer[: chi.size] = chi.T.real.ravel()
+    buffer[chi.size :] = zeta[0][0,0].real.ravel()
+    lbfgsb_opt_thc_l2reg(
+        eri,
+        num_thc,
+        maxiter=2,
+        initial_guess=buffer,
+        )
+    momentum_map = build_momentum_transfer_mapping(sc_mf.cell, sc_mf.kpts)
+    from kpoint_eri.factorizations.thc_jax import make_contiguous_cholesky
+    Luv_cont = make_contiguous_cholesky(Luv)
+    print(Luv_cont.shape)
+    opt_param = lbfgsb_opt_kpthc_l2reg(
+        chi,
+        zeta,
+        momentum_map,
+        G_mapping,
+        jnp.array(Luv_cont),
+        chkfile_name="thc_opt.h5",
+        maxiter=2,
+    )
+    opt_param_batched = lbfgsb_opt_kpthc_l2reg_batched(
+        chi,
+        zeta,
+        momentum_map,
+        G_mapping,
+        jnp.array(Luv_cont),
+        chkfile_name="thc_opt.h5",
+        maxiter=2,
+    )
 
 if __name__ == "__main__":
-    test_kpoint_thc_reg_gamma()
-    test_kpoint_thc_reg_batched()
-    test_kpoint_thc_utility_function()
+    # test_kpoint_thc_reg_gamma()
+    # test_kpoint_thc_reg_batched()
+    test_kpoint_thc_utility_function_k2gamma()
