@@ -106,7 +106,7 @@ def compute_lambda_ncr(hcore, sparse_int_obj: NCRSSparseFactorizationHelper):
             eri_kkqq_pqrs = sparse_int_obj.get_eri_exact([kidx, kidx, qidx, qidx])  
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
-        one_body_mat[kidx] = hcore[kidx] - 0.5 * h1_neg + h1_pos
+        one_body_mat[kidx] = hcore[kidx] + 0.5 * h1_neg + h1_pos
         lambda_one_body += np.sum(np.abs(one_body_mat[kidx].real)) + np.sum(np.abs(one_body_mat[kidx].imag))
     
     lambda_two_body = 0

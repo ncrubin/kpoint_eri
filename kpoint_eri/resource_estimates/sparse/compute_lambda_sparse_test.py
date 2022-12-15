@@ -37,12 +37,12 @@ def test_ncr_lambda_sparse():
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = 'ncr_test_C_density_fitints.chk'
-    from pyscf.pbc.scf.chkfile import load_scf
-    _, scf_dict = load_scf(mf.chkfile)
-    mf.mo_coeff = scf_dict['mo_coeff']
-    mf.mo_occ = scf_dict['mo_occ']
-    mf.mo_energy = scf_dict['mo_energy']
-    mf.e_tot = scf_dict['e_tot']
+    # from pyscf.pbc.scf.chkfile import load_scf
+    # _, scf_dict = load_scf(mf.chkfile)
+    # mf.mo_coeff = scf_dict['mo_coeff']
+    # mf.mo_occ = scf_dict['mo_occ']
+    # mf.mo_energy = scf_dict['mo_energy']
+    # mf.e_tot = scf_dict['e_tot']
     # mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
     mf.init_guess = 'chkfile'
     mf.kernel()
