@@ -64,7 +64,7 @@ def pack_thc_factors(chi, zeta, buffer):
     buffer[: chi.size] = chi.real.ravel()
     buffer[chi.size : 2 * chi.size] = chi.imag.ravel()
     start = 2 * chi.size
-    num_kpts = zeta.shape[0]
+    num_kpts = len(zeta.shape[0])
     for iQ in range(num_kpts):
         size = zeta[iQ].size
         buffer[start : start + size] = zeta[iQ].real.ravel()
