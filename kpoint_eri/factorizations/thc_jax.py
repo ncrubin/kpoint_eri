@@ -219,7 +219,7 @@ def thc_objective_regularized(
                 deri = eri_thc - eri_ref
                 norm_left = norm_kP[ik] * norm_kP[ik_minus_q]
                 norm_right = norm_kP[ik_prime_minus_q] * norm_kP[ik_prime]
-                MPQ_normalized = np.einsum(
+                MPQ_normalized = jnp.einsum(
                     "P,PQ,Q->PQ", norm_left, zeta[iq][Gpq, Gsr], norm_right
                 )
 

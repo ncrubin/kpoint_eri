@@ -128,6 +128,8 @@ def test_kpoint_thc_reg_gamma():
     num_kpts = len(kpts)
     mf = scf.KRHF(cell, kpts)
     mf.chkfile = "test_thc_kpoint_build.chk"
+    mf.init_guess = "chkfile"
+    mf.kernel()
     num_mo = mf.mo_coeff[0].shape[-1]
     num_interp_points = 10 * mf.mo_coeff[0].shape[-1]
     chi, zeta, G_mapping, Luv_cont = chkpoint_helper(mf, num_interp_points)
@@ -182,6 +184,7 @@ def test_kpoint_thc_reg_gamma():
     chi_unpacked, zeta_unpacked = unpack_thc_factors(
         opt_param, num_interp_points, num_mo, num_kpts, num_G_per_Q
     )
+    print(chi_unpacked[0] - chi_unpacked_mol)
     assert np.allclose(chi_unpacked[0], chi_unpacked_mol)
     assert np.allclose(zeta_unpacked[0], zeta_unpacked_mol)
     mol_obj = thc_obj_mol(buffer, num_mo, num_interp_points, eri, 1e-3)
@@ -428,6 +431,6 @@ def test_kpoint_thc_utility_function_k2gamma():
     )
 
 if __name__ == "__main__":
-    # test_kpoint_thc_reg_gamma()
-    # test_kpoint_thc_reg_batched()
+    test_kpoint_thc_reg_gamma()
+    test_kpoint_thc_reg_batched()
     test_kpoint_thc_utility_function_k2gamma()
