@@ -145,7 +145,7 @@ def thc_objective_regularized_batched(
     nthc = zeta[0].shape[-1]
     # Normalization factor, no factor of sqrt as there are 4 chis in total when
     # building ERI.
-    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)
+    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)**0.5
     num_batches = math.ceil(num_kpts**2 / batch_size)
 
     indx_pqrs, indx_zeta = indx_arrays
@@ -195,7 +195,7 @@ def thc_objective_regularized(
     num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
     chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
     num_kpts = momentum_map.shape[0]
-    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)
+    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)**0.5
     for iq in range(num_kpts):
         for ik in range(num_kpts):
             ik_minus_q = momentum_map[iq, ik]
@@ -298,7 +298,7 @@ def lbfgsb_opt_kpthc_l2reg(
         # loss + lambda_z^2 - loss
         penalty_param = loss / lambda_z
     print("loss {}".format(loss))
-    print("lambda_z {} {} {}".format(lambda_z, penalty_param, loss))
+    print("lambda_z {}".format(lambda_z))
     print("penalty_param {}".format(penalty_param))
 
     # L-BFGS-B optimization

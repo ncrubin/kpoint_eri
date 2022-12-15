@@ -165,7 +165,7 @@ def test_kpoint_thc_reg_gamma():
         chkfile_name="thc_opt_gamma.h5",
         maxiter=10,
         initial_guess=buffer,
-        penalty_param=1e-3,
+        penalty_param=None,
     )
     chi_unpacked_mol = opt_param[: chi.size].reshape((num_interp_points, num_mo)).T
     zeta_unpacked_mol = opt_param[chi.size :].reshape(zeta[0].shape)
@@ -179,12 +179,11 @@ def test_kpoint_thc_reg_gamma():
         jnp.array(Luv_cont),
         chkfile_name="thc_opt.h5",
         maxiter=10,
-        penalty_param=1e-3,
+        penalty_param=None,
     )
     chi_unpacked, zeta_unpacked = unpack_thc_factors(
         opt_param, num_interp_points, num_mo, num_kpts, num_G_per_Q
     )
-    print(chi_unpacked[0] - chi_unpacked_mol)
     assert np.allclose(chi_unpacked[0], chi_unpacked_mol)
     assert np.allclose(zeta_unpacked[0], zeta_unpacked_mol)
     mol_obj = thc_obj_mol(buffer, num_mo, num_interp_points, eri, 1e-3)
