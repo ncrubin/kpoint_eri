@@ -75,3 +75,11 @@ def build_krcc_thc_eris(
             MPQ
             )
     return build_cc(approx_cc, helper)
+
+def compute_emp2_approx(mf, helper):
+    approx_cc = cc.KRCCSD(mf)
+    approx_cc = build_cc(approx_cc, helper)
+    eris = approx_cc.ao2mo(lambda x: x)
+    emp2, _, _ = approx_cc.init_amps(eris)
+    emp2 += mf.e_tot
+    return emp2
