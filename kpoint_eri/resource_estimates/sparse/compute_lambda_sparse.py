@@ -93,6 +93,7 @@ def compute_lambda_ncr(hcore, sparse_int_obj: NCRSSparseFactorizationHelper):
     one_body_mat = np.empty((len(kpts)), dtype=object)
     lambda_one_body = 0.
 
+    import time
     for kidx in range(len(kpts)):
         # matrices for - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
         # and  + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
@@ -100,10 +101,17 @@ def compute_lambda_ncr(hcore, sparse_int_obj: NCRSSparseFactorizationHelper):
         h1_neg = np.zeros_like(hcore[kidx])
         for qidx in range(len(kpts)):
             # - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+            # start_time = time.time()
             eri_kqqk_pqrs = sparse_int_obj.get_eri_exact([kidx, qidx, qidx, kidx]) 
+            # end_time = time.time()
+            # print("Time for exact exchange like integral calc ", end_time - start_time)
             h1_neg -= np.einsum('prrq->pq', eri_kqqk_pqrs, optimize=True) / nkpts
             # + sum_{Q}sum_{r}(pkqk|rQrQ)
+            # start_time = time.time()
             eri_kkqq_pqrs = sparse_int_obj.get_eri_exact([kidx, kidx, qidx, qidx])  
+            # end_time = time.time()
+            # print("Time for exact charge like integral calc ", end_time - start_time)
+
             h1_pos += np.einsum('pqrr->pq', eri_kkqq_pqrs) / nkpts
 
         one_body_mat[kidx] = hcore[kidx] + 0.5 * h1_neg + h1_pos
@@ -117,7 +125,10 @@ def compute_lambda_ncr(hcore, sparse_int_obj: NCRSSparseFactorizationHelper):
             for qidx in range(nkpts):                 
                 kmq_idx = sparse_int_obj.k_transfer_map[qidx, kidx]
                 kpmq_idx = sparse_int_obj.k_transfer_map[qidx, kpidx]
+                start_time = time.time()
                 test_eri_block = sparse_int_obj.get_eri([kidx, kmq_idx, kpmq_idx, kpidx]) / nkpts
+                end_time = time.time()
+                # print("time for int block ", end_time - start_time)
                 lambda_two_body += np.sum(np.abs(test_eri_block.real)) + np.sum(np.abs(test_eri_block.imag))
 
     lambda_tot = lambda_one_body + lambda_two_body
