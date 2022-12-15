@@ -408,7 +408,6 @@ def test_kpoint_thc_utility_function_k2gamma():
     momentum_map = build_momentum_transfer_mapping(sc_mf.cell, sc_mf.kpts)
     from kpoint_eri.factorizations.thc_jax import make_contiguous_cholesky
     Luv_cont = make_contiguous_cholesky(Luv)
-    print(Luv_cont.shape)
     opt_param = lbfgsb_opt_kpthc_l2reg(
         chi,
         zeta,

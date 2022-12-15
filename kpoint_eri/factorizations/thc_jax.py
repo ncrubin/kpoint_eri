@@ -74,7 +74,7 @@ def pack_thc_factors(chi, zeta, buffer):
 
 
 @jax.jit
-def compute_objective_batched(chis, zetas, chols, cP, penalty_param=0):
+def compute_objective_batched(chis, zetas, chols, norm_factors, penalty_param=0):
     eri_thc = jnp.einsum(
         "Jpm,Jqm,Jmn,Jrn,Jsn->Jpqrs",
         chis[0].conj(),
@@ -86,7 +86,10 @@ def compute_objective_batched(chis, zetas, chols, cP, penalty_param=0):
     )
     eri_ref = jnp.einsum("Jnpq,Jnrs->Jpqrs", chols[0], chols[1], optimize=True)
     deri = eri_thc - eri_ref
-    MPQ_normalized = jnp.einsum("P,JPQ,Q->JPQ", cP, zetas, cP)
+    norm_left = norm_factors[0] * norm_factors[1]
+    norm_right = norm_factors[2] * norm_factors[3]
+    MPQ_normalized = jnp.einsum("JP,JPQ,JQ->JPQ", norm_left, zetas, norm_right,
+                               optimize=True)
 
     lambda_z = jnp.sum(jnp.einsum("JPQ->J", 0.5 * jnp.abs(MPQ_normalized)) ** 2.0)
 
@@ -142,7 +145,7 @@ def thc_objective_regularized_batched(
     nthc = zeta[0].shape[-1]
     # Normalization factor, no factor of sqrt as there are 4 chis in total when
     # building ERI.
-    cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)
     num_batches = math.ceil(num_kpts**2 / batch_size)
 
     indx_pqrs, indx_zeta = indx_arrays
@@ -155,6 +158,10 @@ def thc_objective_regularized_batched(
             chi_q = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 1])
             chi_r = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 2])
             chi_s = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 3])
+            norm_k1 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 0])
+            norm_k2 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 1])
+            norm_k3 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 2])
+            norm_k4 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 3])
             zeta_batch = get_batched_data_2indx(
                 zeta[iq], indx_zeta[iq, start:end, 0], indx_zeta[iq, start:end, 1]
             )
@@ -168,7 +175,7 @@ def thc_objective_regularized_batched(
                 (chi_p, chi_q, chi_r, chi_s),
                 zeta_batch,
                 (chol_batch_pq, chol_batch_rs),
-                cP,
+                (norm_k1, norm_k2, norm_k3, norm_k4),
                 penalty_param=penalty_param,
             )
     return objective / num_kpts
@@ -188,7 +195,7 @@ def thc_objective_regularized(
     num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
     chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
     num_kpts = momentum_map.shape[0]
-    cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)
     for iq in range(num_kpts):
         for ik in range(num_kpts):
             ik_minus_q = momentum_map[iq, ik]
@@ -210,9 +217,13 @@ def thc_objective_regularized(
                     chol[ik_prime, ik_prime_minus_q].conj(),
                 )
                 deri = eri_thc - eri_ref
-                MPQ_normalized = jnp.einsum("P,PQ,Q->PQ", cP, zeta[iq][Gpq, Gsr], cP)
+                norm_left = norm_kP[ik] * norm_kP[ik_minus_q]
+                norm_right = norm_kP[ik_prime_minus_q] * norm_kP[ik_prime]
+                MPQ_normalized = np.einsum(
+                    "P,PQ,Q->PQ", norm_left, zeta[iq][Gpq, Gsr], norm_right
+                )
 
-                lambda_z = jnp.sum(jnp.abs(MPQ_normalized)) * 0.5
+                lambda_z = 0.5 * jnp.sum(jnp.abs(MPQ_normalized))
                 res += 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * (
                     lambda_z**2
                 )
@@ -282,13 +293,12 @@ def lbfgsb_opt_kpthc_l2reg(
         penalty_param=1.0,
     )
     # set penalty
-    lambda_z = (reg_loss - loss)**0.5
+    lambda_z = (reg_loss - loss) ** 0.5
     if penalty_param is None:
         # loss + lambda_z^2 - loss
         penalty_param = loss / lambda_z
     print("loss {}".format(loss))
-    print("lambda_z {} {} {}".format(lambda_z, penalty_param,
-                                     loss))
+    print("lambda_z {} {} {}".format(lambda_z, penalty_param, loss))
     print("penalty_param {}".format(penalty_param))
 
     # L-BFGS-B optimization
@@ -406,7 +416,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     )
     print("loss {}".format(loss))
     # set penalty
-    lambda_z = (reg_loss - loss)**0.5
+    lambda_z = (reg_loss - loss) ** 0.5
     if penalty_param is None:
         # loss + lambda_z^2 - loss
         penalty_param = loss / lambda_z
