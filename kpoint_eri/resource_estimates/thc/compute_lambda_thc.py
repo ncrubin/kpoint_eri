@@ -81,17 +81,28 @@ def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
     # we roll the normalization constant into the central tensor zeta
     # no sqrts because we have two normalized thc vectors (index by mu and nu)
     # on each side.
-    cP = np.einsum("kpP,kpP->P", thc_obj.chi.conj(), thc_obj.chi, optimize=True)
+    norm_kP = (
+        np.einsum("kpP,kpP->kP", thc_obj.chi.conj(), thc_obj.chi, optimize=True) ** 0.5
+    )
     lambda_two_body = 0
-    for zeta_Q in thc_obj.zeta:
+    for iq, zeta_Q in enumerate(thc_obj.zeta):
         # xy einsum subscript indexes G index.
-        MPQ_normalized = np.einsum("P,xyPQ,Q->xyPQ", cP, zeta_Q, cP)
-        lambda_two_body += np.sum(np.abs(MPQ_normalized.real))
-        lambda_two_body += np.sum(np.abs(MPQ_normalized.imag))
-    # Nk^2 to account for k, k_prime sum. This multiplies a 1/Nk factor present
-    # in the definition of the eris in pyscf which the THC factors are
-    # constructed to reproduce.
-    lambda_two_body *= 2 * nkpts
+        for ik in range(nkpts):
+            ik_minus_q = thc_obj.k_transfer_map[iq, ik]
+            Gpq = thc_obj.G_mapping[iq, ik]
+            for ik_prime in range(nkpts):
+                ik_prime_minus_q = thc_obj.k_transfer_map[iq, ik_prime]
+                Gsr = thc_obj.G_mapping[iq, ik_prime]
+                norm_left = norm_kP[ik] * norm_kP[ik_minus_q]
+                norm_right = norm_kP[ik_prime_minus_q] * norm_kP[ik_prime]
+                MPQ_normalized = (
+                    np.einsum("P,PQ,Q->PQ", norm_left, zeta_Q[Gpq, Gsr],
+                              norm_right, optimize=True)
+                    / nkpts
+                )
+                lambda_two_body += np.sum(np.abs(MPQ_normalized.real))
+                lambda_two_body += np.sum(np.abs(MPQ_normalized.imag))
+    lambda_two_body *= 2
 
     lambda_tot = lambda_one_body + lambda_two_body
     return lambda_tot, lambda_one_body, lambda_two_body
