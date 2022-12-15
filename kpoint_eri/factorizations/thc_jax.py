@@ -569,6 +569,7 @@ def kpoint_thc_via_isdf(
     use_batched_algos=True,
     penalty_param=None,
     batch_size=None,
+    verbose=False,
 ):
     """
     Solve k-point THC using ISDF as an initial guess.
@@ -597,7 +598,9 @@ def kpoint_thc_via_isdf(
     :returns (chi, zeta, G_map)
     """
     # Perform initial ISDF calculation of THC factors
-    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(kmf, num_thc, single_translation=False)
+    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(kmf, num_thc,
+                                                   single_translation=False,
+                                                   verbose=verbose)
     num_mo = kmf.mo_coeff[0].shape[-1]
     num_kpts = len(kmf.kpts)
     if save_checkoints:
