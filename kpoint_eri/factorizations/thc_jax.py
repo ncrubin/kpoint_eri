@@ -281,12 +281,12 @@ def lbfgsb_opt_kpthc_l2reg(
         jnp.array(chol),
         penalty_param=1.0,
     )
-    print(loss, reg_loss)
     # set penalty
     lambda_z = (reg_loss - loss)**0.5
     if penalty_param is None:
         # loss + lambda_z^2 - loss
         penalty_param = loss / lambda_z
+    print("loss {}".format(loss))
     print("lambda_z {} {} {}".format(lambda_z, penalty_param,
                                      loss))
     print("penalty_param {}".format(penalty_param))
@@ -404,7 +404,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         batch_size,
         penalty_param=1.0,
     )
-    print(loss, reg_loss)
+    print("loss {}".format(loss))
     # set penalty
     lambda_z = (reg_loss - loss)**0.5
     if penalty_param is None:
