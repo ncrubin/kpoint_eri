@@ -1,12 +1,17 @@
 import h5py
 import numpy as np
 
-from pyscf.pbc import gto, scf, cc
+from pyscf.pbc import gto, scf, cc, mp
+from pyscf.pbc.tools import pyscf_ase
+from ase.build import bulk
 
 from kpoint_eri.factorizations.isdf import solve_kmeans_kpisdf
+from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import compute_emp2_approx
+from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.thc.integral_helper import (
         KPTHCHelperDoubleTranslation,
-        KPTHCHelperSingleTranslation
+        KPTHCHelperSingleTranslation,
         )
 
 def test_thc_helper():
@@ -87,5 +92,50 @@ def test_thc_helper():
     delta = abs(emp2 - exact_emp2)
     print(" {:4d}  {:10.4e} {:10.4e} {:10.4e}".format(num_interp_points, delta, emp2, exact_emp2))
 
+
+def test_thc_convergence():
+    ase_atom = bulk("H", "bcc", a=2.0, cubic=True)
+    cell = gto.Cell()
+    cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
+    cell.a = ase_atom.cell[:].copy()
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 1, 3]
+    kpts = cell.make_kpts(kmesh)
+    mf = scf.KRHF(cell, kpts)
+    mf.chkfile = 'integrals.chk'
+    mf.init_guess = 'chkfile'
+    mf.kernel()
+
+    exact_cc = cc.KRCCSD(mf)
+    eris = exact_cc.ao2mo()
+    exact_emp2, _, _ = exact_cc.init_amps(eris)
+    exact_emp2 += mf.e_tot
+
+    rsmf = scf.KRHF(mf.cell, mf.kpts).rs_density_fit()
+    # Force same MOs as FFTDF at least
+    rsmf.mo_occ = mf.mo_occ
+    rsmf.mo_coeff = mf.mo_coeff
+    rsmf.mo_energy = mf.mo_energy
+    rsmf.with_df.mesh = mf.cell.mesh
+    mymp = mp.KMP2(rsmf)
+    Luv = cholesky_from_df_ints(mymp)
+    cthc = 4
+    num_thc =  cthc * mf.mo_coeff[0].shape[-1]
+    chi, zeta = kpoint_thc_via_isdf(mf, Luv, num_thc,
+                                    perform_adagrad_opt=False,
+                                    perform_bfgs_opt=False,
+                                    )
+
+    helper = KPTHCHelperDoubleTranslation(chi, zeta, mf)
+    emp2 = compute_emp2_approx(mf, helper)
+    print(" {:4d}  {:10.4e} {:10.4e} {:10.4e}".format(cthc, emp2,
+                                                      exact_emp2,
+                                                      exact_emp2-emp2))
+
 if __name__ == "__main__":
     test_thc_helper()
+    test_thc_convergence()
