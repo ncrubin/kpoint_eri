@@ -134,3 +134,7 @@ src/fqe/lib/_fqe_data.c
 
 # images
 *.png
+*tmp*
+*.dat
+*.npz
+*.npy
