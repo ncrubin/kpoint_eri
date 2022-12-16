@@ -9,13 +9,17 @@ from pyscf.pbc.mp.kmp2 import _add_padding
 from pyscf import lib
 
 
-def cholesky_from_df_ints(mp):
+def cholesky_from_df_ints(mp, pad_mos_with_zeros=True):
     """Compute 3-center electron repulsion integrals, i.e. (L|ov),
     where `L` denotes DF auxiliary basis functions and `o` and `v` occupied and virtual
     canonical crystalline orbitals. Note that `o` and `v` contain kpt indices `ko` and `kv`,
     and the third kpt index `kL` is determined by the conservation of momentum.
     Arguments:
         mp (KMP2) -- A KMP2 instance
+        pad_mos_with_zeros -- Whether to follow KMP2 class and pad mo coefficients with
+            zeros if system has varying number of occupied / virtuals at each
+            k-point which is the default behaviour for KMP2 / KCC methods in
+            pyscf.
     Returns:
         Lov (numpy.ndarray) -- 3-center DF ints, with shape (nkpts, nkpts, naux, nmo, nmo)
     """
@@ -36,12 +40,19 @@ def cholesky_from_df_ints(mp):
         # DF-driven CCSD implementation.
         raise NotImplementedError
 
-    # nocc = mp.nocc
-    nmo = mp.nmo
     # nvir = nmo - nocc
     nao = cell.nao_nr()
 
-    mo_coeff = _add_padding(mp, mp.mo_coeff, mp.mo_energy)[0]
+    if pad_mos_with_zeros:
+        mo_coeff = _add_padding(mp, mp.mo_coeff, mp.mo_energy)[0]
+        # nocc = mp.nocc
+        nmo = mp.nmo
+    else:
+        mo_coeff = mp._scf.mo_coeff
+        nmo = nao
+        num_mo_per_kpt = np.array([C.shape[-1] for C in mo_coeff])
+        err_msg = "Number of MOs differs at each k-point or is not the same as the number of AOs."
+        assert (num_mo_per_kpt == nmo).all(), err_msg
     kpts = mp.kpts
     nkpts = len(kpts)
     if gamma_point(kpts):
