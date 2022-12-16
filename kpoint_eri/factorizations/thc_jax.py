@@ -31,6 +31,7 @@ def load_thc_factors(chkfile_name):
             zeta[iq] = fh5[f"zeta_{iq}"][:]
     return chi, zeta, G_mapping
 
+
 def get_zeta_size(zeta):
     return sum([z.size for z in zeta])
 
@@ -73,7 +74,7 @@ def pack_thc_factors(chi, zeta, buffer):
 
 
 @jax.jit
-def compute_objective_batched(chis, zetas, chols, cP, penalty_param=0):
+def compute_objective_batched(chis, zetas, chols, norm_factors, penalty_param=0):
     eri_thc = jnp.einsum(
         "Jpm,Jqm,Jmn,Jrn,Jsn->Jpqrs",
         chis[0].conj(),
@@ -85,7 +86,10 @@ def compute_objective_batched(chis, zetas, chols, cP, penalty_param=0):
     )
     eri_ref = jnp.einsum("Jnpq,Jnrs->Jpqrs", chols[0], chols[1], optimize=True)
     deri = eri_thc - eri_ref
-    MPQ_normalized = jnp.einsum("P,JPQ,Q->JPQ", cP, zetas, cP)
+    norm_left = norm_factors[0] * norm_factors[1]
+    norm_right = norm_factors[2] * norm_factors[3]
+    MPQ_normalized = jnp.einsum("JP,JPQ,JQ->JPQ", norm_left, zetas, norm_right,
+                               optimize=True)
 
     lambda_z = jnp.sum(jnp.einsum("JPQ->J", 0.5 * jnp.abs(MPQ_normalized)) ** 2.0)
 
@@ -141,7 +145,7 @@ def thc_objective_regularized_batched(
     nthc = zeta[0].shape[-1]
     # Normalization factor, no factor of sqrt as there are 4 chis in total when
     # building ERI.
-    cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)**0.5
     num_batches = math.ceil(num_kpts**2 / batch_size)
 
     indx_pqrs, indx_zeta = indx_arrays
@@ -154,6 +158,10 @@ def thc_objective_regularized_batched(
             chi_q = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 1])
             chi_r = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 2])
             chi_s = get_batched_data_1indx(chi, indx_pqrs[iq, start:end, 3])
+            norm_k1 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 0])
+            norm_k2 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 1])
+            norm_k3 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 2])
+            norm_k4 = get_batched_data_1indx(norm_kP, indx_pqrs[iq, start:end, 3])
             zeta_batch = get_batched_data_2indx(
                 zeta[iq], indx_zeta[iq, start:end, 0], indx_zeta[iq, start:end, 1]
             )
@@ -167,7 +175,7 @@ def thc_objective_regularized_batched(
                 (chi_p, chi_q, chi_r, chi_s),
                 zeta_batch,
                 (chol_batch_pq, chol_batch_rs),
-                cP,
+                (norm_k1, norm_k2, norm_k3, norm_k4),
                 penalty_param=penalty_param,
             )
     return objective / num_kpts
@@ -187,7 +195,7 @@ def thc_objective_regularized(
     num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
     chi, zeta = unpack_thc_factors(xcur, num_thc, num_orb, num_kpts, num_G_per_Q)
     num_kpts = momentum_map.shape[0]
-    cP = jnp.einsum("kpP,kpP->P", chi.conj(), chi, optimize=True)
+    norm_kP = jnp.einsum("kpP,kpP->kP", chi.conj(), chi, optimize=True)**0.5
     for iq in range(num_kpts):
         for ik in range(num_kpts):
             ik_minus_q = momentum_map[iq, ik]
@@ -209,9 +217,13 @@ def thc_objective_regularized(
                     chol[ik_prime, ik_prime_minus_q].conj(),
                 )
                 deri = eri_thc - eri_ref
-                MPQ_normalized = jnp.einsum("P,PQ,Q->PQ", cP, zeta[iq][Gpq, Gsr], cP)
+                norm_left = norm_kP[ik] * norm_kP[ik_minus_q]
+                norm_right = norm_kP[ik_prime_minus_q] * norm_kP[ik_prime]
+                MPQ_normalized = jnp.einsum(
+                    "P,PQ,Q->PQ", norm_left, zeta[iq][Gpq, Gsr], norm_right
+                )
 
-                lambda_z = jnp.sum(jnp.abs(MPQ_normalized)) * 0.5
+                lambda_z = 0.5 * jnp.sum(jnp.abs(MPQ_normalized))
                 res += 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * (
                     lambda_z**2
                 )
@@ -280,14 +292,14 @@ def lbfgsb_opt_kpthc_l2reg(
         jnp.array(chol),
         penalty_param=1.0,
     )
-    print(loss, reg_loss)
     # set penalty
+    lambda_z = (reg_loss - loss) ** 0.5
     if penalty_param is None:
         # loss + lambda_z^2 - loss
-        lambda_z = reg_loss - loss
-        penalty_param = reg_loss / (lambda_z**0.5)
-        print("lambda_z {}".format(lambda_z))
-        print("penalty_param {}".format(penalty_param))
+        penalty_param = loss / lambda_z
+    print("loss {}".format(loss))
+    print("lambda_z {}".format(lambda_z))
+    print("penalty_param {}".format(penalty_param))
 
     # L-BFGS-B optimization
     thc_grad = jax.grad(thc_objective_regularized, argnums=[0])
@@ -402,13 +414,13 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         batch_size,
         penalty_param=1.0,
     )
-    print(loss, reg_loss)
+    print("loss {}".format(loss))
     # set penalty
+    lambda_z = (reg_loss - loss) ** 0.5
     if penalty_param is None:
         # loss + lambda_z^2 - loss
-        lambda_z = reg_loss - loss
-        penalty_param = reg_loss / (lambda_z**0.5)
-        print("lambda_z {}".format(lambda_z))
+        penalty_param = loss / lambda_z
+    print("lambda_z {}".format(lambda_z))
     print("penalty_param {}".format(penalty_param))
 
     # L-BFGS-B optimization
@@ -556,6 +568,34 @@ def adagrad_opt_kpthc_batched(
     return params
 
 
+def make_contiguous_cholesky(cholesky):
+    num_kpts = len(cholesky)
+    num_mo = cholesky[0, 0].shape[-1]
+    if cholesky.dtype == object:
+        # Jax requires contiguous arrays so just truncate naux if it's not
+        # uniform hopefully shouldn't affect results dramatically as from
+        # experience the naux amount only varies by a few % per k-point
+        # Alternatively todo: padd with zeros
+        min_naux = min([cholesky[k1, k1].shape[0] for k1 in range(num_kpts)])
+        cholesky_contiguous = np.zeros(
+            (
+                num_kpts,
+                num_kpts,
+                min_naux,
+                num_mo,
+                num_mo,
+            ),
+            dtype=np.complex128,
+        )
+        for ik1 in range(num_kpts):
+            for ik2 in range(num_kpts):
+                cholesky_contiguous[ik1, ik2] = cholesky[ik1, ik2][:min_naux]
+    else:
+        cholesky_contiguous = cholesky
+
+    return cholesky_contiguous
+
+
 def kpoint_thc_via_isdf(
     kmf,
     cholesky,
@@ -569,6 +609,7 @@ def kpoint_thc_via_isdf(
     use_batched_algos=True,
     penalty_param=None,
     batch_size=None,
+    max_kmeans_iteration=500,
     verbose=False,
 ):
     """
@@ -595,12 +636,19 @@ def kpoint_thc_via_isdf(
     :param use_batched_algos: Whether to use batched algorithms which may be
         faster but have higher memory cost. Bool. Default True.
     :param penalty_param: Penalty parameter for l2 regularization. Float. Default None.
+    :param max_kmeans_iteration: Maximum number of iterations for KMeansCVT
+        step. int. Default 500.
+    :param verbose: Print information? Bool, default False.
     :returns (chi, zeta, G_map)
     """
     # Perform initial ISDF calculation of THC factors
-    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(kmf, num_thc,
-                                                   single_translation=False,
-                                                   verbose=verbose)
+    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(
+        kmf,
+        num_thc,
+        single_translation=False,
+        verbose=verbose,
+        max_kmeans_iteration=max_kmeans_iteration,
+    )
     num_mo = kmf.mo_coeff[0].shape[-1]
     num_kpts = len(kmf.kpts)
     if save_checkoints:
@@ -611,27 +659,7 @@ def kpoint_thc_via_isdf(
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     momentum_map = build_momentum_transfer_mapping(kmf.cell, kmf.kpts)
-    if cholesky.dtype == object:
-        # Jax requires contiguous arrays so just truncate naux if it's not
-        # uniform hopefully shouldn't affect results dramatically as from
-        # experience the naux amount only varies by a few % per k-point
-        # Alternatively todo: padd with zeros
-        min_naux = min([cholesky[k1, k1].shape[0] for k1 in range(num_kpts)])
-        cholesky_contiguous = np.zeros(
-            (
-                num_kpts,
-                num_kpts,
-                min_naux,
-                num_mo,
-                num_mo,
-            ),
-            dtype=np.complex128,
-        )
-        for ik1 in range(num_kpts):
-            for ik2 in range(num_kpts):
-                cholesky_contiguous[ik1, ik2] = cholesky[ik1, ik2][:min_naux]
-    else:
-        cholesky_contiguous = cholesky
+    cholesky_contiguous = make_contiguous_cholesky(cholesky)
     if perform_bfgs_opt:
         if save_checkoints:
             chkfile_name = f"{checkpoint_basename}_bfgs.h5"
@@ -661,8 +689,9 @@ def kpoint_thc_via_isdf(
                 penalty_param=penalty_param,
             )
         num_G_per_Q = [len(np.unique(GQ)) for GQ in G_mapping]
-        chi, zeta = unpack_thc_factors(opt_params, num_thc, num_mo,
-                                               num_kpts, num_G_per_Q)
+        chi, zeta = unpack_thc_factors(
+            opt_params, num_thc, num_mo, num_kpts, num_G_per_Q
+        )
     if perform_adagrad_opt:
         if save_checkoints:
             chkfile_name = f"{checkpoint_basename}_adagrad.h5"
@@ -692,6 +721,7 @@ def kpoint_thc_via_isdf(
                 penalty_param=penalty_param,
             )
         num_G_per_Q = [len(np.unique(GQ)) for GQ in G_mapping]
-        chi, zeta = unpack_thc_factors(opt_params, num_thc, num_mo,
-                                               num_kpts, num_G_per_Q)
-    return chi, zeta
+        chi, zeta = unpack_thc_factors(
+            opt_params, num_thc, num_mo, num_kpts, num_G_per_Q
+        )
+    return chi, zeta, G_mapping

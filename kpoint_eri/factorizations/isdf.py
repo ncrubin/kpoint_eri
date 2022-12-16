@@ -591,10 +591,21 @@ def solve_kmeans_kpisdf(
     single_translation=True,
     verbose=True,
 ):
+    assert isinstance(mf_inst.with_df, df.FFTDF), "mf object must use FFTDF"
     cell = mf_inst.cell
     kpts = mf_inst.kpts
     grid_points = cell.gen_uniform_grids(mf_inst.with_df.mesh)
     num_grid_points = grid_points.shape[0]
+    if verbose:
+        print(
+            "Real space grid shape: ({}, {})".format(
+                grid_points.shape[0], grid_points.shape[1]
+            )
+        )
+        print("Number of grid points: {}".format(num_grid_points))
+        print("Number of interpolating points: {}".format(num_interp_points))
+        print("Maximum number of kmeans iterations: {}".format(max_kmeans_iteration))
+        print("Single-translation kp-thc?: {}".format(single_translation))
     bloch_orbitals_ao = np.array(numint.eval_ao_kpts(cell, grid_points, kpts=kpts))
     bloch_orbitals_mo = np.einsum(
         "kRp,kpi->kRi", bloch_orbitals_ao, mf_inst.mo_coeff, optimize=True
@@ -608,8 +619,9 @@ def solve_kmeans_kpisdf(
     )
     num_mo = mf_inst.mo_coeff[0].shape[-1]  # assuming the same for each k-point
     kmeans = KMeansCVT(grid_points, max_iteration=max_kmeans_iteration)
-    interp_indx = kmeans.find_interpolating_points(num_interp_points,
-                                                   density.real, verbose=verbose)
+    interp_indx = kmeans.find_interpolating_points(
+        num_interp_points, density.real, verbose=verbose
+    )
     num_kpts = len(kpts)
     # Cell periodic part
     # u = e^{-ik.r} phi(r)
