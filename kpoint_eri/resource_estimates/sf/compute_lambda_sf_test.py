@@ -3,7 +3,10 @@ import os
 import numpy as np
 from itertools import product
 
+from ase.build import bulk
+
 from pyscf.pbc import gto, scf, mp, cc
+from pyscf.pbc.tools import pyscf_ase
 
 from kpoint_eri.resource_estimates import sf
 from kpoint_eri.resource_estimates import sparse
@@ -120,6 +123,54 @@ def lambda_calc():
     lambda_two_body_v2 *= 0.5
     assert np.isclose(lambda_two_body_v2, lambda_two_body)
 
+def test_padding():
+    ase_atom = bulk("H", "bcc", a=2.0, cubic=True)
+    cell = gto.Cell()
+    cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
+    cell.a = ase_atom.cell[:].copy()
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 2, 2]
+    kpts = cell.make_kpts(kmesh)
+    nkpts = len(kpts)
+    mf = scf.KRHF(cell, kpts).rs_density_fit()
+    mf.chkfile = 'sf_H_padding.chk'
+    mf.with_df._cderi_to_save = mf.chkfile
+    mf.init_guess = 'chkfile'
+    mf.kernel()
+
+    from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
+    from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+    from pyscf.pbc.mp.kmp2 import _add_padding
+
+    mymp = mp.KMP2(mf)
+    Luv_padded = cholesky_from_df_ints(mymp)
+    mo_coeff_padded = _add_padding(mymp, mymp.mo_coeff, mymp.mo_energy)[0]
+    helper = NCRSingleFactorizationHelper(cholesky_factor=Luv_padded, kmf=mf)
+    assert mf.mo_coeff[0].shape[-1] != mo_coeff_padded[0].shape[-1]
+
+    hcore_ao = mf.get_hcore()
+    hcore_no_padding= np.asarray([reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo)) for k, mo in enumerate(mf.mo_coeff)])
+    hcore_padded = np.asarray([reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo))
+                               for k, mo in enumerate(mo_coeff_padded)])
+    assert hcore_no_padding[0].shape != hcore_padded[0].shape
+    assert np.isclose(np.sum(hcore_no_padding), np.sum(hcore_padded))
+    Luv_no_padding = cholesky_from_df_ints(mymp, pad_mos_with_zeros=False)
+    for k1 in range(nkpts):
+        for k2 in range(nkpts):
+            assert np.isclose(np.sum(Luv_padded[k1, k2]),
+                              np.sum(Luv_no_padding[k1, k2]))
+
+    helper_no_padding = NCRSingleFactorizationHelper(cholesky_factor=Luv_no_padding, kmf=mf)
+    lambda_tot_pad, lambda_one_body_pad, lambda_two_body_pad = compute_lambda_ncr2(hcore_no_padding, helper_no_padding)
+    helper = NCRSingleFactorizationHelper(cholesky_factor=Luv_padded, kmf=mf)
+    lambda_tot_no_pad, lambda_one_body_no_pad, lambda_two_body_no_pad = compute_lambda_ncr2(hcore_padded, helper)
+    assert np.isclose(lambda_tot_no_pad, lambda_tot_pad)
+
 
 if __name__ == "__main__":
     lambda_calc()
+    test_padding()
