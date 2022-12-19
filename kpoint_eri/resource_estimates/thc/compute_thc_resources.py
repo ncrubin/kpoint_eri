@@ -240,7 +240,7 @@ def compute_cost(n: int,
 
     acc = np.max([ac13, ac14 + ac15 + ac16])
     
-    acc += np.max([ac7, ac8 + ac9 + ac10 + ac11 + ac12 + acc])
+    acc = np.max([ac7, ac8 + ac9 + ac10 + ac11 + ac12 + acc])
     
     step_cost = int(cost)
     total_cost = int(cost * iters)
@@ -257,7 +257,7 @@ if __name__ == "__main__":
     beta = 16
     M = 350
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 3, 3, 20_000)
-    print(res)  #{118264, 57157345992, 23935}
+    print(res)  # {118264, 57157345992, 20441}
     assert np.isclose(res[0], 118264)
     assert np.isclose(res[1], 57157345992)
-    assert np.isclose(res[2], 23935)
+    assert np.isclose(res[2], 20441)
