@@ -3,7 +3,7 @@ import numpy as np
 
 from pyscf.pbc import tools, df, gto
 from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, conj_mapping
-from pyscf.pbc.dft import numint
+from pyscf.pbc.dft import numint, gen_grid
 
 from kpoint_eri.resource_estimates.utils.misc_utils import (
     build_momentum_transfer_mapping,
@@ -13,9 +13,12 @@ from kpoint_eri.factorizations.kmeans import KMeansCVT
 
 def check_isdf_solution(orbitals, interp_orbitals, xi):
     lhs = np.einsum("Ri,Rj->Rij", orbitals.conj(), orbitals, optimize=True)
-    rhs = np.einsum("mi,mj->mij", interp_orbitals.conj(), interp_orbitals, optimize=True)
+    rhs = np.einsum(
+        "mi,mj->mij", interp_orbitals.conj(), interp_orbitals, optimize=True
+    )
     lhs_check = np.einsum("Rm,mij->Rij", xi, rhs, optimize=True)
-    return np.linalg.norm(lhs-lhs_check)
+    return np.linalg.norm(lhs - lhs_check)
+
 
 def solve_isdf(orbitals, interp_indx):
     """Solve for interpolating vectors given interpolating points and orbitals.
@@ -589,6 +592,7 @@ def kpoint_isdf_single_translation(
         zeta[iq] = out_array
     return chi, zeta, xi, G_map_unique
 
+
 def build_isdf_orbital_inputs(mf_inst):
     cell = mf_inst.cell
     kpts = mf_inst.kpts
@@ -610,17 +614,32 @@ def build_isdf_orbital_inputs(mf_inst):
     return cell_periodic_mo
 
 
+def density_guess(density, grid_inst, grid_points, num_interp_points):
+    """Select initial centroids based on electronic density."""
+    norm_factor = np.einsum("R,R->", density, grid_inst.weights).real
+    prob_dist = (density.real * grid_inst.weights) / norm_factor
+    indx = np.random.choice(
+        len(grid_points),
+        num_interp_points,
+        replace=False,
+        p=prob_dist,
+    )
+    return grid_points[indx]
+
+
 def solve_kmeans_kpisdf(
     mf_inst,
     num_interp_points,
     max_kmeans_iteration=500,
     single_translation=True,
+    use_density_guess=False,
     verbose=True,
 ):
     assert isinstance(mf_inst.with_df, df.FFTDF), "mf object must use FFTDF"
     cell = mf_inst.cell
     kpts = mf_inst.kpts
     grid_points = cell.gen_uniform_grids(mf_inst.with_df.mesh)
+    grid_inst = gen_grid.UniformGrids(cell)
     num_grid_points = grid_points.shape[0]
     if verbose:
         print(
@@ -645,8 +664,14 @@ def solve_kmeans_kpisdf(
     )
     num_mo = mf_inst.mo_coeff[0].shape[-1]  # assuming the same for each k-point
     kmeans = KMeansCVT(grid_points, max_iteration=max_kmeans_iteration)
+    if use_density_guess:
+        initial_centroids = density_guess(
+            density, grid_inst, grid_points, num_interp_points
+        )
+    else:
+        initial_centroids = None
     interp_indx = kmeans.find_interpolating_points(
-        num_interp_points, density.real, verbose=verbose
+        num_interp_points, density.real, verbose=verbose, centroids=initial_centroids
     )
     num_kpts = len(kpts)
     # Cell periodic part
