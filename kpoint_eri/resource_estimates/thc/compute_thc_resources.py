@@ -6,6 +6,25 @@ from numpy.lib.scimath import arccos, arcsin  # has analytc continuatn to cplx
 from sympy import factorint
 from openfermion.resource_estimates.utils import QR, QI
 
+def QR_ncr(L, M1):
+    """
+    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
+    """
+    k = 0.5 * np.log2(L / M1)
+    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
+    try:
+        assert k >= 0
+    except AssertionError:
+        k_opt = 0
+        val_opt = np.ceil(value(k_opt))
+        assert val_opt.is_integer()
+        return int(k_opt), int(val_opt)
+    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
+    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
+    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
+    assert k_opt.is_integer()
+    assert val_opt.is_integer()
+    return int(k_opt), int(val_opt)
 
 def compute_cost(n: int,
                  lam: float,
@@ -86,7 +105,7 @@ def compute_cost(n: int,
 
 
     # This is the cost of the QROM for the state preparation in step 3 and its
-    cp3 = QR(d, m)[1] + QI(d)[1]
+    cp3 = QR_ncr(d, m)[1] + QI(d)[1]
 
     # The cost for the inequality test in step 4 and its inverse.
     cp4 = 2 * chi
@@ -94,27 +113,28 @@ def compute_cost(n: int,
     # the cost of inequality test and controlled swap of mu and nu registers
     cp5 = 2 * (2 * nM + nk + 4)
 
+    # The cost of an inequality test and controlled - swap of the mu and nu registers
     cp6 = 4 * nM
 
-    CPCP = cp1 + cp3 + cp4 + cp5  + cp6
+    CPCP = cp1 + cp3 + cp4 + cp5 + cp6
 
     # The cost of preparing the k superposition. The 7 here is the assumed number 
     # of bits for the ancilla rotation which makes the probability of 
     # failure negligible.
     cks = 4*(Nkx + Nky + Nkz + 8*nk + 6*7 - 24)
 
-    # The cost of the arithmetic computing k-q
-    cka = 10 * nk - 18
+    # The cost of the arithmetic computing k - q. This cost is after removing some cost of converting to two's complement
+    cka = 8*nk - 12
 
     # This is the cost of swapping based on the spin register
-    cs1 = 3*n* Nk/2
+    cs1 = 3*n*Nk/2
 
     # The cost of controlled swaps into working registers based on the k or 
     # k - Q value.
     cs2 = 4*n*(Nk - 1)
 
     # The QROM for the rotation angles the first time.
-    cs2a = QR(Nk*(M + n/2), n*beta)[1] + QI(Nk*(M + n/2))[1]
+    cs2a = QR_ncr(Nk*(M + n/2), n*beta)[1] + QI(Nk*(M + n/2))[1]
 
     # The QROM for the rotation angles the second time.
     cs2b = QR(Nk*M, n*beta)[1] + QI(Nk*M)[1]
@@ -128,11 +148,34 @@ def compute_cost(n: int,
     # The cost of the controlled selection of the X vs Y.
     cs5 = 2
 
+    # Cost of converting to two' s complement and addition
+    cs6 = 8*(nk - 3)
+
+    # Cost of computing contiguous register.
+    cs6 = cs6 + np.ceil(np.log2(Nkx)) * np.ceil(np.log2(Nky))
+    cs6 = cs6 + np.ceil(np.log2(Nkx*Nky))
+    cs6 = cs6 + np.ceil(np.log2(Nkx*Nky)) * np.ceil(np.log2(Nky))
+    cs6 = cs6 + np.ceil(np.log2(Nk))
+    cs6 = cs6 + np.ceil(np.log2(Nk)) * np.ceil(np.log2(Nkx))
+    cs6 = cs6 + np.ceil(np.log2(Nkx*Nk))
+    cs6 = cs6 + np.ceil(np.log2(Nkx*Nk)) * np.ceil(np.log2(Nky))
+    cs6 = cs6 + np.ceil(np.log2(Nkx*Nky*Nk))
+    cs6 = cs6 + np.ceil(np.log2(Nkx*Nky*Nk)) * np.ceil(np.log2(Nkz))
+    cs6 = cs6 + np.ceil(np.log2(Nk**2))
+    cs6 = cs6 + np.ceil(np.log2(Nkx**2)) * np.ceil(np.log2(M))
+    cs6 = cs6 + np.ceil(np.log2(Nk**2 * M))
+
+    # The QROM cost once we computed the contiguous register
+    cs6 = cs6 + 2 * (QR_ncr(Nk**2 * M, nk + chi)[1] + QI(Nk**2 * M)[1])
+
+    # The remaining state preparation cost with coherent alias sampling.
+    cs6 = cs6 + 4*(nk + chi)
+
     # The total select cost.
-    CS = cks + cka + cs1 + cs2 + cs2a + cs2b + cs3 + cs4 + cs5
+    CS = cks + cka + cs1 + cs2 + cs2a + cs2b + cs3 + cs4 + cs5 + cs6
 
     # The reflection cost.
-    costref = nc + 2*nk + chi + 9
+    costref = nc + 2 * nk + 3 * chi + 9
 
     cost = CPCP + CS + costref
 
@@ -152,7 +195,7 @@ def compute_cost(n: int,
     ac5 = 1
 
     # kp = 2^QRa[d, m]
-    kp = np.power(2, QR(d, m))[0]
+    kp = np.power(2, QR(d, m)[0])
 
     # First round of QROM.
     ac12 = m*kp + np.ceil(np.log2(d/kp)) - 1
@@ -160,32 +203,48 @@ def compute_cost(n: int,
     # Temporary qubits from QROM.
     ac6 = m
 
+    # First round of QROM.
+    ac7 = m*(kp - 1) + np.ceil(np.log2(d/kp)) - 1
+
     # Qubit from inequality test for state preparation.
-    ac7 = 1
+    ac8 = 1
 
-    # Qubit from inequality test for \[Mu],\[Nu]
-    ac8 = 1  
+    # Qubit from inequality test for mu, nu
+    ac9 = 1
 
-    # QROM for constructing contiguous register.
-    ac9 = nk + 7 
+    # QROM for constructing superposition on k.
+    ac10 = 2*nk + 3*7
 
-    # The contiguous register. 
-    ac10 = np.ceil(np.log2(Nk*(M + n/2)))
+    # The contiguous register and k-Q
+    ac11 = np.ceil(np.log2(Nk^2*M) + nk)
 
-    kr = np.power(2, QR(Nk*(M + n/2), n * beta))[0]
+    # output for k-state
+    ac12 = nk + chi
 
-    ac11 = n*beta*kr + np.ceil(np.log2(Nk*(M + n/2))) - 1
+    kn = np.power(2, QR_ncr(Nk**2 * M, nk + chi)[0])
 
-    # Common ancilla costs before the first QROM.
-    aca = ac1 + ac2 + ac3 + ac4 + ac5
+    ac13 = (kn - 1)*(nk + chi) + np.ceil(np.log2(Nk**2 * M)) - 1
 
-    # These are the temporary ancillas in between erasing the first
-    #  QROM ancillas and inverting that QROM.
-    acc = ac6 + ac7 + ac8 + ac9 + ac10 + ac11 
+    ac14 = chi + 1
 
+    # The contiguous register.
+    ac15 = np.ceil(np.log2(Nk*(M + n/2)))
+
+    kr = np.power(2, QR_ncr(Nk*(M + n/2), n* beta)[0])
+
+    # 
+    ac16 = n*beta*kr + np.ceil(np.log2(Nk*(M + n/2))) - 1
+
+    # common ancilla costs
+    aca = ac1 + ac2 + ac3 + ac4 + ac5 + ac6
+
+    acc = np.max([ac13, ac14 + ac15 + ac16])
+    
+    acc = np.max([ac7, ac8 + ac9 + ac10 + ac11 + ac12 + acc])
+    
     step_cost = int(cost)
     total_cost = int(cost * iters)
-    ancilla_cost = int(np.max([aca + ac12, aca + acc]))
+    ancilla_cost = int(aca + acc)
 
     # step-cost, Toffoli count, logical qubits
     return step_cost, total_cost, ancilla_cost
@@ -197,8 +256,8 @@ if __name__ == "__main__":
     chi = 10
     beta = 16
     M = 350
-    res = compute_cost(n, lam, dE, chi, beta, M, 3, 2, 1, 20_000)
-    print(res) #{49677, 24009043131, 8693
-    assert np.isclose(res[0], 49677)
-    assert np.isclose(res[1], 24009043131)
-    assert np.isclose(res[2], 8693)
+    res = compute_cost(n, lam, dE, chi, beta, M, 3, 3, 3, 20_000)
+    print(res)  #{118264, 57157345992, 20441
+    assert np.isclose(res[0], 118264)
+    assert np.isclose(res[1], 57157345992)
+    assert np.isclose(res[2], 20441)
