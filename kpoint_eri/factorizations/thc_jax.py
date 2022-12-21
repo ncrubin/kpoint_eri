@@ -668,6 +668,7 @@ def kpoint_thc_via_isdf(
     max_kmeans_iteration=500,
     verbose=False,
     initial_guess=None,
+    isdf_density_guess=False,
 ):
     """
     Solve k-point THC using ISDF as an initial guess.
@@ -709,6 +710,7 @@ def kpoint_thc_via_isdf(
             single_translation=False,
             verbose=verbose,
             max_kmeans_iteration=max_kmeans_iteration,
+            use_density_guess=isdf_density_guess,
         )
     num_mo = kmf.mo_coeff[0].shape[-1]
     num_kpts = len(kmf.kpts)
