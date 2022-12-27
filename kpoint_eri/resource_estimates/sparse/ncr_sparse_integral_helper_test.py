@@ -216,4 +216,4 @@ def get_num_unique():
 
 if __name__ == "__main__":
     get_num_unique()
-    # test_ncr_sparse_int_obj()
+    test_ncr_sparse_int_obj()
