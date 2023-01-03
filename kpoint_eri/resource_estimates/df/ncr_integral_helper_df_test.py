@@ -244,6 +244,23 @@ def test_df_amat_bmat():
         assert np.allclose(dfk_inst.amat_n_mats[kidx, qidx], Amats)
         assert np.allclose(dfk_inst.bmat_n_mats[kidx, qidx], Bmats)
 
+        for nn in range(Amats.shape[0]):
+            w, v = np.linalg.eigh(Amats[nn, :, :])
+            non_zero_idx = np.where(w > 1.0E-4)[0]
+            w = w[non_zero_idx]
+            v = v[:, non_zero_idx]
+            assert len(w) <= 2 * nmo
+    
+    for qidx in range(nkpts):
+        for nn in range(naux):
+            for kidx in range(nkpts):
+                eigs_a_fixed_n_q = dfk_inst.amat_lambda_vecs[kidx, qidx, nn]
+                eigs_b_fixed_n_q = dfk_inst.bmat_lambda_vecs[kidx, qidx, nn]
+                assert len(eigs_a_fixed_n_q) <= 2 * nmo
+                assert len(eigs_b_fixed_n_q) <= 2 * nmo
+
+    
+
     for kidx in range(nkpts):
         for kpidx in range(nkpts):
             for qidx in range(nkpts):                 
