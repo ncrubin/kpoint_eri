@@ -187,9 +187,9 @@ def build_G_vectors(cell):
     indx = 0
     for n1, n2, n3 in itertools.product(range(-1, 2), repeat=3):
         G_dict[(n1, n2, n3)] = indx
-        G_vectors[indx] = np.einsum("x,wx->w", (n1, n2, n3), cell.reciprocal_vectors())
+        G_vectors[indx] = np.einsum("n,ng->g", (n1, n2, n3), cell.reciprocal_vectors())
         miller_indx = np.rint(
-            np.einsum("wx,x->w", lattice_vectors, G_vectors[indx]) / (2 * np.pi)
+            np.einsum("nx,x->n", lattice_vectors, G_vectors[indx]) / (2 * np.pi)
         )
         assert (miller_indx == (n1, n2, n3)).all()
         indx += 1
