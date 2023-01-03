@@ -22,14 +22,20 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
 
 
 def load_thc_factors(chkfile_name):
+    xi = None
     with h5py.File(chkfile_name, "r") as fh5:
         chi = fh5["chi"][:]
         G_mapping = fh5["G_mapping"][:]
         num_kpts = G_mapping.shape[0]
         zeta = np.zeros((num_kpts,), dtype=object)
+        if "xi" in list(fh5.keys()):
+            xi = fh5["xi"][:]
         for iq in range(G_mapping.shape[0]):
             zeta[iq] = fh5[f"zeta_{iq}"][:]
-    return chi, zeta, G_mapping
+    if xi is not None:
+        return chi, zeta, G_mapping, xi
+    else:
+        return chi, zeta, G_mapping
 
 
 def get_zeta_size(zeta):
@@ -74,7 +80,7 @@ def pack_thc_factors(chi, zeta, buffer):
 
 
 @jax.jit
-def compute_objective_batched(chis, zetas, chols, norm_factors, penalty_param=0):
+def compute_objective_batched(chis, zetas, chols, norm_factors, num_kpts, penalty_param=0):
     eri_thc = jnp.einsum(
         "Jpm,Jqm,Jmn,Jrn,Jsn->Jpqrs",
         chis[0].conj(),
@@ -85,16 +91,16 @@ def compute_objective_batched(chis, zetas, chols, norm_factors, penalty_param=0)
         optimize=True,
     )
     eri_ref = jnp.einsum("Jnpq,Jnrs->Jpqrs", chols[0], chols[1], optimize=True)
-    deri = eri_thc - eri_ref
+    deri = (eri_thc - eri_ref) / num_kpts
     norm_left = norm_factors[0] * norm_factors[1]
     norm_right = norm_factors[2] * norm_factors[3]
     MPQ_normalized = jnp.einsum("JP,JPQ,JQ->JPQ", norm_left, zetas, norm_right,
-                               optimize=True)
+                               optimize=True) / num_kpts
 
     lambda_z = jnp.sum(jnp.einsum("JPQ->J", 0.5 * jnp.abs(MPQ_normalized)) ** 2.0)
 
     res = 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * lambda_z
-    return res.conj()
+    return res
 
 
 def prepare_batched_data_indx_arrays(
@@ -176,9 +182,10 @@ def thc_objective_regularized_batched(
                 zeta_batch,
                 (chol_batch_pq, chol_batch_rs),
                 (norm_k1, norm_k2, norm_k3, norm_k4),
+                num_kpts,
                 penalty_param=penalty_param,
             )
-    return objective / num_kpts
+    return objective
 
 
 def thc_objective_regularized(
@@ -216,19 +223,19 @@ def thc_objective_regularized(
                     chol[ik, ik_minus_q],
                     chol[ik_prime, ik_prime_minus_q].conj(),
                 )
-                deri = eri_thc - eri_ref
+                deri = (eri_thc - eri_ref) / num_kpts
                 norm_left = norm_kP[ik] * norm_kP[ik_minus_q]
                 norm_right = norm_kP[ik_prime_minus_q] * norm_kP[ik_prime]
                 MPQ_normalized = jnp.einsum(
                     "P,PQ,Q->PQ", norm_left, zeta[iq][Gpq, Gsr], norm_right
-                )
+                ) / num_kpts
 
                 lambda_z = 0.5 * jnp.sum(jnp.abs(MPQ_normalized))
                 res += 0.5 * jnp.sum((jnp.abs(deri)) ** 2) + penalty_param * (
                     lambda_z**2
                 )
 
-    return res / num_kpts
+    return res
 
 
 def lbfgsb_opt_kpthc_l2reg(
@@ -328,6 +335,15 @@ def lbfgsb_opt_kpthc_l2reg(
 
     # print(res)
     params = np.array(res.x)
+    loss = thc_objective_regularized(
+        jnp.array(res.x),
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        jnp.array(chol),
+        penalty_param=0.0,
+    )
     if chkfile_name is not None:
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(params, num_thc, num_orb, num_kpts, num_G_per_Q)
@@ -336,7 +352,7 @@ def lbfgsb_opt_kpthc_l2reg(
             fh5["G_mapping"] = Gpq_map
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
-    return np.array(params)
+    return np.array(params), loss
 
 
 def lbfgsb_opt_kpthc_l2reg_batched(
@@ -457,6 +473,17 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         options={"disp": None, "iprint": disp_freq, "maxiter": maxiter},
         callback=callback_func,
     )
+    loss = thc_objective_regularized_batched(
+        jnp.array(res.x),
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        jnp.array(chol),
+        indx_arrays,
+        batch_size,
+        penalty_param=0.0,
+    )
 
     params = np.array(res.x)
     if chkfile_name is not None:
@@ -467,7 +494,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
             fh5["G_mapping"] = Gpq_map
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
-    return np.array(params)
+    return np.array(params), loss
 
 
 def adagrad_opt_kpthc_batched(
@@ -557,6 +584,16 @@ def adagrad_opt_kpthc_batched(
         print("Maximum number of iterations reached")
     # save results before returning
     x = np.array(params)
+    loss = thc_objective_regularized_batched(
+        params,
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        chol,
+        indx_arrays,
+        batch_size,
+    )
     if chkfile_name is not None:
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(x, num_thc, num_orb, num_kpts, num_G_per_Q)
@@ -565,7 +602,7 @@ def adagrad_opt_kpthc_batched(
             fh5["G_mapping"] = Gpq_map
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
-    return params
+    return params, loss
 
 
 def make_contiguous_cholesky(cholesky):
@@ -595,6 +632,25 @@ def make_contiguous_cholesky(cholesky):
 
     return cholesky_contiguous
 
+def compute_isdf_loss(chi, zeta, momentum_map, Gpq_map, chol):
+    initial_guess = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
+    pack_thc_factors(chi, zeta, initial_guess)
+    assert len(chi.shape) == 3
+    assert len(zeta[0].shape) == 4
+    num_kpts = chi.shape[0]
+    num_orb = chi.shape[1]
+    num_thc = chi.shape[-1]
+    loss = thc_objective_regularized(
+        jnp.array(initial_guess),
+        num_orb,
+        num_thc,
+        momentum_map,
+        Gpq_map,
+        jnp.array(chol),
+        penalty_param=0.0,
+    )
+    return loss
+
 
 def kpoint_thc_via_isdf(
     kmf,
@@ -611,6 +667,8 @@ def kpoint_thc_via_isdf(
     batch_size=None,
     max_kmeans_iteration=500,
     verbose=False,
+    initial_guess=None,
+    isdf_density_guess=False,
 ):
     """
     Solve k-point THC using ISDF as an initial guess.
@@ -642,13 +700,18 @@ def kpoint_thc_via_isdf(
     :returns (chi, zeta, G_map)
     """
     # Perform initial ISDF calculation of THC factors
-    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(
-        kmf,
-        num_thc,
-        single_translation=False,
-        verbose=verbose,
-        max_kmeans_iteration=max_kmeans_iteration,
-    )
+    info = {}
+    if initial_guess is not None:
+        chi, zeta, xi, G_mapping = initial_guess
+    else:
+        chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(
+            kmf,
+            num_thc,
+            single_translation=False,
+            verbose=verbose,
+            max_kmeans_iteration=max_kmeans_iteration,
+            use_density_guess=isdf_density_guess,
+        )
     num_mo = kmf.mo_coeff[0].shape[-1]
     num_kpts = len(kmf.kpts)
     if save_checkoints:
@@ -656,17 +719,21 @@ def kpoint_thc_via_isdf(
         with h5py.File(chkfile_name, "w") as fh5:
             fh5["chi"] = chi
             fh5["G_mapping"] = G_mapping
+            fh5["xi"] = xi
             for iq in range(num_kpts):
                 fh5[f"zeta_{iq}"] = zeta[iq]
     momentum_map = build_momentum_transfer_mapping(kmf.cell, kmf.kpts)
-    cholesky_contiguous = make_contiguous_cholesky(cholesky)
+    if cholesky is not None:
+        cholesky_contiguous = make_contiguous_cholesky(cholesky)
+        info["loss_isdf"] = compute_isdf_loss(chi, zeta, momentum_map,
+                    G_mapping, cholesky_contiguous)
     if perform_bfgs_opt:
         if save_checkoints:
             chkfile_name = f"{checkpoint_basename}_bfgs.h5"
         else:
             chkfile_name = None
         if use_batched_algos:
-            opt_params = lbfgsb_opt_kpthc_l2reg_batched(
+            opt_params, loss_bfgs = lbfgsb_opt_kpthc_l2reg_batched(
                 chi,
                 zeta,
                 momentum_map,
@@ -677,8 +744,9 @@ def kpoint_thc_via_isdf(
                 penalty_param=penalty_param,
                 batch_size=batch_size,
             )
+            info["loss_bfgs"] = loss_bfgs
         else:
-            opt_params = lbfgsb_opt_kpthc_l2reg(
+            opt_params, loss_bfgs = lbfgsb_opt_kpthc_l2reg(
                 chi,
                 zeta,
                 momentum_map,
@@ -688,6 +756,7 @@ def kpoint_thc_via_isdf(
                 maxiter=bfgs_maxiter,
                 penalty_param=penalty_param,
             )
+            info["loss_bfgs"] = loss_bfgs
         num_G_per_Q = [len(np.unique(GQ)) for GQ in G_mapping]
         chi, zeta = unpack_thc_factors(
             opt_params, num_thc, num_mo, num_kpts, num_G_per_Q
@@ -698,7 +767,7 @@ def kpoint_thc_via_isdf(
         else:
             chkfile_name = None
         if use_batched_algos:
-            opt_params = lbfgsb_opt_kpthc_l2reg_batched(
+            opt_params, loss_ada = adagrad_opt_kpthc_batched(
                 chi,
                 zeta,
                 momentum_map,
@@ -706,22 +775,11 @@ def kpoint_thc_via_isdf(
                 cholesky_contiguous,
                 chkfile_name=chkfile_name,
                 maxiter=bfgs_maxiter,
-                penalty_param=penalty_param,
                 batch_size=batch_size,
             )
-        else:
-            opt_params = lbfgsb_opt_kpthc_l2reg(
-                chi,
-                zeta,
-                momentum_map,
-                G_mapping,
-                cholesky_contiguous,
-                chkfile_name=chkfile_name,
-                maxiter=bfgs_maxiter,
-                penalty_param=penalty_param,
-            )
+            info["loss_adagrad"] = loss_ada
         num_G_per_Q = [len(np.unique(GQ)) for GQ in G_mapping]
         chi, zeta = unpack_thc_factors(
             opt_params, num_thc, num_mo, num_kpts, num_G_per_Q
         )
-    return chi, zeta, G_mapping
+    return chi, zeta, G_mapping, info

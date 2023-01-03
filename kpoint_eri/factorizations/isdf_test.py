@@ -2,10 +2,12 @@ import itertools
 import h5py
 import numpy as np
 import pytest
+from ase.build import bulk
 
 from pyscf.pbc import gto, scf, tools
 from pyscf.pbc.dft import gen_grid
 from pyscf.pbc.dft import numint
+from pyscf.pbc.tools import pyscf_ase
 from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, member
 
 from kpoint_eri.factorizations.kmeans import KMeansCVT
@@ -22,6 +24,7 @@ from kpoint_eri.factorizations.isdf import (
     kpoint_isdf_single_translation,
     build_eri_isdf_double_translation,
     build_eri_isdf_single_translation,
+    solve_kmeans_kpisdf
 )
 from kpoint_eri.resource_estimates.utils import build_momentum_transfer_mapping
 
@@ -345,7 +348,6 @@ def eri_from_isdf(mf, interp_orbitals, xi_mu, kpts_tuple):
     # k_q - k_p
     q = kpts[1] - kpts[0]
     delta_G = kpts[0] - kpts[1] + kpts[2] - kpts[3]
-    print("delta G: ", delta_G, q)
     phase_factor = np.exp(-1j * (np.einsum("x,Rx->R", delta_G, grid_points)))
     coulG = tools.get_coulG(cell, k=q, mesh=mf.with_df.mesh)
     weighted_coulG = coulG * cell.vol / num_grid_points
@@ -378,7 +380,6 @@ def eri_from_isdf_2(mf, interp_orbitals, xi_mu, q, kpts_indx):
     xi_muG *= weighted_coulG
     vR = tools.ifft(xi_muG, mf.with_df.mesh)
     zeta = np.einsum("Rn,mR->mn", xi_mu, vR, optimize=True)
-    print(np.linalg.norm(zeta - zeta.conj().T))
     ikp, ikq, ikr, iks = kpts_indx
     eri = np.einsum(
         "rn,sn,mn,pm,qm->pqrs",
@@ -392,22 +393,16 @@ def eri_from_isdf_2(mf, interp_orbitals, xi_mu, q, kpts_indx):
     return eri
 
 def test_G_vector_mapping():
+    ase_atom = bulk("AlN", "wurtzite", a=3.11, c=4.98)
     cell = gto.Cell()
-    cell.atom = """
-    C 0.000000000000   0.000000000000   0.000000000000
-    C 1.685068664391   1.685068664391   1.685068664391
-    """
+    cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
+    cell.a = ase_atom.cell[:].copy()
     cell.basis = "gth-szv"
     cell.pseudo = "gth-hf-rev"
-    cell.a = """
-    0.000000000, 3.370137329, 3.370137329
-    3.370137329, 0.000000000, 3.370137329
-    3.370137329, 3.370137329, 0.000000000"""
-    cell.unit = "B"
     cell.verbose = 4
     cell.build()
 
-    nk = 2
+    nk = 3
     kmesh = [nk, nk, nk]
     kpts = cell.make_kpts(kmesh)
 
@@ -530,7 +525,7 @@ def test_kpoint_isdf_build():
         optimize=True,
     )
     num_mo = mf.mo_coeff[0].shape[-1]  # assuming the same for each k-point
-    num_interp_points = 100 * num_mo
+    num_interp_points = 10 * num_mo
     with h5py.File(mf.chkfile, "r+") as fh5:
         try:
             interp_indx = fh5[f"interp_indx_{num_interp_points}"][:]
@@ -1188,6 +1183,31 @@ def test_G_vector_mapping_double():
             assert unique_G[G_unique[iq][i]] == G
 
 
+def test_density_guess():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 2, 1]
+    kpts = cell.make_kpts(kmesh)
+    mf = scf.KRHF(cell, kpts)
+    mf.chkfile = "test_density_isdf.chk"
+    mf.init_guess = "chkfile"
+    mf.kernel()
+    num_thc = 10
+    solve_kmeans_kpisdf(mf, num_thc, use_density_guess=True)
+
 if __name__ == "__main__":
     test_G_vector_mapping_double()
     test_supercell_isdf_gamma()
@@ -1198,3 +1218,4 @@ if __name__ == "__main__":
     test_kpoint_isdf_build_single_translation()
     test_G_vector_mapping()
     test_G_vector_mapping_single_translation()
+    test_density_guess()
