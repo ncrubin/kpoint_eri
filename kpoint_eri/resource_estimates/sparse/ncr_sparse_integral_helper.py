@@ -73,50 +73,29 @@ class NCRSSparseFactorizationHelper:
                         p, q, r, s = ftuple
                         if p == q == r == s:
                             counter += np.count_nonzero(eri_block[p, q, r, s])
-                            # fulltally[kp, kq, kr, p, q, r, s] += 1
                         elif p == r and q == s:
                             counter += np.count_nonzero(eri_block[p, q, r, s])
-                            # fulltally[kp, kq, kr, p, q, r, s] += 1
-                            # fulltally[kp, kq, kr, q, p, s, r] += 1
                         elif p == s and q == r:
                             counter += np.count_nonzero(eri_block[p, q, r, s])
-                            # fulltally[kp, kq, kr, p, q, r, s] += 1
-                            # fulltally[kp, kq, kr, q, p, s, r] += 1
                         elif p == q and r == s:
                             counter += np.count_nonzero(eri_block[p, q, r, s])
-                            # fulltally[kp, kq, kr, p, q, r, s] += 1
-                            # fulltally[kp, kq, kr, r, s, p, q] += 1
                         else:
                             counter += np.count_nonzero(eri_block[p, q, r, s])
-                            # fulltally[kp, kq, kr, p, q, r, s] += 1
-                            # fulltally[kp, kq, kr, q, p, s, r] += 1
-                            # fulltally[kp, kq, kr, s, r, q, p] += 1
-                            # fulltally[kp, kq, kr, r, s, p, q] += 1
 
                 elif kp == kq and kr == ks:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
                     counter += np.count_nonzero(eri_block)
-                    # fulltally[kp, kq, kr] += 1
-                    # fulltally[kr, ks, kp] += 1
 
                 elif kp == ks and kq == kr:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
                     counter += np.count_nonzero(eri_block)
-                    # fulltally[kp, kq, kr] += 1
-                    # fulltally[kr, ks, kp] += 1
 
-
-            elif kp == kr and kq == ks:
-                completed[kp,kq,kr] = True
-                completed[kq,kp,ks] = True
-                counter += np.count_nonzero(eri_block)
-                # tally[kp,kq,kr] += 1 
-                # tally[kq,kp,ks] += 1 
-                # # symmetry takes account of [kq, kp, ks] only need to do one of the blocks
-                # fulltally[kp, kq, kr] += 1
-                # fulltally[kq, kp, ks] += 1
+                elif kp == kr and kq == ks:
+                    completed[kp,kq,kr] = True
+                    completed[kq,kp,ks] = True
+                    counter += np.count_nonzero(eri_block)
 
             else:
                 counter += np.count_nonzero(eri_block)
