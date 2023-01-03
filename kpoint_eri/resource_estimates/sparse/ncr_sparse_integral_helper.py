@@ -71,38 +71,25 @@ class NCRSSparseFactorizationHelper:
                     completed[kp,kq,kr] = True
                     for ftuple in unique_iter(self.nao):
                         p, q, r, s = ftuple
-                        if p == q == r == s:
-                            counter += np.count_nonzero(eri_block[p, q, r, s])
-                        elif p == r and q == s:
-                            counter += np.count_nonzero(eri_block[p, q, r, s])
-                        elif p == s and q == r:
-                            counter += np.count_nonzero(eri_block[p, q, r, s])
-                        elif p == q and r == s:
-                            counter += np.count_nonzero(eri_block[p, q, r, s])
-                        else:
-                            counter += np.count_nonzero(eri_block[p, q, r, s])
-
+                        counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == kq and kr == ks:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
                     counter += np.count_nonzero(eri_block)
-
                 elif kp == ks and kq == kr:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
                     counter += np.count_nonzero(eri_block)
-
                 elif kp == kr and kq == ks:
                     completed[kp,kq,kr] = True
                     completed[kq,kp,ks] = True
                     counter += np.count_nonzero(eri_block)
-
-            else:
-                counter += np.count_nonzero(eri_block)
-                completed[kp,kq,kr] = True
-                completed[kr,ks,kp] = True
-                completed[kq,kp,ks] = True
-                completed[ks,kr,kq] = True
+                else:
+                    counter += np.count_nonzero(eri_block)
+                    completed[kp,kq,kr] = True
+                    completed[kr,ks,kp] = True
+                    completed[kq,kp,ks] = True
+                    completed[ks,kr,kq] = True
         return counter
 
 
