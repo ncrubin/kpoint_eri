@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+import scipy.linalg
 
 from pyscf.pbc import tools, df, gto
 from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, conj_mapping
@@ -627,14 +628,31 @@ def density_guess(density, grid_inst, grid_points, num_interp_points):
     return grid_points[indx]
 
 
-def solve_kmeans_kpisdf(
-    mf_inst,
-    num_interp_points,
-    max_kmeans_iteration=500,
-    single_translation=True,
-    use_density_guess=False,
-    verbose=True,
-):
+def interp_indx_from_qrcp(orbitals_on_grid, num_interp_pts):
+    """Find interpolating points via QRCP
+
+    Z^T P = Q R, where R has diagonal elements that are in descending order of
+    magnitude. Interpolating points are then chosen by the columns of the
+    permuted Z^T.
+
+    :param orbitals_on_grid: cell-periodic part of bloch orbitals on real space grid of shape (num_grid_points, num_kpts*num_mo)
+    :param num_interp_pts: integer corresponding to number of interpolating points to select from full real space grid.
+    :returns interp_indx: Index of interpolating points in full real space grid.
+    """
+
+    num_grid_points = orbitals_on_grid.shape[0]
+    Q, R, P = scipy.linalg.qr(orbitals_on_grid.T, pivoting=True)
+    # print(np.sign(R.diagonal()))
+    signs_R = np.diag(np.sign(R.diagonal()))
+    # Force diagonal of R to be positive which isn't strictly enforced in QR factorization.
+    R = np.dot(signs_R, R)
+    Q = np.dot(Q, signs_R)
+    grid_indx = np.arange(num_grid_points)
+    interp_indx = grid_indx[P[:num_interp_pts]]
+    return interp_indx
+
+
+def setup_isdf(mf_inst, verbose=False):
     assert isinstance(mf_inst.with_df, df.FFTDF), "mf object must use FFTDF"
     cell = mf_inst.cell
     kpts = mf_inst.kpts
@@ -648,31 +666,12 @@ def solve_kmeans_kpisdf(
             )
         )
         print("Number of grid points: {}".format(num_grid_points))
-        print("Number of interpolating points: {}".format(num_interp_points))
-        print("Maximum number of kmeans iterations: {}".format(max_kmeans_iteration))
-        print("Single-translation kp-thc? {}".format(single_translation))
     bloch_orbitals_ao = np.array(numint.eval_ao_kpts(cell, grid_points, kpts=kpts))
     bloch_orbitals_mo = np.einsum(
         "kRp,kpi->kRi", bloch_orbitals_ao, mf_inst.mo_coeff, optimize=True
     )
     nocc = cell.nelec[0]  # assuming same for each k-point
-    density = np.einsum(
-        "kRi,kRi->R",
-        bloch_orbitals_mo[:, :, :nocc].conj(),
-        bloch_orbitals_mo[:, :, :nocc],
-        optimize=True,
-    )
     num_mo = mf_inst.mo_coeff[0].shape[-1]  # assuming the same for each k-point
-    kmeans = KMeansCVT(grid_points, max_iteration=max_kmeans_iteration)
-    if use_density_guess:
-        initial_centroids = density_guess(
-            density, grid_inst, grid_points, num_interp_points
-        )
-    else:
-        initial_centroids = None
-    interp_indx = kmeans.find_interpolating_points(
-        num_interp_points, density.real, verbose=verbose, centroids=initial_centroids
-    )
     num_kpts = len(kpts)
     # Cell periodic part
     # u = e^{-ik.r} phi(r)
@@ -683,11 +682,92 @@ def solve_kmeans_kpisdf(
     cell_periodic_mo = cell_periodic_mo.transpose((1, 0, 2)).reshape(
         (num_grid_points, num_kpts * num_mo)
     )
+    return grid_points, cell_periodic_mo, bloch_orbitals_mo
+
+
+def solve_kmeans_kpisdf(
+    mf_inst,
+    num_interp_points,
+    max_kmeans_iteration=500,
+    single_translation=True,
+    use_density_guess=False,
+    verbose=True,
+):
+    # Build real space grid, and orbitals on real space grid
+    grid_points, cell_periodic_mo, bloch_orbitals_mo = setup_isdf(mf_inst)
+    grid_inst = gen_grid.UniformGrids(mf_inst.cell)
+    # Find interpolating points using K-Means CVT algorithm
+    kmeans = KMeansCVT(grid_points, max_iteration=max_kmeans_iteration)
+    nocc = mf_inst.cell.nelec[0]  # assuming same for each k-point
+    density = np.einsum(
+        "kRi,kRi->R",
+        bloch_orbitals_mo[:, :, :nocc].conj(),
+        bloch_orbitals_mo[:, :, :nocc],
+        optimize=True,
+    )
+    if use_density_guess:
+        initial_centroids = density_guess(
+            density, grid_inst, grid_points, num_interp_points
+        )
+    else:
+        initial_centroids = None
+    interp_indx = kmeans.find_interpolating_points(
+        num_interp_points,
+        density.real,
+        verbose=verbose,
+        centroids=initial_centroids,
+    )
+    # Solve for THC factors.
+    solution = solve_for_thc_factors(
+        mf_inst,
+        interp_indx,
+        cell_periodic_mo,
+        grid_points,
+        single_translation=single_translation,
+        verbose=verbose,
+    )
+    return solution
+
+
+def solve_qrcp_isdf(
+    mf_inst,
+    num_interp_points,
+    single_translation=True,
+    verbose=True,
+):
+    # Build real space grid, and orbitals on real space grid
+    grid_points, cell_periodic_mo, bloch_orbitals_mo = setup_isdf(mf_inst)
+    # Find interpolating points using K-Means CVT algorithm
+    interp_indx = interp_indx_from_qrcp(cell_periodic_mo, num_interp_points)
+    # Solve for THC factors.
+    solution = solve_for_thc_factors(
+        mf_inst,
+        interp_indx,
+        cell_periodic_mo,
+        grid_points,
+        single_translation=single_translation,
+        verbose=verbose,
+    )
+    return solution
+
+
+def solve_for_thc_factors(
+    mf_inst,
+    interp_points_index,
+    cell_periodic_mo,
+    grid_points,
+    single_translation=True,
+    verbose=True,
+):
+    """
+    Solve for THC factors given interpolating points
+    """
+    assert isinstance(mf_inst.with_df, df.FFTDF), "mf object must use FFTDF"
     if single_translation:
         chi, zeta, xi, G_mapping = kpoint_isdf_single_translation(
             mf_inst.with_df,
-            interp_indx,
-            kpts,
+            interp_points_index,
+            mf_inst.kpts,
             cell_periodic_mo,
             grid_points,
             only_unique_G=True,
@@ -695,11 +775,14 @@ def solve_kmeans_kpisdf(
     else:
         chi, zeta, xi, G_mapping = kpoint_isdf_double_translation(
             mf_inst.with_df,
-            interp_indx,
-            kpts,
+            interp_points_index,
+            mf_inst.kpts,
             cell_periodic_mo,
             grid_points,
         )
+    num_interp_points = len(interp_points_index)
+    num_kpts = len(mf_inst.kpts)
+    num_mo = mf_inst.mo_coeff[0].shape[-1]  # assuming the same for each k-point
     assert chi.shape == (num_interp_points, num_kpts * num_mo)
     # go from Rki -> kiR
     chi = chi.reshape((num_interp_points, num_kpts, num_mo))

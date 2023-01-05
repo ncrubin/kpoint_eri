@@ -24,9 +24,10 @@ from kpoint_eri.factorizations.isdf import (
     kpoint_isdf_single_translation,
     build_eri_isdf_double_translation,
     build_eri_isdf_single_translation,
-    solve_kmeans_kpisdf
+    solve_kmeans_kpisdf,
 )
 from kpoint_eri.resource_estimates.utils import build_momentum_transfer_mapping
+
 
 def build_kisdf_helper(mf):
     cell = mf.cell
@@ -392,6 +393,7 @@ def eri_from_isdf_2(mf, interp_orbitals, xi_mu, q, kpts_indx):
     )
     return eri
 
+
 def test_G_vector_mapping():
     ase_atom = bulk("AlN", "wurtzite", a=3.11, c=4.98)
     cell = gto.Cell()
@@ -756,10 +758,12 @@ def build_eri(mf, kpt_pqrs):
     )
     return eri_pqrs
 
+
 def get_complement(miller_indx, kmesh):
     complement = ~miller_indx
-    complement[np.where(np.array(kmesh)==1)] = 0
+    complement[np.where(np.array(kmesh) == 1)] = 0
     return complement
+
 
 def test_kpoint_isdf_symmetries_slow():
     cell = gto.Cell()
@@ -793,6 +797,7 @@ def test_kpoint_isdf_symmetries_slow():
     grid_points = cell.gen_uniform_grids(mf.with_df.mesh)
     lattice_vectors = cell.lattice_vectors()
     from pyscf.pbc.lib.kpts_helper import conj_mapping
+
     minus_k_map = conj_mapping(cell, kpts)
     # Sanity check xi is real
     print("max xi.imag: ", np.max(np.abs(xi.imag)))
@@ -806,7 +811,9 @@ def test_kpoint_isdf_symmetries_slow():
                 ik_prime_minus_q = momentum_map[iq, ik_prime]
                 # Sanity check G mappings
                 assert np.allclose(kpts[ik] - kpts[ik_minus_q] - kpts[iq], Gpq)
-                assert np.allclose(kpts[ik_prime] - kpts[ik_prime_minus_q] - kpts[iq], Gsr)
+                assert np.allclose(
+                    kpts[ik_prime] - kpts[ik_prime_minus_q] - kpts[iq], Gsr
+                )
                 # F30. (pk qk-Q | rk'-Q sk') = (q k-Q p k | sk' rk'-Q)*
                 ik_prime_minus_q = momentum_map[iq, ik_prime]
                 # uncomment to check normal eris
@@ -819,7 +826,9 @@ def test_kpoint_isdf_symmetries_slow():
                 # assert np.allclose(eri_pqrs, eri_qpsr.conj())
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = zeta[-Q,G1_comp,G2_comp,m, n].conj()
                 # Build refernce point zeta[Q,G1,G2,m,n]
-                zeta_ref = build_kpoint_zeta(mf.with_df, kpts[iq], Gpq, Gsr, grid_points, xi)
+                zeta_ref = build_kpoint_zeta(
+                    mf.with_df, kpts[iq], Gpq, Gsr, grid_points, xi
+                )
                 # Get -Q index
                 minus_iq = minus_k_map[iq]
                 # This flips the sign of the miller index corresponding to the G
@@ -834,19 +843,39 @@ def test_kpoint_isdf_symmetries_slow():
                 assert np.allclose(kpts[minus_iq] + kpts[iq] + Gsr + Gsr_comp, zero)
                 # Compare this "complement G" to overleaf
                 print("iq = {}, ik = {}, ik_prime = {}".format(iq, ik, ik_prime))
-                print("G {} new !G: {}".format(get_miller(lattice_vectors, Gpq), get_miller(lattice_vectors, Gpq_comp)))
-                print("G' {} new !G': {}".format(get_miller(lattice_vectors, Gsr), get_miller(lattice_vectors, Gpq_comp)))
-                print("G {} ovleaf !G: {}".format(get_miller(lattice_vectors, Gpq), overleaf_Gpq_comp_tuple))
-                print("G' {} ovleaf !G': {}".format(get_miller(lattice_vectors, Gsr), overleaf_Gsr_comp_tuple))
+                print(
+                    "G {} new !G: {}".format(
+                        get_miller(lattice_vectors, Gpq),
+                        get_miller(lattice_vectors, Gpq_comp),
+                    )
+                )
+                print(
+                    "G' {} new !G': {}".format(
+                        get_miller(lattice_vectors, Gsr),
+                        get_miller(lattice_vectors, Gpq_comp),
+                    )
+                )
+                print(
+                    "G {} ovleaf !G: {}".format(
+                        get_miller(lattice_vectors, Gpq), overleaf_Gpq_comp_tuple
+                    )
+                )
+                print(
+                    "G' {} ovleaf !G': {}".format(
+                        get_miller(lattice_vectors, Gsr), overleaf_Gsr_comp_tuple
+                    )
+                )
                 print()
-                zeta_test = build_kpoint_zeta(mf.with_df,
-                                                      kpts[minus_iq], Gpq_comp,
-                                                      Gsr_comp, grid_points, xi)
+                zeta_test = build_kpoint_zeta(
+                    mf.with_df, kpts[minus_iq], Gpq_comp, Gsr_comp, grid_points, xi
+                )
                 # F31 (pk qk-Q | rk'-Q sk') = (rk'-Q s k'| pk qk-Q)
                 assert np.allclose(zeta_ref, zeta_test.conj())
                 # Sanity check do literal minus signs (should be complex
                 # conjugate)
-                zeta_test = build_kpoint_zeta(mf.with_df, -kpts[iq], -Gpq, -Gsr, grid_points, xi)
+                zeta_test = build_kpoint_zeta(
+                    mf.with_df, -kpts[iq], -Gpq, -Gsr, grid_points, xi
+                )
                 assert np.allclose(zeta_ref, zeta_test.conj())
                 # F32 (pk qk-Q | rk'-Q sk') = (rk'-Q s k'| pk qk-Q)
                 # uncomment to check normal eris
@@ -854,9 +883,9 @@ def test_kpoint_isdf_symmetries_slow():
                 # eri_rspq = build_eri(mf, kpt_pqrs).transpose((2, 3, 0, 1))
                 # assert np.allclose(eri_pqrs, eri_rspq)
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = # zeta[-Q,G2_comp,G1_comp,m, n]
-                zeta_test = build_kpoint_zeta(mf.with_df,
-                                                      kpts[minus_iq], Gsr_comp,
-                                                      Gpq_comp, grid_points, xi)
+                zeta_test = build_kpoint_zeta(
+                    mf.with_df, kpts[minus_iq], Gsr_comp, Gpq_comp, grid_points, xi
+                )
                 assert np.allclose(zeta_ref, zeta_test.T)
                 # F33 (pk qk-Q | rk'-Q sk') = (sk' r k'-Q| qk-Q pk)
                 # uncomment to check normal eris
@@ -864,9 +893,11 @@ def test_kpoint_isdf_symmetries_slow():
                 # eri_srqp = build_eri(mf, kpt_pqrs).transpose((3, 2, 1, 0))
                 # assert np.allclose(eri_pqrs, eri_srqp.conj())
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = zeta[Q,G2,G1,n, m].conj()
-                zeta_test = build_kpoint_zeta(mf.with_df, kpts[iq],
-                                                 Gsr, Gpq, grid_points, xi)
+                zeta_test = build_kpoint_zeta(
+                    mf.with_df, kpts[iq], Gsr, Gpq, grid_points, xi
+                )
                 assert np.allclose(zeta_ref, zeta_test.conj().T)
+
 
 def test_kpoint_isdf_symmetries():
     cell = gto.Cell()
@@ -893,13 +924,16 @@ def test_kpoint_isdf_symmetries():
     G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_double_translation(
         cell, kpts, momentum_map
     )
-    minus_Q_G_map, minus_Q_G_map_unique = build_minus_Q_G_mapping(cell, kpts, momentum_map)
+    minus_Q_G_map, minus_Q_G_map_unique = build_minus_Q_G_mapping(
+        cell, kpts, momentum_map
+    )
     num_kpts = len(kpts)
     # Test symmetries from F30-F33
     # Test LHS for sanity too (need to uncomment)
     grid_points = cell.gen_uniform_grids(mf.with_df.mesh)
     lattice_vectors = cell.lattice_vectors()
     from pyscf.pbc.lib.kpts_helper import conj_mapping
+
     minus_k_map = conj_mapping(cell, kpts)
     # Sanity check xi is real
     print("max xi.imag: ", np.max(np.abs(xi.imag)))
@@ -914,8 +948,13 @@ def test_kpoint_isdf_symmetries():
                 iGsr = G_unique[iq, ik_prime]
                 ik_prime_minus_q = momentum_map[iq, ik_prime]
                 # Sanity check G mappings
-                assert np.allclose(kpts[ik] - kpts[ik_minus_q] - kpts[iq], delta_Gs[iq][iGpq])
-                assert np.allclose(kpts[ik_prime] - kpts[ik_prime_minus_q] - kpts[iq], delta_Gs[iq][iGsr])
+                assert np.allclose(
+                    kpts[ik] - kpts[ik_minus_q] - kpts[iq], delta_Gs[iq][iGpq]
+                )
+                assert np.allclose(
+                    kpts[ik_prime] - kpts[ik_prime_minus_q] - kpts[iq],
+                    delta_Gs[iq][iGsr],
+                )
                 # F30. (pk qk-Q | rk'-Q sk') = (q k-Q p k | sk' rk'-Q)*
                 ik_prime_minus_q = momentum_map[iq, ik_prime]
                 # uncomment to check normal eris
@@ -945,10 +984,20 @@ def test_kpoint_isdf_symmetries():
                 Gsr_comp = delta_Gs[minus_iq][iGsr_comp]
                 # Compare this "complement G" to overleaf
                 print("iq = {}, ik = {}, ik_prime = {}".format(iq, ik, ik_prime))
-                print("G {} new !G: {}".format(miller_Gpq, get_miller(lattice_vectors, Gpq_comp)))
-                print("G' {} new !G': {}".format(miller_Gsr, get_miller(lattice_vectors, Gsr_comp)))
+                print(
+                    "G {} new !G: {}".format(
+                        miller_Gpq, get_miller(lattice_vectors, Gpq_comp)
+                    )
+                )
+                print(
+                    "G' {} new !G': {}".format(
+                        miller_Gsr, get_miller(lattice_vectors, Gsr_comp)
+                    )
+                )
                 print("G {} ovleaf !G: {}".format(miller_Gpq, overleaf_Gpq_comp_tuple))
-                print("G' {} ovleaf !G': {}".format(miller_Gsr, overleaf_Gsr_comp_tuple))
+                print(
+                    "G' {} ovleaf !G': {}".format(miller_Gsr, overleaf_Gsr_comp_tuple)
+                )
                 print()
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = zeta[-Q,G1_comp,G2_comp,m, n].conj()
                 # Build refernce point zeta[Q,G1,G2,m,n]
@@ -958,8 +1007,14 @@ def test_kpoint_isdf_symmetries():
                 assert np.allclose(zeta_ref, zeta_test.conj())
                 # Sanity check do literal minus signs (should be complex
                 # conjugate)
-                zeta_test = build_kpoint_zeta(mf.with_df, -kpts[iq],
-                                              -delta_Gs[iq][iGpq], -delta_Gs[iq][iGsr], grid_points, xi)
+                zeta_test = build_kpoint_zeta(
+                    mf.with_df,
+                    -kpts[iq],
+                    -delta_Gs[iq][iGpq],
+                    -delta_Gs[iq][iGsr],
+                    grid_points,
+                    xi,
+                )
                 assert np.allclose(zeta_ref, zeta_test.conj())
                 # F32 (pk qk-Q | rk'-Q sk') = (rk'-Q s k'| pk qk-Q)
                 # uncomment to check normal eris
@@ -977,8 +1032,6 @@ def test_kpoint_isdf_symmetries():
                 # Check zeta symmetry: expect zeta[Q,G1,G2,m,n] = zeta[Q,G2,G1,n, m].conj()
                 zeta_test = zeta[iq][iGsr, iGpq]
                 assert np.allclose(zeta_ref, zeta_test.conj().T)
-
-
 
 
 def test_symmetry_of_G_maps():
@@ -1007,6 +1060,7 @@ def test_symmetry_of_G_maps():
     num_kpts = len(kpts)
     lattice_vectors = cell.lattice_vectors()
     from pyscf.pbc.lib.kpts_helper import conj_mapping
+
     minus_k_map = conj_mapping(cell, kpts)
     # k1 - k2 = Q + G
     for iq in range(1, num_kpts):
@@ -1018,8 +1072,10 @@ def test_symmetry_of_G_maps():
             miller_Gpq_comp = get_miller(lattice_vectors, Gpq_comp)
             miller_Gpq = get_miller(lattice_vectors, Gpq)
             iGpq_comp = G_dict[tuple(get_miller(lattice_vectors, Gpq_comp))]
-            G_indx_unique = [G_dict[tuple(get_miller(lattice_vectors, G))] for G
-                             in delta_Gs[minus_iq]]
+            G_indx_unique = [
+                G_dict[tuple(get_miller(lattice_vectors, G))]
+                for G in delta_Gs[minus_iq]
+            ]
             if iq == 1:
                 pass
             assert iGpq_comp in G_indx_unique
@@ -1030,7 +1086,7 @@ def test_symmetry_of_G_maps():
                 Gsr_comp = -(kpts[minus_iq] + kpts[iq] + Gsr)
                 comp_miller_Gpq = get_complement(miller_Gpq, kmesh)
                 # if np.linalg.norm(miller_Gpq_comp-comp_miller_Gpq) > 1e-12:
-                    # print(iq, miller_Gpq, comp_miller_Gpq, miller_Gpq_comp)
+                # print(iq, miller_Gpq, comp_miller_Gpq, miller_Gpq_comp)
                 # Check complement(miller_Gpq) = miller_Gpq_comp
                 # Get indx of "complement" G in original set of 27
                 iGsr_comp = G_dict[tuple(get_miller(lattice_vectors, Gpq_comp))]
@@ -1038,9 +1094,10 @@ def test_symmetry_of_G_maps():
                 # Check complement is in set corresponding to zeta[-Q]
                 assert iGsr_comp in G_indx_unique
 
-
     # Check minus Q mapping
-    minus_Q_G_map, minus_Q_G_map_unique = build_minus_Q_G_mapping(cell, kpts, momentum_map)
+    minus_Q_G_map, minus_Q_G_map_unique = build_minus_Q_G_mapping(
+        cell, kpts, momentum_map
+    )
     for iq in range(1, num_kpts):
         minus_iq = minus_k_map[iq]
         for ik in range(num_kpts):
@@ -1072,6 +1129,7 @@ def test_G_vector_mapping_double():
 
     import itertools
     from pyscf import lib
+
     nk = 4
     kmesh = [nk, 1, 1]
     # kmesh = [3, 2, 1]
@@ -1093,27 +1151,52 @@ def test_G_vector_mapping_double():
     # print(momentum_map)
 
     kpoints = kpts
-    delta_k1_k2_Q = kpoints[:,None,None,:] - kpoints[None,:,None,:] - kpoints[None,None,:,:]
+    delta_k1_k2_Q = (
+        kpoints[:, None, None, :]
+        - kpoints[None, :, None, :]
+        - kpoints[None, None, :, :]
+    )
     delta_k1_k2_Q += kpoints[0][None, None, None, :]  # shift to center
-    delta_k1_k2_Q_int = int_scaled_kpts[:, None, None, :] - int_scaled_kpts[None, :, None, :] - int_scaled_kpts[None, None, :, :]
+    delta_k1_k2_Q_int = (
+        int_scaled_kpts[:, None, None, :]
+        - int_scaled_kpts[None, :, None, :]
+        - int_scaled_kpts[None, None, :, :]
+    )
 
     import itertools
-    for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
-        assert np.allclose(kpoints[kpidx] - kpoints[kqidx] - kpoints[qidx], delta_k1_k2_Q[kpidx, kqidx, qidx])
-    delta_dot_a = np.einsum('wx,kpQx->kpQw', cell.lattice_vectors() / (2 * np.pi), delta_k1_k2_Q)
-    delta_dot_a_v2 = np.zeros_like(delta_dot_a)  # fraction [0, 1) representation of the momentum mode
-    delta_dot_a_int_version = np.zeros_like(delta_dot_a) # integer representation [[0, Nk_{x}-1], [0, Nk_{y}-1], [0, Nk_{z}- 1]]
-    for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
-        delta_dot_a_v2[kpidx, kqidx, qidx] = cell.get_scaled_kpts(np.array(delta_k1_k2_Q[kpidx, kqidx, qidx]))
-        delta_dot_a_int_version[kpidx, kqidx, qidx] = cell.get_scaled_kpts(np.array(delta_k1_k2_Q[kpidx, kqidx, qidx])) * np.array(kmesh)
 
-        assert np.allclose(delta_dot_a_v2[kpidx, kqidx, qidx], 
-                           delta_dot_a[kpidx, kqidx, qidx])
+    for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
+        assert np.allclose(
+            kpoints[kpidx] - kpoints[kqidx] - kpoints[qidx],
+            delta_k1_k2_Q[kpidx, kqidx, qidx],
+        )
+    delta_dot_a = np.einsum(
+        "wx,kpQx->kpQw", cell.lattice_vectors() / (2 * np.pi), delta_k1_k2_Q
+    )
+    delta_dot_a_v2 = np.zeros_like(
+        delta_dot_a
+    )  # fraction [0, 1) representation of the momentum mode
+    delta_dot_a_int_version = np.zeros_like(
+        delta_dot_a
+    )  # integer representation [[0, Nk_{x}-1], [0, Nk_{y}-1], [0, Nk_{z}- 1]]
+    for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
+        delta_dot_a_v2[kpidx, kqidx, qidx] = cell.get_scaled_kpts(
+            np.array(delta_k1_k2_Q[kpidx, kqidx, qidx])
+        )
+        delta_dot_a_int_version[kpidx, kqidx, qidx] = cell.get_scaled_kpts(
+            np.array(delta_k1_k2_Q[kpidx, kqidx, qidx])
+        ) * np.array(kmesh)
+
+        assert np.allclose(
+            delta_dot_a_v2[kpidx, kqidx, qidx], delta_dot_a[kpidx, kqidx, qidx]
+        )
         # print(delta_dot_a_v2[kpidx, kqidx, qidx])
         # print(delta_dot_a_int_version[kpidx, kqidx, qidx])
         # print(delta_k1_k2_Q_int[kpidx, kqidx, qidx])
-        assert np.allclose(delta_k1_k2_Q_int[kpidx, kqidx, qidx], delta_dot_a_int_version[kpidx, kqidx, qidx])
-
+        assert np.allclose(
+            delta_k1_k2_Q_int[kpidx, kqidx, qidx],
+            delta_dot_a_int_version[kpidx, kqidx, qidx],
+        )
 
     int_delta_dot_a = np.rint(delta_dot_a)
     # Should be zero if transfer is statisfied (2*pi*n)
@@ -1121,29 +1204,40 @@ def test_G_vector_mapping_double():
     ncr_transfer_map = np.zeros((len(kpts), len(kpts)), dtype=np.int32)
     for (kpidx, kqidx, qidx) in itertools.product(range(len(kpts)), repeat=3):
         # explicitly build my transfer matrix
-        if np.sum(np.abs(delta_dot_a_v2[kpidx, kqidx, qidx] - np.rint(delta_dot_a_v2[kpidx, kqidx, qidx]))) < 1.0E-10:
+        if (
+            np.sum(
+                np.abs(
+                    delta_dot_a_v2[kpidx, kqidx, qidx]
+                    - np.rint(delta_dot_a_v2[kpidx, kqidx, qidx])
+                )
+            )
+            < 1.0e-10
+        ):
             test_transfer_map[kqidx, kpidx] = qidx
 
-        # build transfer matrix based on integer version.  Pretty much we need to know 
+        # build transfer matrix based on integer version.  Pretty much we need to know
         # if the mod is zero. rint just forces this to be the integer value beacuse we are coming
-        # from float land where we aren't precise integers. 
-        # print(delta_dot_a_int_version[kpidx, kqidx, qidx],             
+        # from float land where we aren't precise integers.
+        # print(delta_dot_a_int_version[kpidx, kqidx, qidx],
         #      (np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][0])) % kmesh[0],
         #      (np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][1])) % kmesh[1],
         #      (np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][2])) % kmesh[2]
         #      )
-        if np.allclose([np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][0]) % kmesh[0],
-                        np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][1]) % kmesh[1],
-                        np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][2]) % kmesh[2],
-                       ], 0
-                      ):
+        if np.allclose(
+            [
+                np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][0]) % kmesh[0],
+                np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][1]) % kmesh[1],
+                np.rint(delta_dot_a_int_version[kpidx, kqidx, qidx][2]) % kmesh[2],
+            ],
+            0,
+        ):
             ncr_transfer_map[kqidx, kpidx] = qidx
 
     # print("kmesh")
     # print(kmesh)
-    mapping = np.where(np.sum(np.abs(delta_dot_a-int_delta_dot_a), axis=3) < 1e-10)
+    mapping = np.where(np.sum(np.abs(delta_dot_a - int_delta_dot_a), axis=3) < 1e-10)
     num_kpoints = len(kpoints)
-    momentum_transfer_map = np.zeros((num_kpoints,)*2, dtype=np.int32)
+    momentum_transfer_map = np.zeros((num_kpoints,) * 2, dtype=np.int32)
     # Note index flip due to Q being first index in map but broadcasted last..
     momentum_transfer_map[mapping[1], mapping[0]] = mapping[2]
     # print(momentum_transfer_map)
@@ -1152,9 +1246,9 @@ def test_G_vector_mapping_double():
     # print(ncr_transfer_map)
     assert np.allclose(ncr_transfer_map, momentum_transfer_map)
 
-    
     # now test building G_vecs
     from kpoint_eri.factorizations.isdf import build_G_vectors
+
     # G_dict, G_vectors = build_G_vectors(cell)
     G_vecs, G_map, G_unique, delta_Gs = build_G_vector_mappings_double_translation(
         cell, kpts, momentum_map
@@ -1173,8 +1267,7 @@ def test_G_vector_mapping_double():
             #       cell.get_scaled_kpts(G_shift)[2],)#  * kmesh[2])
             # print(cell.get_scaled_kpts(kpts[iq] + G_shift))
             print(cell.get_scaled_kpts(q))
-            print(cell.get_scaled_kpts(G_shift) + 
-                  cell.get_scaled_kpts(kpts[iq]))
+            print(cell.get_scaled_kpts(G_shift) + cell.get_scaled_kpts(kpts[iq]))
             print()
             assert np.allclose(q, kpts[iq] + G_shift)
     for iq in range(num_kpts):
@@ -1208,14 +1301,48 @@ def test_density_guess():
     num_thc = 10
     solve_kmeans_kpisdf(mf, num_thc, use_density_guess=True)
 
+
+def test_isdf_qrcp():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 4
+    cell.build()
+
+    kmesh = [1, 2, 1]
+    kpts = cell.make_kpts(kmesh)
+    mf = scf.KRHF(cell, kpts)
+    mf.chkfile = "test_qrcp_isdf.chk"
+    mf.init_guess = "chkfile"
+    mf.kernel()
+    from kpoint_eri.factorizations.isdf import setup_isdf, interp_indx_from_qrcp
+
+    grid_points, cell_periodic_grid, mo_grid = setup_isdf(mf)
+    print(grid_points.shape, cell_periodic_grid.shape)
+    c_thc = 10
+    num_mo = mf.mo_coeff[0].shape[-1]
+    num_thc = c_thc * num_mo
+    interp_indx = interp_indx_from_qrcp(cell_periodic_grid, num_thc)
+
+
 if __name__ == "__main__":
-    test_G_vector_mapping_double()
-    test_supercell_isdf_gamma()
-    test_supercell_isdf_complex()
-    test_kpoint_isdf_build()
-    test_kpoint_isdf_symmetries()
-    test_symmetry_of_G_maps()
-    test_kpoint_isdf_build_single_translation()
-    test_G_vector_mapping()
-    test_G_vector_mapping_single_translation()
-    test_density_guess()
+    # test_G_vector_mapping_double()
+    # test_supercell_isdf_gamma()
+    # test_supercell_isdf_complex()
+    # test_kpoint_isdf_build()
+    # test_kpoint_isdf_symmetries()
+    # test_symmetry_of_G_maps()
+    # test_kpoint_isdf_build_single_translation()
+    # test_G_vector_mapping()
+    # test_G_vector_mapping_single_translation()
+    # test_density_guess()
+    test_isdf_qrcp()
