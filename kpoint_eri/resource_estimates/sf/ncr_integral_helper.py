@@ -57,7 +57,7 @@ class NCRSingleFactorizationHelper:
         A = 0.5  * (rho + rho.transpose((0,2,1)).conj())
         B = 0.5j * (rho - rho.transpose((0,2,1)).conj())
 
-        assert np.allclose(rho, A + -1j * B)  # This can be removed later
+        #assert np.allclose(rho, A + -1j * B)  # This can be removed later
         return A, B
 
     def get_eri(self, ikpts, check_eq=False):
