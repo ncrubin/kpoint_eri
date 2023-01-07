@@ -50,6 +50,10 @@ def solve_isdf(orbitals, interp_indx):
     # TODO: Originally used over-determined least squares solve, does it matter?
     CC_dag_inv = np.linalg.pinv(CC_dag)
     Theta = ZC_dag @ CC_dag_inv
+    # Solve ZC_dag = Theta CC_dag
+    # -> ZC_dag^T = CC_dag^T Theta^T
+    # Theta_dag, res, rank, s = np.linalg.lstsq(CC_dag.conj().T, ZC_dag.conj().T)
+    # return Theta_dag.conj().T, interp_orbitals
     return Theta, interp_orbitals
 
 
@@ -628,7 +632,7 @@ def density_guess(density, grid_inst, grid_points, num_interp_points):
     return grid_points[indx]
 
 
-def interp_indx_from_qrcp(orbitals_on_grid, num_interp_pts):
+def interp_indx_from_qrcp(Z, num_interp_pts, return_diagonal=False):
     """Find interpolating points via QRCP
 
     Z^T P = Q R, where R has diagonal elements that are in descending order of
@@ -640,16 +644,16 @@ def interp_indx_from_qrcp(orbitals_on_grid, num_interp_pts):
     :returns interp_indx: Index of interpolating points in full real space grid.
     """
 
-    num_grid_points = orbitals_on_grid.shape[0]
-    Q, R, P = scipy.linalg.qr(orbitals_on_grid.T, pivoting=True)
-    # print(np.sign(R.diagonal()))
+    Q, R, P = scipy.linalg.qr(Z.T, pivoting=True)
     signs_R = np.diag(np.sign(R.diagonal()))
     # Force diagonal of R to be positive which isn't strictly enforced in QR factorization.
     R = np.dot(signs_R, R)
     Q = np.dot(Q, signs_R)
-    grid_indx = np.arange(num_grid_points)
-    interp_indx = grid_indx[P[:num_interp_pts]]
-    return interp_indx
+    interp_indx = P[:num_interp_pts]
+    if return_diagonal:
+        return interp_indx, R.diagonal()
+    else:
+        return interp_indx
 
 
 def setup_isdf(mf_inst, verbose=False):
@@ -692,6 +696,7 @@ def solve_kmeans_kpisdf(
     single_translation=True,
     use_density_guess=False,
     verbose=True,
+    kmeans_weighting_function="density",
 ):
     # Build real space grid, and orbitals on real space grid
     grid_points, cell_periodic_mo, bloch_orbitals_mo = setup_isdf(mf_inst)
@@ -711,9 +716,43 @@ def solve_kmeans_kpisdf(
         )
     else:
         initial_centroids = None
+    weighting_function = None
+    if kmeans_weighting_function == "density":
+        weighting_function = density
+    elif kmeans_weighting_function == "orbital_density":
+        # w(r) = sum_{ij} |phi_i(r)| |phi_j(r)|
+        tmp = np.einsum(
+            "kRi,pRj->Rkipj",
+            abs(bloch_orbitals_mo),
+            abs(bloch_orbitals_mo),
+            optimize=True,
+        )
+        weighting_function = np.einsum("Rkipj->R", tmp)
+    elif kmeans_weighting_function == "product_square_modulus":
+        # w(r) = (sum_{ki} |phi_{ki}(r)|)^2
+        weighting_function = np.einsum(
+            "kRi,kRi->R",
+            bloch_orbitals_mo.conj(),
+            bloch_orbitals_mo,
+            optimize=True,
+        )
+        weighting_function = weighting_function**2.0
+    elif kmeans_weighting_function == "sum_squares":
+        # w(r) = sum_{i} |phi_{ki}(r)|
+        weighting_function = np.einsum(
+            "kRi,kRi->R",
+            bloch_orbitals_mo.conj(),
+            bloch_orbitals_mo,
+            optimize=True,
+        )
+        weighting_function = weighting_function
+    else:
+        raise ValueError(
+            f"Unknown value for weighting function {kmeans_weighting_function}"
+        )
     interp_indx = kmeans.find_interpolating_points(
         num_interp_points,
-        density.real,
+        weighting_function.real,
         verbose=verbose,
         centroids=initial_centroids,
     )
@@ -738,7 +777,13 @@ def solve_qrcp_isdf(
     # Build real space grid, and orbitals on real space grid
     grid_points, cell_periodic_mo, bloch_orbitals_mo = setup_isdf(mf_inst)
     # Find interpolating points using K-Means CVT algorithm
-    interp_indx = interp_indx_from_qrcp(cell_periodic_mo, num_interp_points)
+    # Z_{R, (ki)(k'j)} = u_{ki}(r)* u_{k'j}(r)
+    num_grid_points = len(grid_points)
+    num_orbs = cell_periodic_mo.shape[1]
+    Z = np.einsum(
+        "Ri,Rj->Rij", cell_periodic_mo.conj(), cell_periodic_mo, optimize=True
+    ).reshape((num_grid_points, num_orbs**2))
+    interp_indx = interp_indx_from_qrcp(Z, num_interp_points)
     # Solve for THC factors.
     solution = solve_for_thc_factors(
         mf_inst,
