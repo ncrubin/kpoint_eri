@@ -25,6 +25,51 @@ def unique_iter(nmo):
             seen |= set(_symmetric_two_body_terms(quad, True))
             yield tuple(quad)
 
+def _pq_rs_two_body_terms(quad):
+    """kp = kq and kr = ks
+    thus a subset of the four-fold symmetry can be applied
+    (pkp, qkp|rkr, skr) = (qkp,pkp|skr,rkr) by complex conjucation
+    """
+    p, q, r, s = quad
+    yield p, q, r, s
+    yield q, p, s, r
+
+def unique_iter_pq_rs(nmo):
+    seen = set()
+    for quad in itertools.product(range(nmo), repeat=4):
+        if quad not in seen: 
+            seen |= set(_pq_rs_two_body_terms(quad))
+            yield tuple(quad)
+
+def _ps_qr_two_body_terms(quad):
+    """kp = ks and kq = kr
+    Thus a subset of the four-fold symmetry can be applied
+    (pkp,qkq|rkq,skp) -> (skp,rkq|qkq,pkp) by complex conj and dummy index exchange"""
+    p, q, r, s = quad
+    yield p, q, r, s
+    yield s, r, q, p
+
+def unique_iter_ps_qr_only(nmo):
+    seen = set()
+    for quad in itertools.product(range(nmo), repeat=4):
+        if quad not in seen: 
+            seen |= set(_ps_qr_two_body_terms(quad))
+            yield tuple(quad)
+
+def _pr_qs_two_body_terms(quad):
+    """kp = kr and kq = ks
+    Thus a subset of the four-fold symmetry can be applied
+    (pkp,qkq|rkp,skq) -> (rkp,skq|pkp,rkq) by dummy index exchange"""
+    p, q, r, s = quad
+    yield p, q, r, s
+    yield r, s, p, q
+
+def unique_iter_pr_qs_only(nmo):
+    seen = set()
+    for quad in itertools.product(range(nmo), repeat=4):
+        if quad not in seen: 
+            seen |= set(_pr_qs_two_body_terms(quad))
+            yield tuple(quad)
 
 
 class NCRSSparseFactorizationHelper:
@@ -65,8 +110,6 @@ class NCRSSparseFactorizationHelper:
             ks = kpts_helper.kconserv[kp, kq, kr]
             if not completed[kp,kq,kr]:
                 eri_block = self.get_eri([kp, kq, kr, ks])
-                # zero_mask = np.abs(eri_block) < self.threshold
-                # eri_block[zero_mask] = 0
                 if kp == kq == kr == ks:
                     completed[kp,kq,kr] = True
                     for ftuple in unique_iter(self.nao):
@@ -75,15 +118,21 @@ class NCRSSparseFactorizationHelper:
                 elif kp == kq and kr == ks:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
-                    counter += np.count_nonzero(eri_block)
+                    for ftuple in unique_iter_pq_rs(self.nao):
+                        p, q, r, s = ftuple
+                        counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == ks and kq == kr:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
-                    counter += np.count_nonzero(eri_block)
+                    for ftuple in unique_iter_ps_qr_only(self.nao):
+                        p, q, r, s = ftuple
+                        counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == kr and kq == ks:
                     completed[kp,kq,kr] = True
                     completed[kq,kp,ks] = True
-                    counter += np.count_nonzero(eri_block)
+                    for ftuple in unique_iter_pr_qs_only(self.nao):
+                        p, q, r, s = ftuple
+                        counter += np.count_nonzero(eri_block[p, q, r, s])
                 else:
                     counter += np.count_nonzero(eri_block)
                     completed[kp,kq,kr] = True
@@ -92,8 +141,6 @@ class NCRSSparseFactorizationHelper:
                     completed[ks,kr,kq] = True
         return counter
 
-
-        
     def get_eri(self, ikpts, check_eq=False):
         """
         Construct (pkp qkq| rkr sks) via \\sum_{n}L_{pkp,qkq,n}L_{sks, rkr, n}^{*}
