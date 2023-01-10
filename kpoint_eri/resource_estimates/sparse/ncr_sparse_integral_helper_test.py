@@ -94,7 +94,7 @@ def get_num_unique():
     import itertools
     from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk, get_kconserv
     # import the iteration routines
-    from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import unique_iter, unique_iter_pr_qs_only, unique_iter_ps_qr_only, unique_iter_pq_rs
+    from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import unique_iter, unique_iter_pr_qs, unique_iter_ps_qr, unique_iter_pq_rs
 
     tally4 = np.zeros((nmo, nmo, nmo, nmo), dtype=int)
     for ft in unique_iter(nmo):
@@ -199,7 +199,7 @@ def get_num_unique():
 
                 test_block = np.zeros_like(eri_block, dtype=int)
                 num_terms_in_block = 0
-                for p, q, r, s in unique_iter_ps_qr_only(nmo):
+                for p, q, r, s in unique_iter_ps_qr(nmo):
                     num_terms_in_block += 1
                     test_block[p, q, r, s] += 1
                     fulltally[kp, kq, kr, p, q, r, s] += 1
@@ -230,7 +230,7 @@ def get_num_unique():
 
                 test_block = np.zeros_like(eri_block, dtype=int)
                 num_terms_in_block = 0
-                for p, q, r, s in unique_iter_pr_qs_only(nmo):
+                for p, q, r, s in unique_iter_pr_qs(nmo):
                     num_terms_in_block += 1
                     test_block[p, q, r, s] += 1
                     fulltally[kp, kq, kr, p, q, r, s] += 1

@@ -49,7 +49,7 @@ def _ps_qr_two_body_terms(quad):
     yield p, q, r, s
     yield s, r, q, p
 
-def unique_iter_ps_qr_only(nmo):
+def unique_iter_ps_qr(nmo):
     seen = set()
     for quad in itertools.product(range(nmo), repeat=4):
         if quad not in seen: 
@@ -64,7 +64,7 @@ def _pr_qs_two_body_terms(quad):
     yield p, q, r, s
     yield r, s, p, q
 
-def unique_iter_pr_qs_only(nmo):
+def unique_iter_pr_qs(nmo):
     seen = set()
     for quad in itertools.product(range(nmo), repeat=4):
         if quad not in seen: 
@@ -124,13 +124,13 @@ class NCRSSparseFactorizationHelper:
                 elif kp == ks and kq == kr:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
-                    for ftuple in unique_iter_ps_qr_only(self.nao):
+                    for ftuple in unique_iter_ps_qr(self.nao):
                         p, q, r, s = ftuple
                         counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == kr and kq == ks:
                     completed[kp,kq,kr] = True
                     completed[kq,kp,ks] = True
-                    for ftuple in unique_iter_pr_qs_only(self.nao):
+                    for ftuple in unique_iter_pr_qs(self.nao):
                         p, q, r, s = ftuple
                         counter += np.count_nonzero(eri_block[p, q, r, s])
                 else:
