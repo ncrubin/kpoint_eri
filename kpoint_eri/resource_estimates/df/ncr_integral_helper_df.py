@@ -578,8 +578,8 @@ class DFABV2KpointIntegrals:
         nkpts = self.nk
         nmo = self.nao
         naux = self.naux
-        self.amat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
-        self.bmat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
+        #self.amat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
+        #self.bmat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
         self.amat_lambda_vecs = np.empty((nkpts, nkpts, naux), dtype=object)
         self.bmat_lambda_vecs = np.empty((nkpts, nkpts, naux), dtype=object)
         for qidx, kidx in itertools.product(range(nkpts), repeat=2):
@@ -588,11 +588,11 @@ class DFABV2KpointIntegrals:
             assert naux_qk <= naux
             for nc in range(naux_qk):
                 amat_n_eigs, amat_n_eigv = get_df_factor(Amats[nc], thresh)
-                self.amat_n_mats[kidx, qidx][nc, :, :] = amat_n_eigv @ np.diag(amat_n_eigs) @ amat_n_eigv.conj().T
+                #self.amat_n_mats[kidx, qidx][nc, :, :] = amat_n_eigv @ np.diag(amat_n_eigs) @ amat_n_eigv.conj().T
                 self.amat_lambda_vecs[kidx, qidx, nc] = amat_n_eigs
 
                 bmat_n_eigs, bmat_n_eigv = get_df_factor(Bmats[nc], thresh)
-                self.bmat_n_mats[kidx, qidx][nc, :, :] = bmat_n_eigv @ np.diag(bmat_n_eigs) @ bmat_n_eigv.conj().T
+                #self.bmat_n_mats[kidx, qidx][nc, :, :] = bmat_n_eigv @ np.diag(bmat_n_eigs) @ bmat_n_eigv.conj().T
                 self.bmat_lambda_vecs[kidx, qidx, nc] = bmat_n_eigs
 
         return
