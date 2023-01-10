@@ -1,4 +1,5 @@
 from functools import reduce
+import itertools
 import numpy as np
 from pyscf.pbc import gto, scf, mp, cc
 
@@ -66,32 +67,34 @@ def get_num_unique():
     cell.verbose = 0
     cell.build()
 
-    kmesh = [1, 3, 4]
+    kmesh = [1, 2, 3]
     kpts = cell.make_kpts(kmesh)
     nk = len(kpts)
     nmo = cell.nao
 
+    from pyscf.pbc.scf.chkfile import load_scf
+    mf = scf.KRHF(cell, kpts).rs_density_fit()
+    mf.chkfile = 'test_sparse_iterate.chk'
+    # cell, scf_dict = load_scf(mf.chkfile)
+    # mf.mo_coeff = scf_dict['mo_coeff']
+    # mf.mo_occ = scf_dict['mo_occ']
+    # mf.mo_energy = scf_dict['mo_energy']
+    # mf.e_tot = scf_dict['e_tot']
+    # mf.kpts = scf_dict['kpts']
+    mf.kernel()
+    # test_e_tot = mf.energy_tot()
+    # print(test_e_tot)
+    # print(mf.e_tot)
+    # exit()
+
+    mymp = mp.KMP2(mf)
+    Luv = cholesky_from_df_ints(mymp)
+    helper = NCRSSparseFactorizationHelper(cholesky_factor=Luv, kmf=mf)
+
     import itertools
     from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk, get_kconserv
-
-    def _symmetric_two_body_terms(quad, complex_valued):
-        p, q, r, s = quad
-        yield p, q, r, s
-        yield q, p, s, r
-        yield s, r, q, p
-        yield r, s, p, q
-        if not complex_valued:
-            yield p, s, r, q
-            yield q, r, s, p
-            yield s, p, q, r
-            yield r, q, p, s 
-
-    def unique_iter(nmo):
-        seen = set()
-        for quad in itertools.product(range(nmo), repeat=4):
-            if quad not in seen:
-                seen |= set(_symmetric_two_body_terms(quad, True))
-                yield tuple(quad)
+    # import the iteration routines
+    from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import unique_iter, unique_iter_pr_qs, unique_iter_ps_qr, unique_iter_pq_rs
 
     tally4 = np.zeros((nmo, nmo, nmo, nmo), dtype=int)
     for ft in unique_iter(nmo):
@@ -119,14 +122,17 @@ def get_num_unique():
     completed = np.zeros((nkpts,nkpts,nkpts), dtype=bool)
     tally = np.zeros((nkpts,nkpts,nkpts), dtype=int)
     fulltally = np.zeros((nkpts,nkpts,nkpts, nmo, nmo, nmo, nmo), dtype=int)
+    nk_count = 0
     for kvals in loop_kkk(nk):
         kp, kq, kr = kvals
         ks = kpts_helper.kconserv[kp, kq, kr]
         if not completed[kp,kq,kr]:
+            eri_block = helper.get_eri([kp, kq, kr, ks])
+            nk_count += 1
             if kp == kq == kr == ks:
                 completed[kp,kq,kr] = True
                 tally[kp,kq,kr] += 1 
-                for ftuple in unique_iter(nmo):
+                for ftuple in unique_iter(nmo):  # iterate over unique whenever all momentum indices are the same
                     p, q, r, s = ftuple
                     if p == q == r == s:
                         fulltally[kp, kq, kr, p, q, r, s] += 1
@@ -151,8 +157,36 @@ def get_num_unique():
                 tally[kp,kq,kr] += 1 
                 tally[kr,ks,kp] += 1 
 
-                fulltally[kp, kq, kr] += 1
-                fulltally[kr, ks, kp] += 1
+                # the full (kp kq | kr ks) gets mapped to (kr, ks | kp  kq)
+                # fulltally[kp, kq, kr] += 1
+                # fulltally[kr, ks, kp] += 1
+
+                # we only need to count the single eri block because (kp, kq kr ks) -> (kr, ks, kp kq) 1:1.
+                # but for (p q | r s) -> (qp|sr) so we are overcounting. by a little. 
+                # (q p | s r)
+                # since we have a complex conjugation symmetry in both we really have (npair, npair) here.
+                # we can use pyscf.ao2mo to do this.
+                    
+                test_block = np.zeros_like(eri_block, dtype=int)
+                num_terms_in_block = 0
+                for p, q, r, s in unique_iter_pq_rs(nmo):
+                    num_terms_in_block += 1
+                    test_block[p, q, r, s] += 1
+                    fulltally[kp, kq, kr, p, q, r, s] += 1
+                    fulltally[kr, ks, kp, r, s, p, q] += 1
+                    if p == q and r == s:
+                        continue
+                    else:
+                        test_block[q, p, s, r] += 1
+                        fulltally[kp, kq, kr, q, p, s, r] += 1
+                        fulltally[kr, ks, kp, s, r, q, p] += 1
+
+                for p, q, r, s in itertools.product(range(helper.nao), repeat=4):
+                    if not np.isclose(test_block[p, q, r, s], 1):
+                        print(p, q, r, s, test_block[p, q, r, s])
+                assert np.allclose(test_block, 1)
+                
+                assert num_terms_in_block <= helper.nao**4
 
             elif kp == ks and kq == kr:
                 completed[kp,kq,kr] = True
@@ -160,8 +194,29 @@ def get_num_unique():
                 tally[kp,kq,kr] += 1 
                 tally[kr,ks,kp] += 1 
 
-                fulltally[kp, kq, kr] += 1
-                fulltally[kr, ks, kp] += 1
+                # fulltally[kp, kq, kr] += 1
+                # fulltally[kr, ks, kp] += 1
+
+                test_block = np.zeros_like(eri_block, dtype=int)
+                num_terms_in_block = 0
+                for p, q, r, s in unique_iter_ps_qr(nmo):
+                    num_terms_in_block += 1
+                    test_block[p, q, r, s] += 1
+                    fulltally[kp, kq, kr, p, q, r, s] += 1
+                    fulltally[kr, ks, kp, r, s, p, q] += 1
+                    if p == s and q == r:
+                        continue
+                    else:
+                        test_block[s, r, q, p] += 1
+                        fulltally[kp, kq, kr, s, r, q, p] += 1
+                        fulltally[kr, ks, kp, q, p, s, r] += 1
+
+                for p, q, r, s in itertools.product(range(helper.nao), repeat=4):
+                    if not np.isclose(test_block[p, q, r, s], 1):
+                        print(p, q, r, s, test_block[p, q, r, s])
+                assert np.allclose(test_block, 1)
+
+                assert num_terms_in_block <= helper.nao**4
 
 
             elif kp == kr and kq == ks:
@@ -170,8 +225,29 @@ def get_num_unique():
                 tally[kp,kq,kr] += 1 
                 tally[kq,kp,ks] += 1 
                 # symmetry takes account of [kq, kp, ks] only need to do one of the blocks
-                fulltally[kp, kq, kr] += 1
-                fulltally[kq, kp, ks] += 1
+                # fulltally[kp, kq, kr] += 1
+                # fulltally[kq, kp, ks] += 1
+
+                test_block = np.zeros_like(eri_block, dtype=int)
+                num_terms_in_block = 0
+                for p, q, r, s in unique_iter_pr_qs(nmo):
+                    num_terms_in_block += 1
+                    test_block[p, q, r, s] += 1
+                    fulltally[kp, kq, kr, p, q, r, s] += 1
+                    fulltally[kq, kp, ks, q, p, s, r] += 1
+                    if p == r and q == s:
+                        continue
+                    else:
+                        test_block[r, s, p, q] += 1
+                        fulltally[kp, kq, kr, r, s, p, q] += 1
+                        fulltally[kq, kp, ks, s, r, q, p] += 1
+
+                for p, q, r, s in itertools.product(range(helper.nao), repeat=4):
+                    if not np.isclose(test_block[p, q, r, s], 1):
+                        print(p, q, r, s, test_block[p, q, r, s])
+                assert np.allclose(test_block, 1)
+
+                assert num_terms_in_block <= helper.nao**4
 
             else:
                 completed[kp,kq,kr] = True
@@ -212,8 +288,10 @@ def get_num_unique():
             assert np.allclose(fulltally[kr, ks, kp], 1)
 
         assert np.allclose(fulltally[kp, kp, kp], 1)
+    
+    print("PASSED TEST")
 
 
 if __name__ == "__main__":
     get_num_unique()
-    test_ncr_sparse_int_obj()
+    # test_ncr_sparse_int_obj()
