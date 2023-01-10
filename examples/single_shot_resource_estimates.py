@@ -32,7 +32,7 @@ import pandas as pd
 from pyscf.pbc import gto, cc, scf, mp
 from pyscf.pbc.mp.kmp2 import _add_padding
 from pyscf.pbc.scf.chkfile import load_scf
-from pyscf.pbc.tools.k2gamma import k2gamma
+from pyscf.pbc.tools.k2gamma import k2gamma, kpts_to_kmesh
 from pyscf import ao2mo
 
 from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import (
@@ -62,8 +62,20 @@ from kpoint_eri.resource_estimates.df.compute_lambda_df import (
     compute_lambda_ncr_v2 as compute_lambda_df
 )
 from kpoint_eri.resource_estimates.df.compute_df_resources import (
-    compute_cost as kpoint_df_costs
+    compute_cost as kpoint_df_costs,
 )
+
+from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
+from kpoint_eri.resource_estimates.thc.compute_lambda_thc import (
+    compute_lambda_ncr_v2 as compute_lambda_thc,
+)
+from kpoint_eri.resource_estimates.thc.compute_thc_resources import (
+    compute_cost as compute_cost_thc,
+)
+from kpoint_eri.resource_estimates.thc.integral_helper import (
+    KPTHCHelperDoubleTranslation,
+)
+
 
 def initialize_scf():
     kmesh = [1, 1, 3]
@@ -307,6 +319,79 @@ def get_resources(chkfile, sys_name, rs_gdf_h5file=None, sparse_threshold=1.0E-4
                                                    )
     return sparse_resource_obj, sf_resource_obj, df_resource_obj
 
+    ### THC COSTS ###
+    # For the ISDF guess we need an FFTDF MF object (really just need the grids so a bit of a hack)
+    # Have not checked carefully the sensitivity of ISDF to real space grid size
+    # and just use that determined by pyscf, which is usually not too big. If
+    # you find a ridiculously large FFT grid it might be necessary to set
+    # mf_fftdf.cell.mesh = [40, 40, 40], or simimlar (I've tested up to ~ 50^3).
+    # Since we're fitting to RSGDF it isn't very important what the value is and
+    # there is some tradeoff (grid density vs comp time) which afaik has not
+    # been carefully studied (or at least not published)
+    # Subsequent optimization attempts to fit to the RSGDF integrals which
+    # should hopefully be somewhat close to the FFTDF ones for ISDF to be a good starting point.
+    mf_fftdf = scf.KRHF(cell, kpts)
+    mf_fftdf.max_memory = 180000
+    mf_fftdf.kpts = scf_dict["kpts"]
+    mf_fftdf.e_tot = scf_dict["e_tot"]
+    mf_fftdf.mo_coeff = scf_dict["mo_coeff"]
+    mf_fftdf.mo_energy = scf_dict["mo_energy"]
+    mf_fftdf.mo_occ = scf_dict["mo_occ"]
+
+    # Use cthc = 6 as the rank parameter, typically sufficient post optimization
+    cthc = 6
+    # File to save THC factors to.
+    basename = f"thc_{cthc}"
+    # Finds the THC factors starting from ISDF (written to baename + _isdf.h5), BFGS (_bfgs.h5), and adagrad (_adagrad.h5)
+    chi_ada, zeta_ada, G_map, info = kpoint_thc_via_isdf(
+        mf_fftdf,
+        Luv,
+        cthc * nmo,
+        checkpoint_basename=basename,
+        perform_adagrad_opt=True,
+        perform_bfgs_opt=True,
+        verbose=True,
+        adagrad_maxiter=3000,
+        bfgs_maxiter=3000,
+    )
+    # info["loss_adagrad"] yields loss function value
+    # Now we swtich back to using rsgdf mf object
+    helper = KPTHCHelperDoubleTranslation(chi_ada, zeta_ada, kmf, chol=Luv)
+    thc_lambda_tot, thc_lambda_one_body, thc_lambda_two_body = compute_lambda_thc(
+        hcore_mo, helper
+    )
+    kmesh = kpts_to_kmesh(kmf.cell, kmf.kpts)
+    # THC resource estimates is only called once
+    beta = np.ceil(5.652 + np.log2(num_spin_orbs * num_kpts / dE_for_qpe))
+    # beta should be around 16-20 or so.
+    thc_res_cost = compute_cost_thc(
+        n=num_spin_orbs,
+        lam=thc_lambda_tot,
+        dE=dE_for_qpe,
+        chi=chi,
+        beta=beta,
+        M=chi_ada.shape[-1],
+        Nkx=kmesh[0],
+        Nky=kmesh[1],
+        Nkz=kmesh[2],
+        stps=20_000,
+    )
+    thc_resource_obj = THCFactorizationResources(
+        system_name="{}_thc".format(sys_name),
+        num_spin_orbitals=num_spin_orbs,
+        nkpts=len(kmf.kpts),
+        lambda_tot=thc_lambda_tot,
+        lambda_one_body=thc_lambda_one_body,
+        lambda_two_body=thc_lambda_two_body,
+        toffolis_per_step=thc_res_cost[0],
+        total_toffolis=thc_res_cost[1],
+        logical_qubits=thc_res_cost[2],
+        dE=dE_for_qpe,
+        chi=chi,
+        beta=beta,
+        mp2_energy=None,
+    )
+    return sparse_resource_obj, sf_resource_obj, df_resource_obj, thc_resource_obj
 
 
 if __name__ == "__main__":
@@ -317,9 +402,14 @@ if __name__ == "__main__":
             initialize_scf() # this sets up a sample scf 
 
     ### START HERE IF RUNNING IN PRODUCTION AND SET TEST_RUN = False ###
-    scf_chkfile_name = 'ncr_c2.chk' # name of LNO system goes here
-    sys_name = 'C2'
-    sparse_resource_obj, sf_resource_obj, df_resource_obj = get_resources(scf_chkfile_name, sys_name=sys_name)
+    scf_chkfile_name = "ncr_c2.chk"  # name of LNO system goes here
+    sys_name = "C2"
+    (
+        sparse_resource_obj,
+        sf_resource_obj,
+        df_resource_obj,
+        thc_resource_obj,
+    ) = get_resources(scf_chkfile_name, sys_name=sys_name)
     ### SAVE THE OBJECTS using dict() to JSON dump ###
     import json
     with open('{}_sparse.json'.format(sys_name), 'w') as fid:
@@ -328,6 +418,8 @@ if __name__ == "__main__":
         json.dump(sf_resource_obj.dict(), fp=fid)
     with open('{}_df.json'.format(sys_name), 'w') as fid:
         json.dump(df_resource_obj.dict(), fp=fid)
+    with open("{}_thc.json".format(sys_name), "w") as fid:
+        json.dump(thc_resource_obj.dict(), fp=fid)
 
     if TEST_RUN:
         with open('{}_sparse.json'.format(sys_name), 'r') as fid:
@@ -336,7 +428,10 @@ if __name__ == "__main__":
             test_sf_resource_dict = json.load(fid)
         with open('{}_df.json'.format(sys_name), 'r') as fid:
             test_df_resource_dict = json.load(fid)
+        with open("{}_thc.json".format(sys_name), "r") as fid:
+            test_thc_resource_dict = json.load(fid)
 
         assert test_sparse_resource_dict == sparse_resource_obj.dict()
         assert test_sf_resource_dict == sf_resource_obj.dict()
         assert test_df_resource_dict == df_resource_obj.dict()
+        assert test_thc_resource_dict == thc_resource_obj.dict()
