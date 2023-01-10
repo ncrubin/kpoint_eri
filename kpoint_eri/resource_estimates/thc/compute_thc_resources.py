@@ -62,7 +62,11 @@ def compute_cost(n: int,
         total_cost (int) - Total number of Toffolis
         ancilla_cost (int) - Total ancilla cost
     """
-    nk = np.ceil(np.log2(Nkx)) + np.ceil(np.log2(Nky)) + np.ceil(np.log2(Nkz))
+    nk = (
+        max(np.ceil(np.log2(Nkx)), 1)
+        + max(np.ceil(np.log2(Nky)), 1)
+        + max(np.ceil(np.log2(Nkz)), 1)
+    )
     Nk = Nkx * Nky * Nkz
 
     # The number of steps needed
