@@ -155,6 +155,25 @@ class DoubleFactorizationResources:
 
     dict = asdict
 
+@dataclass
+class THCFactorizationResources:
+    system_name: str
+    num_spin_orbitals: int
+    nkpts: int
+    M: int
+    lambda_tot: float
+    lambda_one_body: float
+    lambda_two_body: float
+    toffolis_per_step: int
+    total_toffolis: int
+    logical_qubits: int
+    dE: float
+    chi: float
+    beta: float
+    mp2_energy: None
+
+    dict = asdict
+
 
 def get_resources(chkfile, sys_name, rs_gdf_h5file=None, sparse_threshold=1.0E-4, sf_nmo_multiplier=5.0, df_thresh=1.0E-3):
     """
@@ -317,7 +336,6 @@ def get_resources(chkfile, sys_name, rs_gdf_h5file=None, sparse_threshold=1.0E-4
                                                    Lxi=num_eigs,
                                                    mp2_energy=None
                                                    )
-    return sparse_resource_obj, sf_resource_obj, df_resource_obj
 
     ### THC COSTS ###
     # For the ISDF guess we need an FFTDF MF object (really just need the grids so a bit of a hack)
@@ -380,6 +398,7 @@ def get_resources(chkfile, sys_name, rs_gdf_h5file=None, sparse_threshold=1.0E-4
         system_name="{}_thc".format(sys_name),
         num_spin_orbitals=num_spin_orbs,
         nkpts=len(kmf.kpts),
+        M=chi_ada.shape[-1],
         lambda_tot=thc_lambda_tot,
         lambda_one_body=thc_lambda_one_body,
         lambda_two_body=thc_lambda_two_body,
