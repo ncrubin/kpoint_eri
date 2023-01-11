@@ -72,7 +72,6 @@ def compute_cost(n: int,
     # The number of steps needed
     iters = np.ceil(np.pi * lam / (2 * dE))
 
-
     #This is the number of distinct items of data we need to output,  see Eq. (28).*)
     d = int((2*Nkx - 1)*(2*Nky - 1)*(2*Nkz - 1) * M**2 / 2 + n * Nk / 2)
 
@@ -150,7 +149,7 @@ def compute_cost(n: int,
     cs4 = 12*Nk + 4*np.ceil(np.log2(Nk*(M + n/2))) + 4*np.ceil(np.log2(Nk*M))
 
     # The cost of the controlled selection of the X vs Y.
-    cs5 = 2
+    cs5 = 2 + 4 * (Nk - 1)
 
     # Cost of converting to two' s complement and addition
     cs6 = 8*(nk - 3)
@@ -260,8 +259,14 @@ if __name__ == "__main__":
     chi = 10
     beta = 16
     M = 350
+
+    res = compute_cost(n, lam, dE, chi, beta, M, 1, 1, 1, 20_000)
+    assert np.isclose(res[0], 30422)
+    assert np.isclose(res[1], 14703043866)
+    assert np.isclose(res[2], 2195)
+
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 3, 3, 20_000)
-    print(res)  #{118264, 57157345992, 20441
-    assert np.isclose(res[0], 118264)
-    assert np.isclose(res[1], 57157345992)
+    print(res)  # 118368, 57207609504, 20441}
+    assert np.isclose(res[0], 118368)
+    assert np.isclose(res[1], 57207609504)
     assert np.isclose(res[2], 20441)

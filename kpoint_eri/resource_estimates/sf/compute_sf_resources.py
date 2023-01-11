@@ -147,7 +147,8 @@ def kpoint_single_factorization_costs(n: int,
     cost1a = 2*(3*nMN + 2*br1 - 9)
 
     # We have added two qubits for ell <> 0.
-    bMN = 2*(np.ceil(np.log2(Nk)) + np.ceil(np.log2(M))) + chi + 2
+    # bMN = 2*(np.ceil(np.log2(Nk)) + np.ceil(np.log2(M))) + chi + 2
+    bMN = nMN + 2*np.ceil(np.log2(Nk)) + chi + 2
 
     # QROM costs for first register preparation in step 1(b)
     cost1b = QR_ncr(M * Nk + 1, bMN)[-1] + QI(M * Nk + 1)[-1]
@@ -263,11 +264,11 @@ if __name__ == "__main__":
     
     # stps = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)[0]
     res = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)
-    assert np.isclose(res[0], 343289)
-    assert np.isclose(res[1], 1656428813997)
-    assert np.isclose(res[2], 97634)
+    assert np.isclose(res[0], 343247)
+    assert np.isclose(res[1], 1656226156731)
+    assert np.isclose(res[2], 97628)
 
     res = kpoint_single_factorization_costs(n, lam, L, 3**3, dE, chi, 20_000)
-    assert np.isclose(res[0], 1172424)
-    assert np.isclose(res[1], 5657148629352)
-    assert np.isclose(res[2], 221364)
+    assert np.isclose(res[0], 1172349)
+    assert np.isclose(res[1], 5656786741377)
+    assert np.isclose(res[2], 221359)

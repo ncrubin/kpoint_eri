@@ -31,11 +31,17 @@ def test_estimate():
     L = 275
     dE = 0.001
     chi = 10
+    
+    # stps = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)[0]
+    res = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)
+    assert np.isclose(res[0], 343247)
+    assert np.isclose(res[1], 1656226156731)
+    assert np.isclose(res[2], 97628)
 
-    stps2 = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20000)
-    assert np.isclose(stps2[0], 33721)
-    assert np.isclose(stps2[1], 162709658733)
-    assert np.isclose(stps2[2], 7206)
+    res = kpoint_single_factorization_costs(n, lam, L, 3**3, dE, chi, 20_000)
+    assert np.isclose(res[0], 1172349)
+    assert np.isclose(res[1], 5656786741377)
+    assert np.isclose(res[2], 221359)
 
 def test_carbon_multikpoint():
     from functools import reduce
@@ -145,9 +151,10 @@ def test_carbon_multikpoint():
             fid.create_dataset(name='total_qubits', data=np.array(total_logical_qubits))
 
 
-
-
-# if __name__ == "__main__":
+if __name__ == "__main__":
+    test_qr2()
+    test_qi2()
+    test_estimate()
 #     # 4 1.3687733767446255 2 1 0.0016 10 (n, lambda, M, nkpts, de, chi)
 #     res = kpoint_single_factorization_costs(n=4, lam=1.3687733767446255, M=2, Nk=1, dE=0.0016, chi=10, stps=20_000)
 # 

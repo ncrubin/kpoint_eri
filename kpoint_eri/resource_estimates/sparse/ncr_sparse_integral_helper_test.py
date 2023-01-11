@@ -288,7 +288,7 @@ def get_num_unique():
             assert np.allclose(fulltally[kr, ks, kp], 1)
 
         assert np.allclose(fulltally[kp, kp, kp], 1)
-    
+
     print("PASSED TEST")
 
 
