@@ -94,7 +94,7 @@ class NCRSSparseFactorizationHelper:
         self.k_transfer_map = k_transfer_map
         self.threshold = threshold
 
-    def get_total_unique_terms_above_thresh(self,):
+    def get_total_unique_terms_above_thresh(self, return_nk_counter=True):
         """
         Determine all unique (pkp, qkq|rkr, sks) given momentum conservation and four fold symmetry
 
@@ -105,10 +105,12 @@ class NCRSSparseFactorizationHelper:
         nkpts = len(self.kmf.kpts)
         completed = np.zeros((nkpts,nkpts,nkpts), dtype=bool)
         counter = 0
+        nk_counter = 0
         for kvals in loop_kkk(nkpts):
             kp, kq, kr = kvals
             ks = kpts_helper.kconserv[kp, kq, kr]
             if not completed[kp,kq,kr]:
+                nk_counter += 1
                 eri_block = self.get_eri([kp, kq, kr, ks])
                 if kp == kq == kr == ks:
                     completed[kp,kq,kr] = True
@@ -187,6 +189,8 @@ class NCRSSparseFactorizationHelper:
                     completed[kr,ks,kp] = True
                     completed[kq,kp,ks] = True
                     completed[ks,kr,kq] = True
+        if return_nk_counter:
+            return counter, nk_counter
         return counter
 
     def get_eri(self, ikpts, check_eq=False):
