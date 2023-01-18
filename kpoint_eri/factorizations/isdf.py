@@ -698,6 +698,7 @@ def solve_kmeans_kpisdf(
     verbose=True,
     kmeans_weighting_function="density",
 ):
+    print(f" K-Means weightig function: {kmeans_weighting_function}")
     # Build real space grid, and orbitals on real space grid
     grid_points, cell_periodic_mo, bloch_orbitals_mo = setup_isdf(mf_inst)
     grid_inst = gen_grid.UniformGrids(mf_inst.cell)
