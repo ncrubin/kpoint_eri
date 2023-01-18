@@ -3,6 +3,7 @@ import numpy as np
 from scipy.optimize import minimize
 from uuid import uuid4
 import math
+import time
 
 from jax.config import config
 
@@ -419,6 +420,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         batch_size,
         penalty_param=0.0,
     )
+    start = time.time()
     reg_loss = thc_objective_regularized_batched(
         jnp.array(initial_guess),
         num_orb,
@@ -430,6 +432,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         batch_size,
         penalty_param=1.0,
     )
+    print("Time to evaluate loss function : {:.4f}".format(time.time()-start))
     print("loss {}".format(loss))
     # set penalty
     lambda_z = (reg_loss - loss) ** 0.5
@@ -442,6 +445,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     # L-BFGS-B optimization
     thc_grad = jax.grad(thc_objective_regularized_batched, argnums=[0])
     print("Initial Grad")
+    start = time.time()
     print(
         thc_grad(
             jnp.array(initial_guess),
@@ -455,6 +459,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
             penalty_param,
         )
     )
+    print("# Time to evaluate gradient: {:.4f}".format(time.time()-start))
     res = minimize(
         thc_objective_regularized_batched,
         initial_guess,
@@ -701,6 +706,7 @@ def kpoint_thc_via_isdf(
     """
     # Perform initial ISDF calculation of THC factors
     info = {}
+    start = time .time()
     if initial_guess is not None:
         chi, zeta, xi, G_mapping = initial_guess
     else:
@@ -712,6 +718,8 @@ def kpoint_thc_via_isdf(
             max_kmeans_iteration=max_kmeans_iteration,
             use_density_guess=isdf_density_guess,
         )
+    if verbose:
+        print("Time for generating initial guess {:.4f}".format(time.time()-start))
     num_mo = kmf.mo_coeff[0].shape[-1]
     num_kpts = len(kmf.kpts)
     if save_checkoints:
@@ -727,6 +735,7 @@ def kpoint_thc_via_isdf(
         cholesky_contiguous = make_contiguous_cholesky(cholesky)
         info["loss_isdf"] = compute_isdf_loss(chi, zeta, momentum_map,
                     G_mapping, cholesky_contiguous)
+    start = time.time()
     if perform_bfgs_opt:
         if save_checkoints:
             chkfile_name = f"{checkpoint_basename}_bfgs.h5"
@@ -761,6 +770,9 @@ def kpoint_thc_via_isdf(
         chi, zeta = unpack_thc_factors(
             opt_params, num_thc, num_mo, num_kpts, num_G_per_Q
         )
+    if verbose:
+        print("Time for BFGS {:.4f}".format(time.time()-start))
+    start = time.time()
     if perform_adagrad_opt:
         if save_checkoints:
             chkfile_name = f"{checkpoint_basename}_adagrad.h5"
@@ -782,4 +794,6 @@ def kpoint_thc_via_isdf(
         chi, zeta = unpack_thc_factors(
             opt_params, num_thc, num_mo, num_kpts, num_G_per_Q
         )
+    if verbose:
+        print("Time for ADAGRAD {:.4f}".format(time.time()-start))
     return chi, zeta, G_mapping, info
