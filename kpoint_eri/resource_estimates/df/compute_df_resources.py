@@ -37,8 +37,9 @@ def compute_cost(n: int,
                  Lxi: int,
                  chi: int,
                  beta: int,
-                 Nk: int,
-                 nk: int,
+                 Nkx: int,
+                 Nky: int,
+                 Nkz: int,
                  stps: int,
                  verbose: bool = False) -> Tuple[int, int, int]:
     """ Determine fault-tolerant costs using DF decomposition in quantum chem
@@ -53,8 +54,9 @@ def compute_cost(n: int,
             number of bits for the representation of the coefficients
         beta (int) - equivalent to beth in the document, the number of bits
             for the rotations
-        Nk (int) - Number of k-points
-        nk (int) - number of bits to store Nk, approximately log2(Nk)
+        Nkx (int) - Number of k-points in x-direction
+        Nky (int) - Number of k-points in y-direction
+        Nkz (int) - Number of k-points in z-direction
         stps (int) - an approximate number of steps to choose the precision of
             single qubit rotations in preparation of the equal superpositn state
         verbose (bool) - do additional printing of intermediates?
@@ -64,9 +66,15 @@ def compute_cost(n: int,
         total_cost (int) - Total number of Toffolis
         ancilla_cost (int) - Total ancilla cost
     """
+    nNk = (
+        max(np.ceil(np.log2(Nkx)), 1)
+        + max(np.ceil(np.log2(Nky)), 1)
+        + max(np.ceil(np.log2(Nkz)), 1)
+    )
+    Nk = Nkx * Nky * Nkz
 
     # The number of bits used for the second register.
-    nxi = np.ceil(np.log2(nk * n // 2))
+    nxi = np.ceil(np.log2(Nk * n // 2))
 
     # The number of bits for the contiguous register.
     nLxi = np.ceil(np.log2(Lxi + Nk * n // 2))
@@ -80,8 +88,6 @@ def compute_cost(n: int,
         eta = factors[min(list(sorted(factors.keys())))]
     else:
         eta = 0
-
-    # eta = power_two(L + 1)
 
     oh = [0] * 20
     for p in range(20):
@@ -119,7 +125,7 @@ def compute_cost(n: int,
     # The output size for the QROM for the data to prepare the equal
     # superposition on the second register, as given in Eq. (C29).
     bo = nxi + nLxi + br + 1
-    bo = bo + nk # account for k-point sampling outputting values of Q.
+    bo = bo + nNk # account for k-point sampling outputting values of Q.
 
     # This is step 2. This is the cost of outputting the data to prepare the
     # equal superposition on the second register. We will assume it is not
@@ -156,7 +162,7 @@ def compute_cost(n: int,
     cost4ah = 4 * (nLxi - 1)
 
     # The costs of the QROMs and their inverses in steps 4 (b) and (g).
-    cost4bg = QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nk)[1] + QI(Lxi + Nk * n // 2)[1] + QR_ncr(
+    cost4bg = QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nNk)[1] + QI(Lxi + Nk * n // 2)[1] + QR_ncr(
         Lxi, 4 * n)[1] + QI(Lxi)[1]
 
     # The cost of the controlled swaps based on the spin qubit in steps 4c and f
@@ -167,7 +173,15 @@ def compute_cost(n: int,
 
     # The controlled Z operations in the middle for step 4 (e).
     cost4e = 3
-    cost4e = cost4e + 4 * n * Nk + 10 * nk # extra cost of swapping into working registers and computing k-Q.
+    cost4e = cost4e + 4 * n * Nk + 12 * nNk # extra cost of swapping into working registers and computing k-Q.
+
+    # (*Adjustment for modular arithmetic costs.*)
+    if Nkx == 2**np.ceil(np.log2(Nkx)):
+        cost4e = cost4e - 2 * np.ceil(np.log2(Nkx)) 
+    if Nky == 2**np.ceil(np.log2(Nky)):
+        cost4e = cost4e - 2 * np.ceil(np.log2(Nky)) 
+    if Nkz == 2**np.ceil(np.log2(Nkz)):
+        cost4e = cost4e - 2 * np.ceil(np.log2(Nkz))
 
     # This is the cost of the controlled rotations for step 4.
     cost4 = cost4ah + cost4bg + cost4cf + cost4df + cost4e
@@ -190,7 +204,7 @@ def compute_cost(n: int,
 
     # Now the number of qubits from the list on page 54.
 
-    k1 = np.power(2, QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nk)[0])
+    k1 = np.power(2, QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nNk)[0])
 
     # The control register for phase estimation and iteration on it.
     ac1 = np.ceil(np.log2(iters + 1)) * 2 - 1
@@ -217,7 +231,7 @@ def compute_cost(n: int,
     ac9 = chi + 1
 
     # The angles for rotations.
-    ac10 = k1 * (2 * n * beta + nk)
+    ac10 = k1 * (2 * n * beta + nNk)
 
     # The phase gradient state.
     ac11 = beta
@@ -229,7 +243,7 @@ def compute_cost(n: int,
     ac13 = 1
 
     # extra for kpoint
-    ac14 = nk + 2 * n 
+    ac14 = nNk + 2 * n 
 
     if verbose:
         print("[*] Top of routine")
@@ -257,19 +271,6 @@ def compute_cost(n: int,
     return step_cost, total_cost, ancilla_cost
 
 if __name__ == "__main__":
-    num_spin_orbs = 4 
-    lamH = 1.1270376988022122 
-    dE = 0.0016 
-    L = 24 
-    Lxi = 12 
-    chi = 10 
-    beta = 20 
-    nk = 1 
-    nk = 1
-    res = compute_cost(num_spin_orbs, lamH, dE, L, Lxi, chi, beta, nk, nk, 20_000) 
-    print(res)
-
-
     nRe = 108
     lamRe = 294.8
     dE = 0.001
@@ -285,23 +286,28 @@ if __name__ == "__main__":
     LxiLi = 20115
     betaLi = 20
 
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 8, 3, 20_000) 
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 8, 3, res[0]) 
-    assert np.isclose(res[0], 48151)
-    assert np.isclose(res[1], 22297331721)
-    assert np.isclose(res[2], 8171)
-    print(res) #{48151, 22297331721, 8171}
+    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 2, 2, 2, 20_000) 
+    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 2, 2, 2, res[0]) 
+    # 48250, 22343175750, 8174
+    assert np.isclose(res[0], 48250)
+    assert np.isclose(res[1], 22343175750)
+    assert np.isclose(res[2], 8174)
 
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 8, 3, 20_000) 
-    # res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 8, 3, res[0]) 
-    print(res) # 79014, 145363399038, 13867
-    assert np.isclose(res[0], 79014)
-    assert np.isclose(res[1], 145363399038)
-    assert np.isclose(res[2], 13867)
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 8, 3, res[0])
-    assert np.isclose(res[0], 79014)
-    assert np.isclose(res[1], 145363399038)
-    assert np.isclose(res[2], 13867)
+    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 3, 5, 1, 20_000) 
+    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 3, 5, 1, res[0]) 
+    # 53146, 24610371366, 8945
+    assert np.isclose(res[0], 53146)
+    assert np.isclose(res[1], 24610371366)
+    assert np.isclose(res[2], 8945)
 
-
-
+    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 2, 2, 2, 20_000) 
+    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 2, 2, 2, res[0]) 
+    # print(res) # 79212, 145727663004, 13873
+    assert np.isclose(res[0], 79212)
+    assert np.isclose(res[1], 145727663004)
+    assert np.isclose(res[2], 13873)
+    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 3, 5, 1, res[0])
+    # print(res) # 86042, 158292930114, 14952
+    assert np.isclose(res[0], 86042)
+    assert np.isclose(res[1], 158292930114)
+    assert np.isclose(res[2], 14952)
