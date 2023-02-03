@@ -4,7 +4,7 @@ from typing import Tuple
 import numpy as np
 from numpy.lib.scimath import arccos, arcsin  # has analytc continuatn to cplx
 from sympy import factorint
-from openfermion.resource_estimates.utils import QR, QI
+from openfermion.resource_estimates.utils import QI
 
 def QR_ncr(L, M1):
     """
@@ -69,11 +69,15 @@ def compute_cost(n: int,
     )
     Nk = Nkx * Nky * Nkz
 
+    # (*Temporarily set as number of even numbers.*)
+    nc = 3 - Nkx % 2 - Nky % 2 - Nkz % 2
+
+    
     # The number of steps needed
     iters = np.ceil(np.pi * lam / (2 * dE))
 
     #This is the number of distinct items of data we need to output,  see Eq. (28).*)
-    d = int((2*Nkx - 1)*(2*Nky - 1)*(2*Nkz - 1) * M**2 / 2 + n * Nk / 2)
+    d = int(32 * (Nk - 2**nc) * M**2 / 2 + n * Nk / 2)
 
     # The number of bits used for the contiguous register
     nc = np.ceil(np.log2(d))    
@@ -82,7 +86,7 @@ def compute_cost(n: int,
 
     # The output size is 2* Log[M] for the alt values, chi for the keep value, 
     # and 2 for the two sign bits.
-    m = 2 * (2 * nM + nk + 5) + chi
+    m = 2 * (2 * nM + nk + 8) + chi
 
     oh = [0] * 20
     for p in range(20):
@@ -99,7 +103,7 @@ def compute_cost(n: int,
     br = np.argmin(oh) + 1
 
     if d % 2 == 0:
-        factors = factorint(d)
+        factors = factorint(int(d))
         eta = factors[min(list(sorted(factors.keys())))]
     else:
         eta = 0
@@ -114,10 +118,10 @@ def compute_cost(n: int,
     cp4 = 2 * chi
 
     # the cost of inequality test and controlled swap of mu and nu registers
-    cp5 = 2 * (2 * nM + nk + 4)
+    cp5 = 2 * (2 * nM + nk + 7)
 
     # The cost of an inequality test and controlled - swap of the mu and nu registers
-    cp6 = 4 * nM
+    cp6 = 4 * nM + 12
 
     CPCP = cp1 + cp3 + cp4 + cp5 + cp6
 
@@ -126,11 +130,11 @@ def compute_cost(n: int,
     # failure negligible.
     cks = 4*(Nkx + Nky + Nkz + 8*nk + 6*7 - 24)
 
-    # The cost of the arithmetic computing k - q. This cost is after removing some cost of converting to two's complement
-    cka = 8*nk - 12
+    # The cost of the arithmetic computing k - Q, and controlling swaps for the one-body term
+    cka = 12 * nk
 
     # This is the cost of swapping based on the spin register
-    cs1 = 3*n*Nk/2
+    cs1 = 3 * n * Nk / 2
 
     # The cost of controlled swaps into working registers based on the k or 
     # k - Q value.
@@ -151,8 +155,8 @@ def compute_cost(n: int,
     # The cost of the controlled selection of the X vs Y.
     cs5 = 2 + 4 * (Nk - 1)
 
-    # Cost of converting to two' s complement and addition
-    cs6 = 8*(nk - 3)
+    # Cost of computing K-Q-G
+    cs6 = 2 * nk
 
     # Cost of computing contiguous register.
     cs6 = cs6 + np.ceil(np.log2(Nkx)) * np.ceil(np.log2(Nky))
@@ -168,11 +172,17 @@ def compute_cost(n: int,
     cs6 = cs6 + np.ceil(np.log2(Nkx**2)) * np.ceil(np.log2(M))
     cs6 = cs6 + np.ceil(np.log2(Nk**2 * M))
 
+    # the times for is for computing and uncomputing twice
+    cs6 = cs6 * 4
+
     # The QROM cost once we computed the contiguous register
     cs6 = cs6 + 2 * (QR_ncr(Nk**2 * M, nk + chi)[1] + QI(Nk**2 * M)[1])
 
     # The remaining state preparation cost with coherent alias sampling.
     cs6 = cs6 + 4*(nk + chi)
+
+    # The costs of generating the symmetry in Q, with a +1 for the one-body control.
+    cs6 = cs6 + 4 * nk + 1
 
     # The total select cost.
     CS = cks + cka + cs1 + cs2 + cs2a + cs2b + cs3 + cs4 + cs5 + cs6
@@ -198,7 +208,7 @@ def compute_cost(n: int,
     ac5 = 1
 
     # kp = 2^QRa[d, m]
-    kp = np.power(2, QR(d, m)[0])
+    kp = np.power(2, QR_ncr(d, m)[0])
 
     # First round of QROM.
     ac12 = m*kp + np.ceil(np.log2(d/kp)) - 1
@@ -219,7 +229,7 @@ def compute_cost(n: int,
     ac10 = 2*nk + 3*7
 
     # The contiguous register and k-Q
-    ac11 = np.ceil(np.log2(Nk^2*M) + nk)
+    ac11 = np.ceil(np.log2(Nk**2 * M) + nk)
 
     # output for k-state
     ac12 = nk + chi
@@ -261,12 +271,20 @@ if __name__ == "__main__":
     M = 350
 
     res = compute_cost(n, lam, dE, chi, beta, M, 1, 1, 1, 20_000)
-    assert np.isclose(res[0], 30422)
-    assert np.isclose(res[1], 14703043866)
-    assert np.isclose(res[2], 2195)
+    print(res) # 26205, 12664955115, 2069
+    assert np.isclose(res[0], 26205)
+    assert np.isclose(res[1], 12664955115)
+    assert np.isclose(res[2], 2069)
 
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 3, 3, 20_000)
-    print(res)  # 118368, 57207609504, 20441}
-    assert np.isclose(res[0], 118368)
-    assert np.isclose(res[1], 57207609504)
-    assert np.isclose(res[2], 20441)
+    print(res)  # {205788, 99457957764, 78813
+    assert np.isclose(res[0], 205788)
+    assert np.isclose(res[1], 99457957764)
+    assert np.isclose(res[2], 78813)
+
+    res = compute_cost(n, lam, dE, chi, beta, M, 3, 5, 1, 20_000)
+    print(res)  # 151622, 73279367466, 39628
+    assert np.isclose(res[0], 151622)
+    assert np.isclose(res[1], 73279367466)
+    assert np.isclose(res[2], 39628)
+
