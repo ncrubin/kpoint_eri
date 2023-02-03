@@ -30,13 +30,12 @@ def QR_ncr(L, M1):
     return int(k_opt), int(val_opt)
 
 
-def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
-                stps: int) -> Tuple[int, int, int]:
+def cost_sparse(n: int, lam: float, d: int, dE: float, chi: int,
+                stps: int, Nkx: int, Nky: int, Nkz: int) -> Tuple[int, int, int]:
     """ Determine fault-tolerant costs using sparse decomposition in quantum
         chemistry
     Args:
         n (int) - the number of spin-orbitals
-        Nk (int) - the number of k-points
         lam (float) - the lambda-value for the Hamiltonian
         d (int) - number of symmetry unique terms kept in the sparse Hamiltonian
         dE (float) - allowable error in phase estimation
@@ -45,6 +44,9 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
         stps (int) - an approximate number of steps to choose the precision
             of single qubit rotations in preparation of the equal superposition
             state
+        Nkx (int) - number of k-points in x-direction
+        Nky (int) - number of k-points in y-direction
+        Nkz (int) - number of k-points in z-direction
     Returns:
         step_cost (int) - Toffolis per step
         total_cost (int) - Total number of Toffolis
@@ -53,18 +55,18 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     if n % 2 != 0:
         raise ValueError("The number of spin orbitals is always even!")
 
-    # I think there is a bug in the mathematica notebook. It does not check if
-    # 2 is a factor first, which it should, cf. the similar function in
-    # costingdf.nb Below is correct using the power_two() function, to give
-    # power of 2 that is a factor of d.
     factors = factorint(d)
     eta = factors[min(list(sorted(factors.keys())))]
-    # eta = power_two(d) # 0 if power_two(d) == 0 else power_two(d)
     if d % 2 == 1:
         eta = 0
 
     nN = np.ceil(np.log2(n // 2))
-    nNk = np.ceil(np.log2(Nk))
+    nNk = (
+        max(np.ceil(np.log2(Nkx)), 1)
+        + max(np.ceil(np.log2(Nky)), 1)
+        + max(np.ceil(np.log2(Nkz)), 1)
+    )
+    Nk = Nkx * Nky * Nkz
 
     m = chi + 8 * nN + 6 * nNk + 5  # Eq 26
 
@@ -87,8 +89,16 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
     k1 = QR_ncr(d, m)[0]
 
     # Equation (A17)
-    cost = QR_ncr(d, m)[1] + QI(d)[1] + 6 * n * Nk + 8 * nN + 10 * nNk + 2 * chi + \
+    cost = QR_ncr(d, m)[1] + QI(d)[1] + 6 * n * Nk + 8 * nN + 12 * nNk + 2 * chi + \
         7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 8
+    
+    # The following are adjustments if we don't need to do explicit arithmetic to make subtraction modular
+    if Nkx == 2**np.ceil(np.log2(Nkx)):
+        cost = cost - 2 * np.ceil(np.log2(Nkx))
+    if Nky == 2**np.ceil(np.log2(Nky)):
+        cost = cost - 2 * np.ceil(np.log2(Nky))
+    if Nkz == 2**np.ceil(np.log2(Nkz)):
+        cost = cost - 2 * np.ceil(np.log2(Nkz))
 
     # Number of iterations needed for the phase estimation.
     iters = np.ceil(np.pi * lam / (dE * 2))
@@ -103,10 +113,6 @@ def cost_sparse(n: int, Nk: int, lam: float, d: int, dE: float, chi: int,
 
     # The register used for the QROM
     ac3 = np.ceil(np.log2(d))
-
-    # The qubit used for flagging the success of the equal superposition state
-    # preparation and the ancilla qubit for rotation
-    # ac45 = 2
 
     # The phase gradient state
     ac6 = br
