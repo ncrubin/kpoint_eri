@@ -67,10 +67,12 @@ def QI2(L1, Lv2):
 def kpoint_single_factorization_costs(n: int, 
                                       lam: float, 
                                       M: int, 
-                                      Nk: int,
                                       dE: float, 
                                       chi: int, 
                                       stps: int, 
+                                      Nkx: int,
+                                      Nky: int,
+                                      Nkz: int,
                                       verbose: bool=False) -> Tuple[int, int, int]:
     """ Determine fault-tolerant costs using SF decomposition in quantum chem
 
@@ -79,20 +81,28 @@ def kpoint_single_factorization_costs(n: int,
                   k-point sampling, this is equivalent to N times N_k.
         lam (float) - the lambda-value for the Hamiltonian
         M (int) - The combined number of values of n
-        Nk (int) - Number of k-points
         dE (float) - allowable error in phase estimation
         chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
             number of bits for the representation of the coefficients
         stps (int) - an approximate number of steps to choose the precision of
             single qubit rotations in preparation of the equal superposn state
         verbose (bool) - do additional printing of intermediates?
+        Nkx (int) - num k-points in x-direction
+        Nky (int) - num k-points in y-direction
+        Nkz (int) - num k-points in z-direction
 
     Returns:
         step_cost (int) - Toffolis per step
         total_cost (int) - Total number of Toffolis
         total_qubit_count (int) - Total qubit count
     """
-    L = Nk * n * (n + 2) // 4
+    nNk = (
+        max(np.ceil(np.log2(Nkx)), 1)
+        + max(np.ceil(np.log2(Nky)), 1)
+        + max(np.ceil(np.log2(Nkz)), 1)
+    )
+    Nk = Nkx * Nky * Nkz
+    L = Nk * n**2 // 2
 
     # Number of trailing zeros by computing smallest prime factor exponent
     # Number of trailing zeros
@@ -160,12 +170,6 @@ def kpoint_single_factorization_costs(n: int,
     # Cost of preparing equal superposition of p and q registers in step 2(a).
     cost2a = 4*(3*nL - 3*eta + 2*br2 - 9)
 
-    # # Number of coefficients for first state preparation on p & q.
-    # n1 = (L + 1) * nprime
-
-    # # Number of coefficients for second state preparation on p & q.
-    # n2 = L * nprime
-
     # The output size for the QROM for the second state preparation.
     bp = 6*np.ceil(np.log2(Nk)/3) + 4*nN + chi + 3
 
@@ -176,10 +180,14 @@ def kpoint_single_factorization_costs(n: int,
     # quantum alias sampling in steps 2(c) and (d).
     cost2cd =  4*(chi + 3*np.ceil(np.log2(Nk)/3) + 2*nN + 1)
 
-
-    # Swapping the p & q registers for symmetry in step 3.  This needs to be
-    # done and inverted twice, hence the factor of 4.
-    cost3 = 4 * nN
+    # Computing k - Q and k' - Q, then below we perform adjustments for non - modular arithmetic.
+    cost3 = 4 * nNk
+    if Nkx == 2**np.ceil(np.log2(Nkx)):
+        cost3 = cost3 - 2 * np.ceil(np.log2(Nkx))
+    if Nky == 2**np.ceil(np.log2(Nky)):
+        cost3 = cost3 - 2 * np.ceil(np.log2(Nky))
+    if Nkz == 2**np.ceil(np.log2(Nkz)):
+        cost3 = cost3 - 2 * np.ceil(np.log2(Nkz))
 
     # The SELECT operation in step 4, which needs to be done twice.
     cost4 = 2*(3*n*Nk - 4)
@@ -263,12 +271,14 @@ if __name__ == "__main__":
     chi = 10
     
     # stps = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)[0]
-    res = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)
-    assert np.isclose(res[0], 343247)
-    assert np.isclose(res[1], 1656226156731)
-    assert np.isclose(res[2], 97628)
+    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 3, 3)
+    # 1663687, 8027577592851, 438447}
+    assert np.isclose(res[0], 1663687)
+    assert np.isclose(res[1], 8027577592851)
+    assert np.isclose(res[2], 438447)
 
-    res = kpoint_single_factorization_costs(n, lam, L, 3**3, dE, chi, 20_000)
-    assert np.isclose(res[0], 1172349)
-    assert np.isclose(res[1], 5656786741377)
-    assert np.isclose(res[2], 221359)
+    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 5, 1)
+    # 907828, 4380427154244, 219526
+    assert np.isclose(res[0], 907828)
+    assert np.isclose(res[1], 4380427154244)
+    assert np.isclose(res[2], 219526)
