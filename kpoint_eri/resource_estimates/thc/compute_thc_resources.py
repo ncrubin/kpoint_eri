@@ -77,7 +77,7 @@ def compute_cost(n: int,
     iters = np.ceil(np.pi * lam / (2 * dE))
 
     #This is the number of distinct items of data we need to output,  see Eq. (28).*)
-    d = int(32 * (Nk - 2**nc) * M**2 / 2 + n * Nk / 2)
+    d = int(32 * (Nk + 2**nc) * M**2 / 2 + n * Nk / 2)
 
     # The number of bits used for the contiguous register
     nc = np.ceil(np.log2(d))    
