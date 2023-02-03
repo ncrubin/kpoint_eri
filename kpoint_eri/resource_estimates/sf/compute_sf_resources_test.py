@@ -32,16 +32,17 @@ def test_estimate():
     dE = 0.001
     chi = 10
     
-    # stps = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)[0]
-    res = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)
-    assert np.isclose(res[0], 343247)
-    assert np.isclose(res[1], 1656226156731)
-    assert np.isclose(res[2], 97628)
+    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 3, 3)
+    # 1663687, 8027577592851, 438447}
+    assert np.isclose(res[0], 1663687)
+    assert np.isclose(res[1], 8027577592851)
+    assert np.isclose(res[2], 438447)
 
-    res = kpoint_single_factorization_costs(n, lam, L, 3**3, dE, chi, 20_000)
-    assert np.isclose(res[0], 1172349)
-    assert np.isclose(res[1], 5656786741377)
-    assert np.isclose(res[2], 221359)
+    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 5, 1)
+    # 907828, 4380427154244, 219526
+    assert np.isclose(res[0], 907828)
+    assert np.isclose(res[1], 4380427154244)
+    assert np.isclose(res[2], 219526)
 
 def test_carbon_multikpoint():
     from functools import reduce
