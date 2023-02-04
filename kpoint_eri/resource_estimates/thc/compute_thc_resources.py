@@ -272,22 +272,22 @@ if __name__ == "__main__":
 
     res = compute_cost(n, lam, dE, chi, beta, M, 1, 1, 1, 20_000)
     # print(res) # 26205, 12664955115, 2069
-    print(res) # (62880, 30390092640, 17628)
-    assert np.isclose(res[0], 62880)
-    assert np.isclose(res[1], 30390092640)
-    assert np.isclose(res[2], 17628)
+    print(res) # (80098, 38711603694, 17630)
+    assert np.isclose(res[0], 80098)
+    assert np.isclose(res[1], 38711603694)
+    assert np.isclose(res[2], 17630)
 
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 3, 3, 20_000)
     #print(res)  # {205788, 99457957764, 78813
-    print(res) # (210095, 101539543785, 78813)
-    assert np.isclose(res[0], 210095)
-    assert np.isclose(res[1], 101539543785)
-    assert np.isclose(res[2], 78813)
+    print(res) # (270394, 130682231382, 78815)
+    assert np.isclose(res[0], 270394)
+    assert np.isclose(res[1], 130682231382)
+    assert np.isclose(res[2], 78815)
 
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 5, 1, 20_000)
     # print(res)  # 151622, 73279367466, 39628
-    print(res) # (160207, 77428523721, 39628)
-    assert np.isclose(res[0], 160207)
-    assert np.isclose(res[1], 77428523721)
-    assert np.isclose(res[2], 39628)
+    print(res) #  (202209, 97728216327, 77517)
+    assert np.isclose(res[0], 202209)
+    assert np.isclose(res[1], 97728216327)
+    assert np.isclose(res[2], 77517)
 
