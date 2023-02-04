@@ -77,7 +77,7 @@ def compute_cost(n: int,
     iters = np.ceil(np.pi * lam / (2 * dE))
 
     #This is the number of distinct items of data we need to output,  see Eq. (28).*)
-    d = int(32 * (Nk - 2**nc) * M**2 / 2 + n * Nk / 2)
+    d = int(32 * (Nk + 2**nc) * M**2 + n * Nk / 2)
 
     # The number of bits used for the contiguous register
     nc = np.ceil(np.log2(d))    
@@ -271,20 +271,23 @@ if __name__ == "__main__":
     M = 350
 
     res = compute_cost(n, lam, dE, chi, beta, M, 1, 1, 1, 20_000)
-    print(res) # 26205, 12664955115, 2069
-    assert np.isclose(res[0], 26205)
-    assert np.isclose(res[1], 12664955115)
-    assert np.isclose(res[2], 2069)
+    # print(res) # 26205, 12664955115, 2069
+    print(res) # (80098, 38711603694, 17630)
+    assert np.isclose(res[0], 80098)
+    assert np.isclose(res[1], 38711603694)
+    assert np.isclose(res[2], 17630)
 
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 3, 3, 20_000)
-    print(res)  # {205788, 99457957764, 78813
-    assert np.isclose(res[0], 205788)
-    assert np.isclose(res[1], 99457957764)
-    assert np.isclose(res[2], 78813)
+    #print(res)  # {205788, 99457957764, 78813
+    print(res) # (270394, 130682231382, 78815)
+    assert np.isclose(res[0], 270394)
+    assert np.isclose(res[1], 130682231382)
+    assert np.isclose(res[2], 78815)
 
     res = compute_cost(n, lam, dE, chi, beta, M, 3, 5, 1, 20_000)
-    print(res)  # 151622, 73279367466, 39628
-    assert np.isclose(res[0], 151622)
-    assert np.isclose(res[1], 73279367466)
-    assert np.isclose(res[2], 39628)
+    # print(res)  # 151622, 73279367466, 39628
+    print(res) #  (202209, 97728216327, 77517)
+    assert np.isclose(res[0], 202209)
+    assert np.isclose(res[1], 97728216327)
+    assert np.isclose(res[2], 77517)
 
