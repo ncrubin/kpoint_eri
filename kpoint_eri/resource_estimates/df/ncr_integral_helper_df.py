@@ -483,7 +483,10 @@ class DFABV2KpointIntegrals:
         self.chol = cholesky_factor
         self.kmf = kmf 
         self.nk = len(self.kmf.kpts)
-        self.naux = self.chol[0, 0].shape[0]
+        naux = 0
+        for i, j in itertools.product(range(self.nk), repeat=2):
+            naux = max(self.chol[i, j].shape[0], naux)
+        self.naux = naux
         self.nao = cholesky_factor[0, 0].shape[-1]
         kpts = self.kmf.kpts
         cell = self.kmf.cell
@@ -518,11 +521,11 @@ class DFABV2KpointIntegrals:
         :param qidx: index for momentum mode Q.
         :param kidx: index for momentum mode K.
         """
-        naux = self.naux
+        k_minus_q_idx = self.k_transfer_map[qidx, kidx]
+        naux = self.chol[kidx, k_minus_q_idx].shape[0]
         nmo = self.nao
         Amat = np.zeros((naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
         Bmat = np.zeros((naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
-        k_minus_q_idx = self.k_transfer_map[qidx, kidx]
         if k_minus_q_idx == kidx:
             Amat[:, :nmo, :nmo] = self.chol[kidx, k_minus_q_idx] # beacuse L_{pK, qK,n}= L_{qK,pK,n}^{*}
             Bmat[:, :nmo, :nmo] = 0.5j * (self.chol[kidx, k_minus_q_idx] - self.chol[kidx, k_minus_q_idx].conj().transpose(0, 2, 1))
@@ -575,19 +578,21 @@ class DFABV2KpointIntegrals:
         nkpts = self.nk
         nmo = self.nao
         naux = self.naux
-        self.amat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
-        self.bmat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
+        #self.amat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
+        #self.bmat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
         self.amat_lambda_vecs = np.empty((nkpts, nkpts, naux), dtype=object)
         self.bmat_lambda_vecs = np.empty((nkpts, nkpts, naux), dtype=object)
         for qidx, kidx in itertools.product(range(nkpts), repeat=2):
             Amats, Bmats = self.build_A_B_n_q_k_from_chol(qidx, kidx) 
-            for nc in range(self.naux):
+            naux_qk = Amats.shape[0]
+            assert naux_qk <= naux
+            for nc in range(naux_qk):
                 amat_n_eigs, amat_n_eigv = get_df_factor(Amats[nc], thresh)
-                self.amat_n_mats[kidx, qidx][nc, :, :] = amat_n_eigv @ np.diag(amat_n_eigs) @ amat_n_eigv.conj().T
+                #self.amat_n_mats[kidx, qidx][nc, :, :] = amat_n_eigv @ np.diag(amat_n_eigs) @ amat_n_eigv.conj().T
                 self.amat_lambda_vecs[kidx, qidx, nc] = amat_n_eigs
 
                 bmat_n_eigs, bmat_n_eigv = get_df_factor(Bmats[nc], thresh)
-                self.bmat_n_mats[kidx, qidx][nc, :, :] = bmat_n_eigv @ np.diag(bmat_n_eigs) @ bmat_n_eigv.conj().T
+                #self.bmat_n_mats[kidx, qidx][nc, :, :] = bmat_n_eigv @ np.diag(bmat_n_eigs) @ bmat_n_eigv.conj().T
                 self.bmat_lambda_vecs[kidx, qidx, nc] = bmat_n_eigs
 
         return

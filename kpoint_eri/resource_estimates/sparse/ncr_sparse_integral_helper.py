@@ -94,7 +94,7 @@ class NCRSSparseFactorizationHelper:
         self.k_transfer_map = k_transfer_map
         self.threshold = threshold
 
-    def get_total_unique_terms_above_thresh(self,):
+    def get_total_unique_terms_above_thresh(self, return_nk_counter=True):
         """
         Determine all unique (pkp, qkq|rkr, sks) given momentum conservation and four fold symmetry
 
@@ -105,40 +105,92 @@ class NCRSSparseFactorizationHelper:
         nkpts = len(self.kmf.kpts)
         completed = np.zeros((nkpts,nkpts,nkpts), dtype=bool)
         counter = 0
+        nk_counter = 0
         for kvals in loop_kkk(nkpts):
             kp, kq, kr = kvals
             ks = kpts_helper.kconserv[kp, kq, kr]
             if not completed[kp,kq,kr]:
+                nk_counter += 1
                 eri_block = self.get_eri([kp, kq, kr, ks])
                 if kp == kq == kr == ks:
                     completed[kp,kq,kr] = True
-                    for ftuple in unique_iter(self.nao):
-                        p, q, r, s = ftuple
-                        counter += np.count_nonzero(eri_block[p, q, r, s])
+                    n = self.nao
+                    assert all(nx == n for nx in eri_block.shape)
+                    Dd = np.zeros((n,), dtype=eri_block.dtype)
+                    for p in range(n):
+                        Dd[p] = eri_block[p, p, p, p]
+                        eri_block[p, p, p, p] = 0.0
+                    Dp = np.zeros((n, n), dtype=eri_block.dtype)
+                    for p, q in itertools.product(range(n), repeat=2):
+                        Dp[p, q] = eri_block[p, q, p, q]
+                        eri_block[p, q, p, q] = 0.0
+                    Dc = np.zeros((n, n), dtype=eri_block.dtype)
+                    for p, r in itertools.product(range(n), repeat=2):
+                        Dc[p, r] = eri_block[p, p, r, r]
+                        eri_block[p, p, r, r] = 0.0
+                    Dpc = np.zeros((n, n), dtype=eri_block.dtype)
+                    for p, q in itertools.product(range(n), repeat=2):
+                        Dpc[p, q] = eri_block[p, q, q, p]
+                        eri_block[p, q, q, p] = 0.0
+                    counter += np.count_nonzero(Dd)
+                    counter += np.count_nonzero(Dp) // 2
+                    counter += np.count_nonzero(Dc) // 2
+                    counter += np.count_nonzero(Dpc) // 2
+                    counter += np.count_nonzero(eri_block) // 4
+                    #for ftuple in unique_iter(self.nao):
+                    #    p, q, r, s = ftuple
+                    #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == kq and kr == ks:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
-                    for ftuple in unique_iter_pq_rs(self.nao):
-                        p, q, r, s = ftuple
-                        counter += np.count_nonzero(eri_block[p, q, r, s])
+                    n = self.nao
+                    assert all(nx == n for nx in eri_block.shape)
+                    Dc = np.zeros((n, n), dtype=eri_block.dtype)
+                    for p, r in itertools.product(range(n), repeat=2):
+                        Dc[p, r] = eri_block[p, p, r, r]
+                        eri_block[p, p, r, r] = 0.0
+                    counter += np.count_nonzero(Dc)
+                    counter += np.count_nonzero(eri_block) // 2
+                    #for ftuple in unique_iter_ps_qr(self.nao):
+                    #for ftuple in unique_iter_pq_rs(self.nao):
+                    #    p, q, r, s = ftuple
+                    #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == ks and kq == kr:
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
-                    for ftuple in unique_iter_ps_qr(self.nao):
-                        p, q, r, s = ftuple
-                        counter += np.count_nonzero(eri_block[p, q, r, s])
+                    n = self.nao
+                    assert all(nx == n for nx in eri_block.shape)
+                    Dpc = np.zeros((n, n), dtype=eri_block.dtype)
+                    for p, q in itertools.product(range(n), repeat=2):
+                        Dpc[p, q] = eri_block[p, q, q, p]
+                        eri_block[p, q, q, p] = 0.0
+                    counter += np.count_nonzero(Dpc)
+                    counter += np.count_nonzero(eri_block) // 2
+                    #for ftuple in unique_iter_ps_qr(self.nao):
+                    #    p, q, r, s = ftuple
+                    #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == kr and kq == ks:
                     completed[kp,kq,kr] = True
                     completed[kq,kp,ks] = True
-                    for ftuple in unique_iter_pr_qs(self.nao):
-                        p, q, r, s = ftuple
-                        counter += np.count_nonzero(eri_block[p, q, r, s])
+                    n = self.nao
+                    assert all(nx == n for nx in eri_block.shape)
+                    Dp = np.zeros((n, n), dtype=eri_block.dtype)
+                    for p, q in itertools.product(range(n), repeat=2):
+                        Dp[p, q] = eri_block[p, q, p, q]
+                        eri_block[p, q, p, q] = 0.0
+                    counter += np.count_nonzero(Dp)
+                    counter += np.count_nonzero(eri_block) // 2
+                    #for ftuple in unique_iter_pr_qs(self.nao):
+                    #    p, q, r, s = ftuple
+                    #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 else:
                     counter += np.count_nonzero(eri_block)
                     completed[kp,kq,kr] = True
                     completed[kr,ks,kp] = True
                     completed[kq,kp,ks] = True
                     completed[ks,kr,kq] = True
+        if return_nk_counter:
+            return counter, nk_counter
         return counter
 
     def get_eri(self, ikpts, check_eq=False):

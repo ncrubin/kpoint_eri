@@ -153,6 +153,8 @@ def compute_lambda_ncr_v2(hcore, df_obj: DFABV2KpointIntegrals):
             # sum up p,k eigenvalues
             for kidx in range(len(kpts)):
                 # A and B are W
+                if df_obj.amat_lambda_vecs[kidx, qidx, nn] is None:
+                    continue
                 eigs_a_fixed_n_q = df_obj.amat_lambda_vecs[kidx, qidx, nn] / np.sqrt(nkpts)
                 eigs_b_fixed_n_q = df_obj.bmat_lambda_vecs[kidx, qidx, nn] / np.sqrt(nkpts)
                 first_number_to_square += np.sum(np.abs(eigs_a_fixed_n_q)) 
