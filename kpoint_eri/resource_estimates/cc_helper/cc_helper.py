@@ -1,9 +1,17 @@
-from pyscf.pbc import cc, scf
-
+"""Utilities for overwriting CCSD pbc eris with integral factorizations."""
 from kpoint_eri.resource_estimates import cc_helper
-from kpoint_eri.resource_estimates import utils
 
-def build_cc(approx_cc, helper):
+def build_cc(approx_cc, integral_helper):
+    """Build modified coupled cluster object which uses integral_helper to
+    construct ERIs.
+
+    Args:
+        approx_cc (cc.CCSD): pyscf pbc CCSD object we will overwrite the integrals computation of.
+        integral_helper (IntegralHelper object): Integral helper that builds _ERIS object. 
+
+    Returns:
+        approx_cc (cc.CCSD): Updated pyscf pbc CCSD object.
+    """
     eris = cc_helper._ERIS(
             approx_cc,
             approx_cc.mo_coeff,
@@ -13,73 +21,3 @@ def build_cc(approx_cc, helper):
         return eris
     approx_cc.ao2mo = ao2mo
     return approx_cc
-
-def build_krcc_sparse_eris(pyscf_mf, threshold=1e-5):
-    approx_cc = cc.KRCCSD(pyscf_mf)
-    helper = cc_helper.SparseHelper(
-            pyscf_mf.with_df,
-            pyscf_mf.mo_coeff,
-            pyscf_mf.kpts,
-            threshold=threshold
-            )
-    return build_cc(approx_cc, helper)
-
-def build_krcc_sf_eris(
-        pyscf_mf,
-        chol,
-        mom_map,
-        kpoints
-        ):
-    approx_cc = cc.KRCCSD(pyscf_mf)
-    helper = cc_helper.SingleFactorizationHelper(
-            chol,
-            mom_map,
-            kpoints
-            )
-    return build_cc(approx_cc, helper)
-
-def build_krcc_df_eris(
-        pyscf_mf,
-        chol,
-        mom_map,
-        kpoints,
-        nmo_pk,
-        df_thresh=1e-5
-        ):
-    approx_cc = cc.KRCCSD(pyscf_mf)
-    helper = cc_helper.DoubleFactorizationHelper(
-            chol,
-            mom_map,
-            kpoints,
-            nmo_pk,
-            df_thresh=df_thresh
-            )
-    return build_cc(approx_cc, helper)
-
-# supercell case
-def build_krcc_thc_eris(
-        pyscf_mf,
-        etapP,
-        MPQ
-        ):
-    scmf = utils.k2gamma(pyscf_mf)
-    kscmf = scf.KRHF(scmf.cell)
-    kscmf.mo_coeff = [scmf.mo_coeff]
-    kscmf.mo_occ = [scmf.mo_occ]
-    kscmf.get_hcore = lambda *args: [scmf.get_hcore()]
-    kscmf.get_ovlp = lambda *args: [scmf.get_ovlp()]
-    kscmf.mo_energy = [scmf.mo_energy]
-    approx_cc = cc.KRCCSD(kscmf)
-    helper = cc_helper.THCHelper(
-            etapP,
-            MPQ
-            )
-    return build_cc(approx_cc, helper)
-
-def compute_emp2_approx(mf, helper):
-    approx_cc = cc.KRCCSD(mf)
-    approx_cc = build_cc(approx_cc, helper)
-    eris = approx_cc.ao2mo(lambda x: x)
-    emp2, _, _ = approx_cc.init_amps(eris)
-    emp2 += mf.e_tot
-    return emp2
