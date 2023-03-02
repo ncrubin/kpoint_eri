@@ -1,19 +1,32 @@
+#!/usr/bin/env python
+# Copyright 2017-2021 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Authors: James D. McClain
+#          Timothy Berkelbach <tim.berkelbach@gmail.com>
+#
+# Modified to overwrite integral generation step to force incore and avoid
+# ao2mo7d type calls + simplified slightly.
 from functools import reduce
 import numpy as np
-import h5py
 
 from pyscf import lib
-import pyscf.ao2mo
-from pyscf.lib import logger
-import pyscf.cc
-import pyscf.cc.ccsd
-from pyscf.pbc import scf
-from pyscf.pbc.mp.kmp2 import (get_frozen_mask, get_nocc, get_nmo,
-                               padded_mo_coeff, padding_k_idx)  # noqa
-from pyscf.pbc.cc import kintermediates_rhf as imdk
-from pyscf.lib.parameters import LOOSE_ZERO_TOL, LARGE_DENOM  # noqa
-from pyscf.pbc.lib import kpts_helper
-from pyscf.pbc.lib.kpts_helper import gamma_point
+from pyscf.pbc.mp.kmp2 import (
+    get_nocc,
+    padded_mo_coeff,
+    padding_k_idx,
+)  # noqa
 from pyscf import __config__
 
 #######################################
@@ -27,10 +40,10 @@ from pyscf import __config__
 # TODO: use the same convention as kccsd_uhf
 #
 class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
-    def __init__(self, cc, mo_coeff=None, method='incore', eri_helper=None):
-        from pyscf.pbc import df
+    def __init__(self, cc, mo_coeff=None, method="incore", eri_helper=None):
         from pyscf.pbc import tools
         from pyscf.pbc.cc.ccsd import _adjust_occ
+
         # log = logger.Logger(cc.stdout, cc.verbose)
         # cput0 = (logger.process_clock(), logger.perf_counter())
         cell = cc._scf.cell
@@ -51,7 +64,7 @@ class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
         # try:
         mo_coeff = self.mo_coeff = padded_mo_coeff(cc, mo_coeff)
         # except IndexError:
-            # mo_coeff = self.mo_coeff
+        # mo_coeff = self.mo_coeff
 
         # Re-make our fock MO matrix elements from density and fock AO
         dm = cc._scf.make_rdm1(cc.mo_coeff, cc.mo_occ)
@@ -61,8 +74,12 @@ class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
             # excluded from the Fock matrix.
             vhf = cc._scf.get_veff(cell, dm)
         fockao = cc._scf.get_hcore() + vhf
-        self.fock = np.asarray([reduce(np.dot, (mo.T.conj(), fockao[k], mo))
-                                for k, mo in enumerate(mo_coeff)])
+        self.fock = np.asarray(
+            [
+                reduce(np.dot, (mo.T.conj(), fockao[k], mo))
+                for k, mo in enumerate(mo_coeff)
+            ]
+        )
         self.e_hf = cc._scf.energy_tot(dm=dm, vhf=vhf)
         # print("ehf : ", self.e_hf/2)
 
@@ -77,8 +94,10 @@ class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
             # FIXME: Whether to add this correction for other exxdiv treatments?
             # Without the correction, MP2 energy may be largely off the correct value.
             madelung = tools.madelung(cell, kpts)
-            self.mo_energy = [_adjust_occ(mo_e, nocc, -madelung)
-                              for k, mo_e in enumerate(self.mo_energy)]
+            self.mo_energy = [
+                _adjust_occ(mo_e, nocc, -madelung)
+                for k, mo_e in enumerate(self.mo_energy)
+            ]
 
         # Get location of padded elements in occupied and virtual space.
         nocc_per_kpt = get_nocc(cc, per_kpoint=True)
@@ -87,38 +106,41 @@ class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
         # Check direct and indirect gaps for possible issues with CCSD convergence.
         mo_e = [self.mo_energy[kp][nonzero_padding[kp]] for kp in range(nkpts)]
         mo_e = np.sort([y for x in mo_e for y in x])  # Sort de-nested array
-        gap = mo_e[np.sum(nocc_per_kpt)] - mo_e[np.sum(nocc_per_kpt)-1]
+        gap = mo_e[np.sum(nocc_per_kpt)] - mo_e[np.sum(nocc_per_kpt) - 1]
         # if gap < 1e-5:
-            # logger.warn(cc, 'HOMO-LUMO gap %s too small for KCCSD. '
-                            # 'May cause issues in convergence.', gap)
+        # logger.warn(cc, 'HOMO-LUMO gap %s too small for KCCSD. '
+        # 'May cause issues in convergence.', gap)
 
         # mem_incore, mem_outcore, mem_basic = _mem_usage(nkpts, nocc, nvir)
         mem_now = lib.current_memory()[0]
 
         kconserv = cc.khelper.kconserv
         khelper = cc.khelper
-        orbv = np.asarray(mo_coeff[:,:,nocc:], order='C')
+        orbv = np.asarray(mo_coeff[:, :, nocc:], order="C")
 
         # log.info('using incore ERI storage')
-        self.oooo = np.empty((nkpts,nkpts,nkpts,nocc,nocc,nocc,nocc), dtype=dtype)
-        self.ooov = np.empty((nkpts,nkpts,nkpts,nocc,nocc,nocc,nvir), dtype=dtype)
-        self.oovv = np.empty((nkpts,nkpts,nkpts,nocc,nocc,nvir,nvir), dtype=dtype)
-        self.ovov = np.empty((nkpts,nkpts,nkpts,nocc,nvir,nocc,nvir), dtype=dtype)
-        self.voov = np.empty((nkpts,nkpts,nkpts,nvir,nocc,nocc,nvir), dtype=dtype)
-        self.vovv = np.empty((nkpts,nkpts,nkpts,nvir,nocc,nvir,nvir), dtype=dtype)
-        self.vvvv = np.empty((nkpts,nkpts,nkpts,nvir,nvir,nvir,nvir), dtype=dtype)
+        self.oooo = np.empty((nkpts, nkpts, nkpts, nocc, nocc, nocc, nocc), dtype=dtype)
+        self.ooov = np.empty((nkpts, nkpts, nkpts, nocc, nocc, nocc, nvir), dtype=dtype)
+        self.oovv = np.empty((nkpts, nkpts, nkpts, nocc, nocc, nvir, nvir), dtype=dtype)
+        self.ovov = np.empty((nkpts, nkpts, nkpts, nocc, nvir, nocc, nvir), dtype=dtype)
+        self.voov = np.empty((nkpts, nkpts, nkpts, nvir, nocc, nocc, nvir), dtype=dtype)
+        self.vovv = np.empty((nkpts, nkpts, nkpts, nvir, nocc, nvir, nvir), dtype=dtype)
+        self.vvvv = np.empty((nkpts, nkpts, nkpts, nvir, nvir, nvir, nvir), dtype=dtype)
         # self.vvvv = cc._scf.with_df.ao2mo_7d(orbv, factor=1./nkpts).transpose(0,2,1,3,5,4,6)
 
-        for (ikp,ikq,ikr) in khelper.symm_map.keys():
-            iks = kconserv[ikp,ikq,ikr]
+        for (ikp, ikq, ikr) in khelper.symm_map.keys():
+            iks = kconserv[ikp, ikq, ikr]
             # eri_kpt = ((mo_coeff[ikp],mo_coeff[ikq],mo_coeff[ikr],mo_coeff[iks]),
-                             # (kpts[ikp],kpts[ikq],kpts[ikr],kpts[iks]), compact=False)
+            # (kpts[ikp],kpts[ikq],kpts[ikr],kpts[iks]), compact=False)
             kpts = [ikp, ikq, ikr, iks]
             eri_kpt = eri_helper.get_eri(kpts)
-            if dtype == np.float: eri_kpt = eri_kpt.real
+            if dtype == np.float:
+                eri_kpt = eri_kpt.real
             eri_kpt = eri_kpt.reshape(nmo, nmo, nmo, nmo)
             for (kp, kq, kr) in khelper.symm_map[(ikp, ikq, ikr)]:
-                eri_kpt_symm = khelper.transform_symm(eri_kpt, kp, kq, kr).transpose(0, 2, 1, 3)
+                eri_kpt_symm = khelper.transform_symm(eri_kpt, kp, kq, kr).transpose(
+                    0, 2, 1, 3
+                )
                 self.oooo[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, :nocc, :nocc] / nkpts
                 self.ooov[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, :nocc, nocc:] / nkpts
                 self.oovv[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, nocc:, nocc:] / nkpts
