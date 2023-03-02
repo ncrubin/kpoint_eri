@@ -1,103 +1,13 @@
 from functools import reduce
-import os
 import numpy as np
-from itertools import product
 
-from pyscf.pbc import gto, scf, mp, cc
-from pyscf.pbc.df import FFTDF
+from pyscf.pbc import gto, scf, mp
 
-from kpoint_eri.resource_estimates import df
-from kpoint_eri.resource_estimates import sparse
-from kpoint_eri.resource_estimates import utils
-
-from kpoint_eri.resource_estimates.df.compute_lambda_df import compute_lambda_ncr, compute_lambda_ncr_v2
-from kpoint_eri.resource_estimates.df.ncr_integral_helper_df import DFABV2KpointIntegrals
+from kpoint_eri.resource_estimates.df.compute_lambda_df import compute_lambda
+from kpoint_eri.resource_estimates.df.integral_helper_df import DFABKpointIntegrals
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
-from pyscf.pbc import ao2mo, tools
-from pyscf.pbc.lib.kpts_helper import get_kconserv
 
-
-
-_file_path = os.path.dirname(os.path.abspath(__file__))
-
-def test_compute_lambda_df():
-    ham = utils.read_cholesky_contiguous(
-            _file_path + '/../sf/chol_diamond_nk4.h5',
-            frac_chol_to_keep=1.0)
-    cell, kmf = utils.init_from_chkfile(_file_path+'/../sparse/diamond_221.chk')
-    mo_coeffs = kmf.mo_coeff
-    num_kpoints = len(mo_coeffs)
-    kpoints = ham['kpoints']
-    momentum_map = ham['qk_k2']
-    chol = ham['chol']
-    df_factors = df.double_factorize(
-            ham['chol'],
-            ham['qk_k2'],
-            ham['nmo_pk'],
-            df_thresh=1e-5)
-    lambda_tot, lambda_T, lambda_F = df.compute_lambda(
-            ham['hcore'],
-            df_factors,
-            kpoints,
-            momentum_map,
-            ham['nmo_pk']
-            )
-
-    df_factors = df.double_factorize_batched(
-            ham['chol'],
-            ham['qk_k2'],
-            ham['nmo_pk'],
-            df_thresh=1e-5)
-    lambda_tot_batch, lambda_T_, lambda_F_ = df.compute_lambda(
-            ham['hcore'],
-            df_factors,
-            kpoints,
-            momentum_map,
-            ham['nmo_pk']
-            )
-
-    assert lambda_tot - lambda_tot_batch < 1e-12
-
-def lambda_calc():
-    cell = gto.Cell()
-    cell.atom = '''
-    C 0.000000000000   0.000000000000   0.000000000000
-    C 1.685068664391   1.685068664391   1.685068664391
-    '''
-    cell.basis = 'gth-szv'
-    cell.pseudo = 'gth-hf-rev'
-    cell.a = '''
-    0.000000000, 3.370137329, 3.370137329
-    3.370137329, 0.000000000, 3.370137329
-    3.370137329, 3.370137329, 0.000000000'''
-    cell.unit = 'B'
-    cell.verbose = 4
-    cell.build()
-
-    kmesh = [1, 1, 3]
-    kpts = cell.make_kpts(kmesh)
-    nkpts = len(kpts)
-    mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = 'ncr_test_C_density_fitints.chk'
-    mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
-    mf.init_guess = 'chkfile'
-    mf.kernel()
-
-    from kpoint_eri.resource_estimates.df.ncr_integral_helper_df import DFABKpointIntegrals
-    from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
-    mymp = mp.KMP2(mf)
-    Luv = cholesky_from_df_ints(mymp)
-    helper = DFABKpointIntegrals(cholesky_factor=Luv, kmf=mf)
-    helper.double_factorize(thresh=1.0E-4)
-
-    hcore_ao = mf.get_hcore()
-    hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo)) for k, mo in enumerate(mf.mo_coeff)])
-
-    lambda_tot, lambda_one_body, lambda_two_body, num_eigs = compute_lambda_ncr(hcore_mo, helper)
-    print(lambda_tot)
-    print(num_eigs)
-
-def lambda_v2_calc():
+def test_lambda_calc():
     cell = gto.Cell()
     cell.atom = '''
     C 0.000000000000   0.000000000000   0.000000000000
@@ -118,14 +28,8 @@ def lambda_v2_calc():
     kpts = cell.make_kpts(kmesh)
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
+    mf.with_df.mesh = cell.mesh
     mf.chkfile = 'fft_ncr_test_C_density_fitints.chk'
-    # cell, scf_dict = load_scf(mf.chkfile)
-    # mf.e_tot = scf_dict['e_tot']
-    # mf.kpts = scf_dict['kpts']
-    # mf.mo_coeff = scf_dict['mo_coeff']
-    # mf.mo_energy = scf_dict['mo_energy']
-    # mf.mo_occ = scf_dict['mo_occ']
-    # mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
     mf.init_guess = 'chkfile'
     mf.kernel()
 
@@ -133,24 +37,25 @@ def lambda_v2_calc():
     mymp = mp.KMP2(mf)
     mymp.density_fit()
     Luv = cholesky_from_df_ints(mymp)
-    helper = DFABV2KpointIntegrals(cholesky_factor=Luv, kmf=mf)
+    helper = DFABKpointIntegrals(cholesky_factor=Luv, kmf=mf)
     helper.double_factorize(thresh=1.0E-13)
 
     hcore_ao = mf.get_hcore()
     hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo)) for k, mo in enumerate(mf.mo_coeff)])
 
-    lambda_tot, lambda_one_body, lambda_two_body, num_eigs = compute_lambda_ncr_v2(hcore_mo, helper)
+    lambda_tot, lambda_one_body, lambda_two_body, num_eigs = compute_lambda(hcore_mo, helper)
 
     l2norm_hcore_mo = np.linalg.norm(hcore_mo.ravel())
 
     from kpoint_eri.resource_estimates.utils.k2gamma import k2gamma
     supercell_mf = k2gamma(mf, make_real=False)
+    supercell_mf.with_df.mesh = supercell_mf.cell.mesh
     supercell_mf.e_tot = supercell_mf.energy_tot()
     assert np.isclose(mf.e_tot, supercell_mf.e_tot / np.prod(kmesh))
 
     supercell_mymp = mp.KMP2(supercell_mf)
     supercell_Luv = cholesky_from_df_ints(supercell_mymp)
-    supercell_helper = DFABV2KpointIntegrals(cholesky_factor=supercell_Luv, kmf=supercell_mf)
+    supercell_helper = DFABKpointIntegrals(cholesky_factor=supercell_Luv, kmf=supercell_mf)
     supercell_helper.double_factorize(thresh=1.0E-13)
     sc_nk = supercell_helper.nk
     sc_help = supercell_helper
@@ -171,7 +76,7 @@ def lambda_v2_calc():
     
     assert np.isclose(l2_norm_supercell_hcore_mo, l2norm_hcore_mo)
 
-    sc_lambda_tot, sc_lambda_one_body, sc_lambda_two_body, sc_num_eigs = compute_lambda_ncr_v2(supercell_hcore_mo, sc_help)
+    sc_lambda_tot, sc_lambda_one_body, sc_lambda_two_body, sc_num_eigs = compute_lambda(supercell_hcore_mo, sc_help)
 
     assert np.isclose(sc_lambda_one_body, lambda_one_body)
 
@@ -276,7 +181,7 @@ def lambda_v2_calc():
     print(lambda_two_body_v3)
     print(lambda_two_body_v4)
     print(weird_quantum_lambda_two_body * 0.25)
-    lambda_tot, lambda_one_body, lambda_two_body, num_eigs = compute_lambda_ncr_v2(hcore_mo, helper)
+    lambda_tot, lambda_one_body, lambda_two_body, num_eigs = compute_lambda(hcore_mo, helper)
     print(lambda_two_body)
     # YES THIS LOOKS CORRECT!
 
@@ -299,19 +204,5 @@ def lambda_v2_calc():
             sc_weird_quantum_lambda_two_body += quantum_first_number_to_square**2
             sc_weird_quantum_lambda_two_body += quantum_second_number_to_square**2
 
-    print(sc_lambda_two_body)
-    print(sc_weird_quantum_lambda_two_body)
-    print(lambda_two_body_v3)
-    print(lambda_two_body_v4)
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
-    # fftdf_reconstruct()
-    lambda_v2_calc()
+    test_lambda_calc()
