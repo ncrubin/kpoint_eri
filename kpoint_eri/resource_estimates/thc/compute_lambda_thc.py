@@ -1,13 +1,16 @@
 import numpy as np
-from itertools import product
 
-from kpoint_eri.resource_estimates import sf
 from kpoint_eri.resource_estimates.thc.integral_helper import (
     KPTHCHelperDoubleTranslation,
 )
 
 
-def compute_lambda_real(h1, etaPp, MPQ, chol):
+def compute_lambda_real(
+    h1: np.ndarray,
+    etaPp: np.ndarray,
+    MPQ: np.ndarray,
+    chol: np.ndarray,
+):
     """
     Compute lambda thc assuming real THC factors (molecular way) but without
     needing a molecular object as in openfermion. Just pared down function from
@@ -45,7 +48,7 @@ def compute_lambda_real(h1, etaPp, MPQ, chol):
     return lambda_tot, lambda_T, lambda_z
 
 
-def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
+def compute_lambda(hcore: list, thc_obj: KPTHCHelperDoubleTranslation):
     """
     Compute one-body and two-body lambda for qubitization of
     tensor hypercontraction LUC
@@ -96,8 +99,13 @@ def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
                 norm_left = norm_kP[ik] * norm_kP[ik_minus_q]
                 norm_right = norm_kP[ik_prime_minus_q] * norm_kP[ik_prime]
                 MPQ_normalized = (
-                    np.einsum("P,PQ,Q->PQ", norm_left, zeta_Q[Gpq, Gsr],
-                              norm_right, optimize=True)
+                    np.einsum(
+                        "P,PQ,Q->PQ",
+                        norm_left,
+                        zeta_Q[Gpq, Gsr],
+                        norm_right,
+                        optimize=True,
+                    )
                     / nkpts
                 )
                 lambda_two_body += np.sum(np.abs(MPQ_normalized.real))

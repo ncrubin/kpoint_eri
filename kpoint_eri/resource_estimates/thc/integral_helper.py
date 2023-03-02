@@ -15,7 +15,7 @@ from kpoint_eri.factorizations.isdf import (
 )
 
 
-class KPTHCHelperDoubleTranslation(object):
+class KPTHCHelperDoubleTranslation:
     def __init__(
         self,
         chi: np.ndarray,
@@ -85,13 +85,19 @@ class KPTHCHelperDoubleTranslation(object):
         """
         ikp, ikq, ikr, iks = kpts
         if self.chol is not None:
-            return np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
+            return np.einsum(
+                "npq,nsr->pqrs",
+                self.chol[ikp, ikq],
+                self.chol[iks, ikr].conj(),
+                optimize=True,
+            )
         else:
-            eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (ikp,ikq,ikr,iks)],
-                                            [self.kmf.kpts[i] for i in
-                                             (ikp,ikq,ikr,iks)],
-                                             compact=False)
-            shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (ikp,ikq,ikr,iks)]
+            eri_kpt = self.kmf.with_df.ao2mo(
+                [self.kmf.mo_coeff[i] for i in (ikp, ikq, ikr, iks)],
+                [self.kmf.kpts[i] for i in (ikp, ikq, ikr, iks)],
+                compact=False,
+            )
+            shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (ikp, ikq, ikr, iks)]
             eri_kpt = eri_kpt.reshape(shape_pqrs)
         return eri_kpt
 
@@ -157,12 +163,18 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         """
         ikp, ikq, ikr, iks = kpts
         if self.chol is not None:
-            return np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
+            return np.einsum(
+                "npq,nsr->pqrs",
+                self.chol[ikp, ikq],
+                self.chol[iks, ikr].conj(),
+                optimize=True,
+            )
         else:
-            eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (ikp,ikq,ikr,iks)],
-                                            [self.kmf.kpts[i] for i in (ikp,ikq,ikr,iks)],
-                                             compact=False)
-            shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (ikp,ikq,ikr,iks)]
+            eri_kpt = self.kmf.with_df.ao2mo(
+                [self.kmf.mo_coeff[i] for i in (ikp, ikq, ikr, iks)],
+                [self.kmf.kpts[i] for i in (ikp, ikq, ikr, iks)],
+                compact=False,
+            )
+            shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (ikp, ikq, ikr, iks)]
             eri_kpt = eri_kpt.reshape(shape_pqrs)
         return eri_kpt
-

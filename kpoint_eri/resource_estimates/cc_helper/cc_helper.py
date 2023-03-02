@@ -1,5 +1,5 @@
 """Utilities for overwriting CCSD pbc eris with integral factorizations."""
-from kpoint_eri.resource_estimates import cc_helper
+from pyscf.pbc import cc
 from kpoint_eri.resource_estimates.cc_helper.custom_ao2mo import _ERIS
 
 def build_cc(approx_cc, integral_helper):
@@ -22,3 +22,11 @@ def build_cc(approx_cc, integral_helper):
         return eris
     approx_cc.ao2mo = ao2mo
     return approx_cc
+
+def compute_emp2_approx(mf, helper):
+    approx_cc = cc.KRCCSD(mf)
+    approx_cc = build_cc(approx_cc, helper)
+    eris = approx_cc.ao2mo(lambda x: x)
+    emp2, _, _ = approx_cc.init_amps(eris)
+    emp2 += mf.e_tot
+    return emp2
