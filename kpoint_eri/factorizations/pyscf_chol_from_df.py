@@ -2,7 +2,6 @@ import itertools
 import numpy as np
 import h5py
 
-from pyscf import gto as mol_gto
 from pyscf.pbc import gto, scf, cc, mp
 from pyscf.lib import logger
 from pyscf.pbc.mp.kmp2 import _add_padding
@@ -67,27 +66,33 @@ def cholesky_from_df_ints(mp, pad_mos_with_zeros=True):
     bra_start = 0
     bra_end = nmo
     ket_start = nmo
-    ket_end = 2*nmo
-    with h5py.File(mp._scf.with_df._cderi, 'r') as f:
-        kptij_lst = f['j3c-kptij'][:]
+    ket_end = 2 * nmo
+    with h5py.File(mp._scf.with_df._cderi, "r") as f:
+        kptij_lst = f["j3c-kptij"][:]
         tao = []
         ao_loc = None
         for ki, kpti in enumerate(kpts):
             for kj, kptj in enumerate(kpts):
                 kpti_kptj = np.array((kpti, kptj))
-                Lpq_ao = np.asarray(df._getitem(f, 'j3c', kpti_kptj, kptij_lst))
+                Lpq_ao = np.asarray(df._getitem(f, "j3c", kpti_kptj, kptij_lst))
 
                 mo = np.hstack((mo_coeff[ki], mo_coeff[kj]))
-                mo = np.asarray(mo, dtype=dtype, order='F')
+                mo = np.asarray(mo, dtype=dtype, order="F")
                 if dtype == np.double:
                     out = _ao2mo.nr_e2(
-                        Lpq_ao, mo, (bra_start, bra_end, ket_start, ket_end), aosym='s2')
+                        Lpq_ao, mo, (bra_start, bra_end, ket_start, ket_end), aosym="s2"
+                    )
                 else:
                     # Note: Lpq.shape[0] != naux if linear dependency is found in auxbasis
                     if Lpq_ao[0].size != nao**2:  # aosym = 's2'
                         Lpq_ao = lib.unpack_tril(Lpq_ao).astype(np.complex128)
                     out = _ao2mo.r_e2(
-                        Lpq_ao, mo, (bra_start, bra_end, ket_start, ket_end), tao, ao_loc)
+                        Lpq_ao,
+                        mo,
+                        (bra_start, bra_end, ket_start, ket_end),
+                        tao,
+                        ao_loc,
+                    )
                 Lchol[ki, kj] = out.reshape(-1, nmo, nmo)
 
     log.timer_debug1("transforming DF-AO integrals to MO", *cput0)
@@ -105,23 +110,23 @@ def _format_jks(vj, dm, kpts_band):
     return vj
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     cell = gto.Cell()
-    cell.atom = '''
+    cell.atom = """
     C 0.000000000000   0.000000000000   0.000000000000
     C 1.685068664391   1.685068664391   1.685068664391
-    '''
-    cell.basis = 'gth-cc-dzvp'
-    cell.pseudo = 'gth-hf-rev'
-    cell.a = '''
+    """
+    cell.basis = "gth-cc-dzvp"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
     0.000000000, 3.370137329, 3.370137329
     3.370137329, 0.000000000, 3.370137329
-    3.370137329, 3.370137329, 0.000000000'''
-    cell.unit = 'B'
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
     cell.verbose = 4
     cell.build()
 
-    name_prefix = ''
+    name_prefix = ""
     basname = cell.basis
     pp_name = cell.pseudo
 
@@ -132,9 +137,9 @@ if __name__ == '__main__':
     # uncomment for rs density fitting:
     # mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = 'ncr_test_C_density_fitints.chk'
-    mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
-    mf.init_guess = 'chkfile'
+    mf.chkfile = "ncr_test_C_density_fitints.chk"
+    mf.with_df._cderi_to_save = "ncr_test_C_density_fitints_gdf.h5"
+    mf.init_guess = "chkfile"
     Escf = mf.kernel()
 
     mymp = mp.KMP2(mf)
@@ -146,35 +151,34 @@ if __name__ == '__main__':
     # 1. Test that the DF integrals give the correct SCF energy (oo block)
     mf.exxdiv = None  # exclude ewald exchange correction
     Eref = mf.energy_elec()[1]
-    Eout = 0.j
+    Eout = 0.0j
     for ik, jk in itertools.product(range(nkpts), repeat=2):
         Lii = Luv[ik, ik][:, :nocc, :nocc]
         Ljj = Luv[jk, jk][:, :nocc, :nocc]
         Lij = Luv[ik, jk][:, :nocc, :nocc]
         Lji = Luv[jk, ik][:, :nocc, :nocc]
-        oooo_d = np.einsum('Lij,Lkl->ijkl', Lii, Ljj) / nkpts
-        oooo_x = np.einsum('Lij,Lkl->ijkl', Lij, Lji) / nkpts
-        Eout += 2.0*np.einsum('iijj->', oooo_d)
-        Eout -= np.einsum('ijji->', oooo_x)
-    assert abs(Eout/nkpts - Eref) < 1e-12
+        oooo_d = np.einsum("Lij,Lkl->ijkl", Lii, Ljj) / nkpts
+        oooo_x = np.einsum("Lij,Lkl->ijkl", Lij, Lji) / nkpts
+        Eout += 2.0 * np.einsum("iijj->", oooo_d)
+        Eout -= np.einsum("ijji->", oooo_x)
+    assert abs(Eout / nkpts - Eref) < 1e-12
 
     # 2. Test that the DF integrals agree with those from MP2 (ov block)
     from pyscf.pbc.mp.kmp2 import _init_mp_df_eris
+
     Ltest = _init_mp_df_eris(mymp)
     for ik, jk in itertools.product(range(nkpts), repeat=2):
         assert np.allclose(Luv[ik, jk][:, :nocc, nocc:], Ltest[ik, jk], atol=1e-12)
 
     # 3. Test that the DF integrals have correct vvvv block (vv)
-    Ivvvv = np.zeros((nkpts, nkpts, nkpts, nvir, nvir, nvir, nvir),
-                     dtype=np.complex128)
+    Ivvvv = np.zeros((nkpts, nkpts, nkpts, nvir, nvir, nvir, nvir), dtype=np.complex128)
     for ik, jk, kk in itertools.product(range(nkpts), repeat=3):
         lk = mymp.khelper.kconserv[ik, jk, kk]
         Lij = Luv[ik, jk][:, nocc:, nocc:]
         Lkl = Luv[kk, lk][:, nocc:, nocc:]
-        Imo = np.einsum('Lij,Lkl->ijkl', Lij, Lkl)
+        Imo = np.einsum("Lij,Lkl->ijkl", Lij, Lkl)
         Ivvvv[ik, jk, kk] = Imo / nkpts
 
     mycc = cc.KRCCSD(mf)
     eris = mycc.ao2mo()
-    assert np.allclose(
-        eris.vvvv, Ivvvv.transpose(0, 2, 1, 3, 5, 4, 6), atol=1e-12)
+    assert np.allclose(eris.vvvv, Ivvvv.transpose(0, 2, 1, 3, 5, 4, 6), atol=1e-12)
