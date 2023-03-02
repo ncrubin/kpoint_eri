@@ -1,5 +1,6 @@
 """Utilities for overwriting CCSD pbc eris with integral factorizations."""
 from kpoint_eri.resource_estimates import cc_helper
+from kpoint_eri.resource_estimates.cc_helper.custom_ao2mo import _ERIS
 
 def build_cc(approx_cc, integral_helper):
     """Build modified coupled cluster object which uses integral_helper to
@@ -12,10 +13,10 @@ def build_cc(approx_cc, integral_helper):
     Returns:
         approx_cc (cc.CCSD): Updated pyscf pbc CCSD object.
     """
-    eris = cc_helper._ERIS(
+    eris = _ERIS(
             approx_cc,
             approx_cc.mo_coeff,
-            eri_helper=helper,
+            eri_helper=integral_helper,
             method='incore')
     def ao2mo(self, mo_coeff=None):
         return eris

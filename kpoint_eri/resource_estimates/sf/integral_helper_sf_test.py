@@ -1,6 +1,6 @@
 from pyscf.pbc import gto, scf, mp, cc
 
-from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
+from kpoint_eri.resource_estimates.sf.integral_helper_sf import SingleFactorizationHelper
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
 def test_ncr_sf_helper_trunc():
@@ -16,7 +16,7 @@ def test_ncr_sf_helper_trunc():
     3.370137329, 0.000000000, 3.370137329
     3.370137329, 3.370137329, 0.000000000'''
     cell.unit = 'B'
-    cell.verbose = 4
+    cell.verbose = 0
     cell.build()
 
     kmesh = [1, 1, 3]
@@ -24,6 +24,7 @@ def test_ncr_sf_helper_trunc():
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = 'ncr_test_C_density_fitints.chk'
     mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
+    mf.with_df.mesh = mf.cell.mesh
     mf.init_guess = 'chkfile'
     mf.kernel()
 
@@ -40,7 +41,7 @@ def test_ncr_sf_helper_trunc():
     for i in range(50, naux + 1):
         approx_cc = cc.KRCCSD(mf)
         approx_cc.verbose = 0
-        helper = NCRSingleFactorizationHelper(
+        helper = SingleFactorizationHelper(
             cholesky_factor=Luv, kmf=mf, naux=i)
         from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
         approx_cc = build_cc(approx_cc, helper)
