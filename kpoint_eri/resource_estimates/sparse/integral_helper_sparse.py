@@ -2,9 +2,12 @@ import itertools
 import numpy as np
 
 from pyscf.pbc import scf
-from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk, get_kconserv
+from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk
 
-from kpoint_eri.resource_estimates.utils.misc_utils import build_momentum_transfer_mapping
+from kpoint_eri.resource_estimates.utils.misc_utils import (
+    build_momentum_transfer_mapping,
+)
+
 
 def _symmetric_two_body_terms(quad, complex_valued):
     p, q, r, s = quad
@@ -16,7 +19,8 @@ def _symmetric_two_body_terms(quad, complex_valued):
         yield p, s, r, q
         yield q, r, s, p
         yield s, p, q, r
-        yield r, q, p, s 
+        yield r, q, p, s
+
 
 def unique_iter(nmo):
     seen = set()
@@ -24,6 +28,7 @@ def unique_iter(nmo):
         if quad not in seen:
             seen |= set(_symmetric_two_body_terms(quad, True))
             yield tuple(quad)
+
 
 def _pq_rs_two_body_terms(quad):
     """kp = kq and kr = ks
@@ -34,12 +39,14 @@ def _pq_rs_two_body_terms(quad):
     yield p, q, r, s
     yield q, p, s, r
 
+
 def unique_iter_pq_rs(nmo):
     seen = set()
     for quad in itertools.product(range(nmo), repeat=4):
-        if quad not in seen: 
+        if quad not in seen:
             seen |= set(_pq_rs_two_body_terms(quad))
             yield tuple(quad)
+
 
 def _ps_qr_two_body_terms(quad):
     """kp = ks and kq = kr
@@ -49,12 +56,14 @@ def _ps_qr_two_body_terms(quad):
     yield p, q, r, s
     yield s, r, q, p
 
+
 def unique_iter_ps_qr(nmo):
     seen = set()
     for quad in itertools.product(range(nmo), repeat=4):
-        if quad not in seen: 
+        if quad not in seen:
             seen |= set(_ps_qr_two_body_terms(quad))
             yield tuple(quad)
+
 
 def _pr_qs_two_body_terms(quad):
     """kp = kr and kq = ks
@@ -64,16 +73,17 @@ def _pr_qs_two_body_terms(quad):
     yield p, q, r, s
     yield r, s, p, q
 
+
 def unique_iter_pr_qs(nmo):
     seen = set()
     for quad in itertools.product(range(nmo), repeat=4):
-        if quad not in seen: 
+        if quad not in seen:
             seen |= set(_pr_qs_two_body_terms(quad))
             yield tuple(quad)
 
 
-class NCRSSparseFactorizationHelper:
-    def __init__(self, cholesky_factor: np.ndarray, kmf: scf.HF, threshold=1.0E-14):
+class SparseFactorizationHelper:
+    def __init__(self, cholesky_factor: np.ndarray, kmf: scf.HF, threshold=1.0e-14):
         """
         Initialize a ERI object for CCSD from Cholesky factors and a
         pyscf mean-field object
@@ -103,17 +113,17 @@ class NCRSSparseFactorizationHelper:
         """
         kpts_helper = KptsHelper(self.kmf.cell, self.kmf.kpts)
         nkpts = len(self.kmf.kpts)
-        completed = np.zeros((nkpts,nkpts,nkpts), dtype=bool)
+        completed = np.zeros((nkpts, nkpts, nkpts), dtype=bool)
         counter = 0
         nk_counter = 0
         for kvals in loop_kkk(nkpts):
             kp, kq, kr = kvals
             ks = kpts_helper.kconserv[kp, kq, kr]
-            if not completed[kp,kq,kr]:
+            if not completed[kp, kq, kr]:
                 nk_counter += 1
                 eri_block = self.get_eri([kp, kq, kr, ks])
                 if kp == kq == kr == ks:
-                    completed[kp,kq,kr] = True
+                    completed[kp, kq, kr] = True
                     n = self.nao
                     assert all(nx == n for nx in eri_block.shape)
                     Dd = np.zeros((n,), dtype=eri_block.dtype)
@@ -137,12 +147,12 @@ class NCRSSparseFactorizationHelper:
                     counter += np.count_nonzero(Dc) // 2
                     counter += np.count_nonzero(Dpc) // 2
                     counter += np.count_nonzero(eri_block) // 4
-                    #for ftuple in unique_iter(self.nao):
+                    # for ftuple in unique_iter(self.nao):
                     #    p, q, r, s = ftuple
                     #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == kq and kr == ks:
-                    completed[kp,kq,kr] = True
-                    completed[kr,ks,kp] = True
+                    completed[kp, kq, kr] = True
+                    completed[kr, ks, kp] = True
                     n = self.nao
                     assert all(nx == n for nx in eri_block.shape)
                     Dc = np.zeros((n, n), dtype=eri_block.dtype)
@@ -151,13 +161,13 @@ class NCRSSparseFactorizationHelper:
                         eri_block[p, p, r, r] = 0.0
                     counter += np.count_nonzero(Dc)
                     counter += np.count_nonzero(eri_block) // 2
-                    #for ftuple in unique_iter_ps_qr(self.nao):
-                    #for ftuple in unique_iter_pq_rs(self.nao):
+                    # for ftuple in unique_iter_ps_qr(self.nao):
+                    # for ftuple in unique_iter_pq_rs(self.nao):
                     #    p, q, r, s = ftuple
                     #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == ks and kq == kr:
-                    completed[kp,kq,kr] = True
-                    completed[kr,ks,kp] = True
+                    completed[kp, kq, kr] = True
+                    completed[kr, ks, kp] = True
                     n = self.nao
                     assert all(nx == n for nx in eri_block.shape)
                     Dpc = np.zeros((n, n), dtype=eri_block.dtype)
@@ -166,12 +176,12 @@ class NCRSSparseFactorizationHelper:
                         eri_block[p, q, q, p] = 0.0
                     counter += np.count_nonzero(Dpc)
                     counter += np.count_nonzero(eri_block) // 2
-                    #for ftuple in unique_iter_ps_qr(self.nao):
+                    # for ftuple in unique_iter_ps_qr(self.nao):
                     #    p, q, r, s = ftuple
                     #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 elif kp == kr and kq == ks:
-                    completed[kp,kq,kr] = True
-                    completed[kq,kp,ks] = True
+                    completed[kp, kq, kr] = True
+                    completed[kq, kp, ks] = True
                     n = self.nao
                     assert all(nx == n for nx in eri_block.shape)
                     Dp = np.zeros((n, n), dtype=eri_block.dtype)
@@ -180,15 +190,15 @@ class NCRSSparseFactorizationHelper:
                         eri_block[p, q, p, q] = 0.0
                     counter += np.count_nonzero(Dp)
                     counter += np.count_nonzero(eri_block) // 2
-                    #for ftuple in unique_iter_pr_qs(self.nao):
+                    # for ftuple in unique_iter_pr_qs(self.nao):
                     #    p, q, r, s = ftuple
                     #    counter += np.count_nonzero(eri_block[p, q, r, s])
                 else:
                     counter += np.count_nonzero(eri_block)
-                    completed[kp,kq,kr] = True
-                    completed[kr,ks,kp] = True
-                    completed[kq,kp,ks] = True
-                    completed[ks,kr,kq] = True
+                    completed[kp, kq, kr] = True
+                    completed[kr, ks, kp] = True
+                    completed[kq, kp, ks] = True
+                    completed[ks, kr, kq] = True
         if return_nk_counter:
             return counter, nk_counter
         return counter
@@ -204,9 +214,26 @@ class NCRSSparseFactorizationHelper:
         """
         ikp, ikq, ikr, iks = ikpts
         if check_eq:
-            assert np.allclose(np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True),
-                               np.einsum('npq,nrs->pqrs', self.chol[ikp, ikq], self.chol[ikr, iks], optimize=True))
-        kpoint_eri_tensor = np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
+            assert np.allclose(
+                np.einsum(
+                    "npq,nsr->pqrs",
+                    self.chol[ikp, ikq],
+                    self.chol[iks, ikr].conj(),
+                    optimize=True,
+                ),
+                np.einsum(
+                    "npq,nrs->pqrs",
+                    self.chol[ikp, ikq],
+                    self.chol[ikr, iks],
+                    optimize=True,
+                ),
+            )
+        kpoint_eri_tensor = np.einsum(
+            "npq,nsr->pqrs",
+            self.chol[ikp, ikq],
+            self.chol[iks, ikr].conj(),
+            optimize=True,
+        )
         zero_mask = np.abs(kpoint_eri_tensor) < self.threshold
         kpoint_eri_tensor[zero_mask] = 0
         return kpoint_eri_tensor
@@ -228,5 +255,9 @@ class NCRSSparseFactorizationHelper:
         # return eri_kpt
 
         ikp, ikq, ikr, iks = kpts
-        return np.einsum('npq,nsr->pqrs', self.chol[ikp, ikq], self.chol[iks, ikr].conj(), optimize=True)
-
+        return np.einsum(
+            "npq,nsr->pqrs",
+            self.chol[ikp, ikq],
+            self.chol[iks, ikr].conj(),
+            optimize=True,
+        )

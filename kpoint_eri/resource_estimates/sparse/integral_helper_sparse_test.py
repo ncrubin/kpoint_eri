@@ -1,69 +1,71 @@
 from functools import reduce
-import itertools
 import numpy as np
-from pyscf.pbc import gto, scf, mp, cc
+from pyscf.pbc import gto, scf, mp
 
-from kpoint_eri.resource_estimates import sparse
-from kpoint_eri.resource_estimates import utils
-from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import NCRSSparseFactorizationHelper
+from kpoint_eri.resource_estimates.sparse.integral_helper_sprase import (
+    SparseFactorizationHelper,
+)
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
-from kpoint_eri.resource_estimates.sparse.compute_lambda_sparse import compute_lambda_ncr
 
-
-def test_ncr_sparse_int_obj():
+def test_sparse_int_obj():
     cell = gto.Cell()
-    cell.atom = '''
+    cell.atom = """
     C 0.000000000000   0.000000000000   0.000000000000
     C 1.685068664391   1.685068664391   1.685068664391
-    '''
-    cell.basis = 'gth-szv'
-    cell.pseudo = 'gth-hf-rev'
-    cell.a = '''
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
     0.000000000, 3.370137329, 3.370137329
     3.370137329, 0.000000000, 3.370137329
-    3.370137329, 3.370137329, 0.000000000'''
-    cell.unit = 'B'
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
     cell.verbose = 0
     cell.build()
 
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = 'ncr_test_C_density_fitints.chk'
-    mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
-    mf.init_guess = 'chkfile'
+    mf.chkfile = "ncr_test_C_density_fitints.chk"
+    mf.with_df._cderi_to_save = "ncr_test_C_density_fitints_gdf.h5"
+    mf.init_guess = "chkfile"
     mf.kernel()
 
     mymp = mp.KMP2(mf)
     Luv = cholesky_from_df_ints(mymp)
-    for thresh in [1.0E-3, 1.0E-4, 1.0E-5, 1.0E-6]:
+    for thresh in [1.0e-3, 1.0e-4, 1.0e-5, 1.0e-6]:
         abs_sum_coeffs = 0
-        helper = NCRSSparseFactorizationHelper(cholesky_factor=Luv, kmf=mf, threshold=thresh)
+        helper = SparseFactorizationHelper(
+            cholesky_factor=Luv, kmf=mf, threshold=thresh
+        )
         nkpts = len(kpts)
         # recall (k, k-q|k'-q, k')
         for kidx in range(nkpts):
             for kpidx in range(nkpts):
-                for qidx in range(nkpts):                 
+                for qidx in range(nkpts):
                     kmq_idx = helper.k_transfer_map[qidx, kidx]
                     kpmq_idx = helper.k_transfer_map[qidx, kpidx]
                     test_eri_block = helper.get_eri([kidx, kmq_idx, kpmq_idx, kpidx])
-                    abs_sum_coeffs += np.sum(np.abs(test_eri_block.real)) + np.sum(np.abs(test_eri_block.imag))
-        print(thresh, abs_sum_coeffs) # this should always be increasing
+                    abs_sum_coeffs += np.sum(np.abs(test_eri_block.real)) + np.sum(
+                        np.abs(test_eri_block.imag)
+                    )
+        print(thresh, abs_sum_coeffs)  # this should always be increasing
 
-def get_num_unique():
+
+def test_get_num_unique():
     cell = gto.Cell()
-    cell.atom = '''
+    cell.atom = """
     C 0.000000000000   0.000000000000   0.000000000000
     C 1.685068664391   1.685068664391   1.685068664391
-    '''
-    cell.basis = 'gth-szv'
-    cell.pseudo = 'gth-hf-rev'
-    cell.a = '''
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
     0.000000000, 3.370137329, 3.370137329
     3.370137329, 0.000000000, 3.370137329
-    3.370137329, 3.370137329, 0.000000000'''
-    cell.unit = 'B'
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
     cell.verbose = 0
     cell.build()
 
@@ -73,28 +75,25 @@ def get_num_unique():
     nmo = cell.nao
 
     from pyscf.pbc.scf.chkfile import load_scf
+
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = 'test_sparse_iterate.chk'
-    # cell, scf_dict = load_scf(mf.chkfile)
-    # mf.mo_coeff = scf_dict['mo_coeff']
-    # mf.mo_occ = scf_dict['mo_occ']
-    # mf.mo_energy = scf_dict['mo_energy']
-    # mf.e_tot = scf_dict['e_tot']
-    # mf.kpts = scf_dict['kpts']
+    mf.chkfile = "test_sparse_iterate.chk"
     mf.kernel()
-    # test_e_tot = mf.energy_tot()
-    # print(test_e_tot)
-    # print(mf.e_tot)
-    # exit()
 
     mymp = mp.KMP2(mf)
     Luv = cholesky_from_df_ints(mymp)
-    helper = NCRSSparseFactorizationHelper(cholesky_factor=Luv, kmf=mf)
+    helper = SparseFactorizationHelper(cholesky_factor=Luv, kmf=mf)
 
     import itertools
-    from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk, get_kconserv
+    from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk
+
     # import the iteration routines
-    from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import unique_iter, unique_iter_pr_qs, unique_iter_ps_qr, unique_iter_pq_rs
+    from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
+        unique_iter,
+        unique_iter_pr_qs,
+        unique_iter_ps_qr,
+        unique_iter_pq_rs,
+    )
 
     tally4 = np.zeros((nmo, nmo, nmo, nmo), dtype=int)
     for ft in unique_iter(nmo):
@@ -115,24 +114,26 @@ def get_num_unique():
             tally4[q, p, s, r] += 1
             tally4[s, r, q, p] += 1
             tally4[r, s, p, q] += 1
-    assert np.allclose(tally4, 1) 
+    assert np.allclose(tally4, 1)
 
     kpts_helper = KptsHelper(cell, kpts)
     nkpts = len(kpts)
-    completed = np.zeros((nkpts,nkpts,nkpts), dtype=bool)
-    tally = np.zeros((nkpts,nkpts,nkpts), dtype=int)
-    fulltally = np.zeros((nkpts,nkpts,nkpts, nmo, nmo, nmo, nmo), dtype=int)
+    completed = np.zeros((nkpts, nkpts, nkpts), dtype=bool)
+    tally = np.zeros((nkpts, nkpts, nkpts), dtype=int)
+    fulltally = np.zeros((nkpts, nkpts, nkpts, nmo, nmo, nmo, nmo), dtype=int)
     nk_count = 0
     for kvals in loop_kkk(nk):
         kp, kq, kr = kvals
         ks = kpts_helper.kconserv[kp, kq, kr]
-        if not completed[kp,kq,kr]:
+        if not completed[kp, kq, kr]:
             eri_block = helper.get_eri([kp, kq, kr, ks])
             nk_count += 1
             if kp == kq == kr == ks:
-                completed[kp,kq,kr] = True
-                tally[kp,kq,kr] += 1 
-                for ftuple in unique_iter(nmo):  # iterate over unique whenever all momentum indices are the same
+                completed[kp, kq, kr] = True
+                tally[kp, kq, kr] += 1
+                for ftuple in unique_iter(
+                    nmo
+                ):  # iterate over unique whenever all momentum indices are the same
                     p, q, r, s = ftuple
                     if p == q == r == s:
                         fulltally[kp, kq, kr, p, q, r, s] += 1
@@ -152,21 +153,21 @@ def get_num_unique():
                         fulltally[kp, kq, kr, r, s, p, q] += 1
 
             elif kp == kq and kr == ks:
-                completed[kp,kq,kr] = True
-                completed[kr,ks,kp] = True
-                tally[kp,kq,kr] += 1 
-                tally[kr,ks,kp] += 1 
+                completed[kp, kq, kr] = True
+                completed[kr, ks, kp] = True
+                tally[kp, kq, kr] += 1
+                tally[kr, ks, kp] += 1
 
                 # the full (kp kq | kr ks) gets mapped to (kr, ks | kp  kq)
                 # fulltally[kp, kq, kr] += 1
                 # fulltally[kr, ks, kp] += 1
 
                 # we only need to count the single eri block because (kp, kq kr ks) -> (kr, ks, kp kq) 1:1.
-                # but for (p q | r s) -> (qp|sr) so we are overcounting. by a little. 
+                # but for (p q | r s) -> (qp|sr) so we are overcounting. by a little.
                 # (q p | s r)
                 # since we have a complex conjugation symmetry in both we really have (npair, npair) here.
                 # we can use pyscf.ao2mo to do this.
-                    
+
                 test_block = np.zeros_like(eri_block, dtype=int)
                 num_terms_in_block = 0
                 for p, q, r, s in unique_iter_pq_rs(nmo):
@@ -185,14 +186,14 @@ def get_num_unique():
                     if not np.isclose(test_block[p, q, r, s], 1):
                         print(p, q, r, s, test_block[p, q, r, s])
                 assert np.allclose(test_block, 1)
-                
+
                 assert num_terms_in_block <= helper.nao**4
 
             elif kp == ks and kq == kr:
-                completed[kp,kq,kr] = True
-                completed[kr,ks,kp] = True
-                tally[kp,kq,kr] += 1 
-                tally[kr,ks,kp] += 1 
+                completed[kp, kq, kr] = True
+                completed[kr, ks, kp] = True
+                tally[kp, kq, kr] += 1
+                tally[kr, ks, kp] += 1
 
                 # fulltally[kp, kq, kr] += 1
                 # fulltally[kr, ks, kp] += 1
@@ -218,12 +219,11 @@ def get_num_unique():
 
                 assert num_terms_in_block <= helper.nao**4
 
-
             elif kp == kr and kq == ks:
-                completed[kp,kq,kr] = True
-                completed[kq,kp,ks] = True
-                tally[kp,kq,kr] += 1 
-                tally[kq,kp,ks] += 1 
+                completed[kp, kq, kr] = True
+                completed[kq, kp, ks] = True
+                tally[kp, kq, kr] += 1
+                tally[kq, kp, ks] += 1
                 # symmetry takes account of [kq, kp, ks] only need to do one of the blocks
                 # fulltally[kp, kq, kr] += 1
                 # fulltally[kq, kp, ks] += 1
@@ -250,15 +250,15 @@ def get_num_unique():
                 assert num_terms_in_block <= helper.nao**4
 
             else:
-                completed[kp,kq,kr] = True
-                completed[kr,ks,kp] = True
-                completed[kq,kp,ks] = True
-                completed[ks,kr,kq] = True
+                completed[kp, kq, kr] = True
+                completed[kr, ks, kp] = True
+                completed[kq, kp, ks] = True
+                completed[ks, kr, kq] = True
 
-                tally[kp,kq,kr] += 1 
-                tally[kr,ks,kp] += 1 
-                tally[kq,kp,ks] += 1 
-                tally[ks,kr,kq] += 1 
+                tally[kp, kq, kr] += 1
+                tally[kr, ks, kp] += 1
+                tally[kq, kp, ks] += 1
+                tally[ks, kr, kq] += 1
 
                 # just assign entire 4-tensor +1 value because each pqrs is unique because
                 # kp, kq, kr, ks is unique for this case we would only need to grab one of
@@ -274,9 +274,9 @@ def get_num_unique():
     for kvals in loop_kkk(nk):
         kp, kq, kr = kvals
         ks = kpts_helper.kconserv[kp, kq, kr]
-        if len(set([kp, kq, kr ,ks])) == 4:
-                # print(kp, kq, kr, np.allclose(fulltally[kp, kq, kr], 1))
-                assert np.allclose(fulltally[kp, kq, kr], 1)
+        if len(set([kp, kq, kr, ks])) == 4:
+            # print(kp, kq, kr, np.allclose(fulltally[kp, kq, kr], 1))
+            assert np.allclose(fulltally[kp, kq, kr], 1)
         elif kp == kr and kq == ks:
             assert np.allclose(fulltally[kp, kq, kr], 1)
             assert np.allclose(fulltally[kq, kp, ks], 1)
@@ -293,5 +293,5 @@ def get_num_unique():
 
 
 if __name__ == "__main__":
-    get_num_unique()
-    # test_ncr_sparse_int_obj()
+    test_get_num_unique()
+    test_ncr_sparse_int_obj()
