@@ -2,7 +2,7 @@ from functools import reduce
 import numpy as np
 from pyscf.pbc import gto, scf, mp
 
-from kpoint_eri.resource_estimates.sparse.integral_helper_sprase import (
+from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
 )
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
@@ -29,6 +29,7 @@ def test_sparse_int_obj():
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = "ncr_test_C_density_fitints.chk"
     mf.with_df._cderi_to_save = "ncr_test_C_density_fitints_gdf.h5"
+    mf.with_df.mesh = cell.mesh
     mf.init_guess = "chkfile"
     mf.kernel()
 
@@ -78,6 +79,7 @@ def test_get_num_unique():
 
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = "test_sparse_iterate.chk"
+    mf.with_df.mesh = cell.mesh
     mf.kernel()
 
     mymp = mp.KMP2(mf)
@@ -294,4 +296,4 @@ def test_get_num_unique():
 
 if __name__ == "__main__":
     test_get_num_unique()
-    test_ncr_sparse_int_obj()
+    test_sparse_int_obj()
