@@ -32,7 +32,7 @@ def test_lambda_sparse():
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = "ncr_test_C_density_fitints.chk"
     mf.init_guess = "chkfile"
-    mf.with_df.mesh = cell.mesh 
+    mf.with_df.mesh = cell.mesh
     mf.kernel()
 
     mymp = mp.KMP2(mf)
@@ -137,6 +137,7 @@ def test_lambda_sparse():
 
     assert np.isclose(sc_lambda_one_body, lambda_one_body)
     assert np.isclose(sc_lambda_two_body, lambda_two_body)
+
 
 if __name__ == "__main__":
     test_lambda_sparse()
