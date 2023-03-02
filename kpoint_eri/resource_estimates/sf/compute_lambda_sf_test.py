@@ -1,43 +1,16 @@
 from functools import reduce
-import os
 import numpy as np
-from itertools import product
 
 from ase.build import bulk
 
-from pyscf.pbc import gto, scf, mp, cc
+from pyscf.pbc import gto, scf, mp
 from pyscf.pbc.tools import pyscf_ase
 
-from kpoint_eri.resource_estimates import sf
-from kpoint_eri.resource_estimates import sparse
-from kpoint_eri.resource_estimates import utils
-
-from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda_ncr, compute_lambda_ncr2
+from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
+from kpoint_eri.resource_estimates.sf.integral_helper_sf import SingleFactorizationHelper
 
 
-_file_path = os.path.dirname(os.path.abspath(__file__))
-
-def test_sf_eris():
-    ham = utils.read_cholesky_contiguous(
-            _file_path+'/chol_diamond_nk4.h5',
-            frac_chol_to_keep=1.0)
-    cell, kmf = utils.init_from_chkfile(_file_path+'/../sparse/diamond_221.chk')
-    mo_coeffs = kmf.mo_coeff
-    num_kpoints = len(mo_coeffs)
-    kpoints = ham['kpoints']
-    momentum_map = ham['qk_k2']
-    chol = ham['chol']
-    lambda_tot, lambda_T, lambda_W, nchol = sf.compute_lambda(
-            ham['hcore'],
-            chol,
-            kpoints,
-            momentum_map,
-            ham['nmo_pk']
-            )
-
-    print(lambda_tot, lambda_T, lambda_W)
-
-def lambda_calc():
+def test_lambda_calc():
     cell = gto.Cell()
     cell.atom = '''
     C 0.000000000000   0.000000000000   0.000000000000
@@ -58,20 +31,20 @@ def lambda_calc():
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = 'ncr_test_C_density_fitints.chk'
+    mf.with_df.mesh = mf.cell.mesh
     mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
     mf.init_guess = 'chkfile'
     mf.kernel()
 
-    from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
     from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
     mymp = mp.KMP2(mf)
     Luv = cholesky_from_df_ints(mymp)
-    helper = NCRSingleFactorizationHelper(cholesky_factor=Luv, kmf=mf)
+    helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf)
 
     hcore_ao = mf.get_hcore()
     hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo)) for k, mo in enumerate(mf.mo_coeff)])
 
-    lambda_tot, lambda_one_body, lambda_two_body = compute_lambda_ncr2(hcore_mo, helper)
+    lambda_tot, lambda_one_body, lambda_two_body = compute_lambda(hcore_mo, helper)
 
     from pyscf.pbc.tools.k2gamma import k2gamma
     from kpoint_eri.resource_estimates.utils.k2gamma import k2gamma
@@ -82,12 +55,12 @@ def lambda_calc():
 
     supercell_mymp = mp.KMP2(supercell_mf)
     supercell_Luv = cholesky_from_df_ints(supercell_mymp)
-    supercell_helper = NCRSingleFactorizationHelper(cholesky_factor=supercell_Luv, kmf=supercell_mf)
+    supercell_helper = SingleFactorizationHelper(cholesky_factor=supercell_Luv, kmf=supercell_mf)
 
     supercell_hcore_ao = supercell_mf.get_hcore()
     supercell_hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), supercell_hcore_ao[k], mo)) for k, mo in enumerate(supercell_mf.mo_coeff)])
 
-    sc_lambda_tot, sc_lambda_one_body, sc_lambda_two_body = compute_lambda_ncr2(supercell_hcore_mo, supercell_helper)
+    sc_lambda_tot, sc_lambda_one_body, sc_lambda_two_body = compute_lambda(supercell_hcore_mo, supercell_helper)
 
     # check l2 norm of one-body
     assert np.isclose(np.linalg.norm(supercell_hcore_mo), np.linalg.norm(np.array(hcore_mo).ravel()))
@@ -130,7 +103,7 @@ def test_padding():
     cell.a = ase_atom.cell[:].copy()
     cell.basis = "gth-szv"
     cell.pseudo = "gth-hf-rev"
-    cell.verbose = 4
+    cell.verbose = 0
     cell.build()
 
     kmesh = [1, 2, 2]
@@ -138,18 +111,18 @@ def test_padding():
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.chkfile = 'sf_H_padding.chk'
+    mf.with_df.mesh = cell.mesh
     mf.with_df._cderi_to_save = mf.chkfile
     mf.init_guess = 'chkfile'
     mf.kernel()
 
-    from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
     from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
     from pyscf.pbc.mp.kmp2 import _add_padding
 
     mymp = mp.KMP2(mf)
     Luv_padded = cholesky_from_df_ints(mymp)
     mo_coeff_padded = _add_padding(mymp, mymp.mo_coeff, mymp.mo_energy)[0]
-    helper = NCRSingleFactorizationHelper(cholesky_factor=Luv_padded, kmf=mf)
+    helper = SingleFactorizationHelper(cholesky_factor=Luv_padded, kmf=mf)
     assert mf.mo_coeff[0].shape[-1] != mo_coeff_padded[0].shape[-1]
 
     hcore_ao = mf.get_hcore()
@@ -164,13 +137,13 @@ def test_padding():
             assert np.isclose(np.sum(Luv_padded[k1, k2]),
                               np.sum(Luv_no_padding[k1, k2]))
 
-    helper_no_padding = NCRSingleFactorizationHelper(cholesky_factor=Luv_no_padding, kmf=mf)
-    lambda_tot_pad, lambda_one_body_pad, lambda_two_body_pad = compute_lambda_ncr2(hcore_no_padding, helper_no_padding)
-    helper = NCRSingleFactorizationHelper(cholesky_factor=Luv_padded, kmf=mf)
-    lambda_tot_no_pad, lambda_one_body_no_pad, lambda_two_body_no_pad = compute_lambda_ncr2(hcore_padded, helper)
+    helper_no_padding = SingleFactorizationHelper(cholesky_factor=Luv_no_padding, kmf=mf)
+    lambda_tot_pad, lambda_one_body_pad, lambda_two_body_pad = compute_lambda(hcore_no_padding, helper_no_padding)
+    helper = SingleFactorizationHelper(cholesky_factor=Luv_padded, kmf=mf)
+    lambda_tot_no_pad, lambda_one_body_no_pad, lambda_two_body_no_pad = compute_lambda(hcore_padded, helper)
     assert np.isclose(lambda_tot_no_pad, lambda_tot_pad)
 
 
 if __name__ == "__main__":
-    lambda_calc()
+    test_lambda_calc()
     test_padding()
