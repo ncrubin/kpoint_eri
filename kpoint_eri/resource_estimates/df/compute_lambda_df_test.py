@@ -20,10 +20,9 @@ def test_lambda_calc():
     3.370137329, 0.000000000, 3.370137329
     3.370137329, 3.370137329, 0.000000000'''
     cell.unit = 'B'
-    cell.verbose = 4
+    cell.verbose = 0
     cell.build()
 
-    from pyscf.pbc.scf.chkfile import load_scf
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     nkpts = len(kpts)
@@ -67,8 +66,7 @@ def test_lambda_calc():
                 kpmq_idx = supercell_helper.k_transfer_map[qidx, kpidx]
                 exact_eri_block = supercell_helper.get_eri_exact([kidx, kmq_idx, kpmq_idx, kpidx])
                 test_eri_block = supercell_helper.get_eri([kidx, kmq_idx, kpmq_idx, kpidx])
-                # assert np.allclose(exact_eri_block, test_eri_block)
-                print(np.allclose(exact_eri_block, test_eri_block))
+                assert np.allclose(exact_eri_block, test_eri_block)
 
     supercell_hcore_ao = supercell_mf.get_hcore()
     supercell_hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), supercell_hcore_ao[k], mo)) for k, mo in enumerate(supercell_mf.mo_coeff)])
@@ -82,30 +80,6 @@ def test_lambda_calc():
 
     from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
     sf_helper = NCRSingleFactorizationHelper(cholesky_factor=Luv, kmf=mf)
-    # this part needs to change 
-    lambda_two_body = 0
-    for qidx in range(len(kpts)):
-        # A and B are W
-        A, B = sf_helper.build_AB_from_chol(qidx) # [naux, nao * nk, nao * nk]
-        A /= np.sqrt(nkpts)
-        B /= np.sqrt(nkpts)
-        # sum_q sum_n (sum_{pq} |Re{A_{pq}^n}| + |Im{A_{pq}^n|)^2
-        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A.real) + np.abs(A.imag))**2)
-        # lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B.real) + np.abs(B.imag))**2)
-        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(A)**2))
-        lambda_two_body += np.sum(np.einsum('npq->n', np.abs(B)**2))
-
-        # _, w, _ = np.linalg.svd(A[0])
-        # print(np.sum(w**2))
-        # print(np.sum(np.abs(A[0])**2))
-        # print(np.trace(A[0].conj().T @ A[0]).real)
-        # print(np.einsum('npq->n', np.abs(A)**2)[0])
-        # w, _ = np.linalg.eigh(A[0])
-        # print(np.sum(np.abs(w)**2))
-        # print(np.sum([np.sum(np.abs(A[x])**2) for x in range(helper.naux)]))
-        # print(np.sum(np.einsum('npq->n', np.abs(A)**2)))
-    print(lambda_two_body)
-
     lambda_two_body = 0
     lambda_two_body_v2 = 0
     for qidx in range(nkpts):
@@ -138,8 +112,7 @@ def test_lambda_calc():
         lambda_two_body_v2 += np.sum(bval_to_square_v2)
  
         
-    print(lambda_two_body)
-    print(lambda_two_body_v2)
+    assert np.isclose(lambda_two_body, lambda_two_body_v2)
 
     lambda_two_body_v3 = 0
     lambda_two_body_v4 = 0
@@ -178,11 +151,8 @@ def test_lambda_calc():
             weird_quantum_lambda_two_body += quantum_first_number_to_square**2
             weird_quantum_lambda_two_body += quantum_second_number_to_square**2
 
-    print(lambda_two_body_v3)
-    print(lambda_two_body_v4)
-    print(weird_quantum_lambda_two_body * 0.25)
+    assert np.isclose(lambda_two_body_v3, lambda_two_body_v4)
     lambda_tot, lambda_one_body, lambda_two_body, num_eigs = compute_lambda(hcore_mo, helper)
-    print(lambda_two_body)
     # YES THIS LOOKS CORRECT!
 
     sc_lambda_two_body = 0
