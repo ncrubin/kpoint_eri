@@ -46,15 +46,11 @@ def solve_isdf(orbitals, interp_indx):
     # Just down sample from ZC_dag
     CC_dag = ZC_dag[interp_indx].copy()
     # Solve ZC_dag = Theta CC_dag
-    # Theta =  ZC_dag (CC_dag)^{-1}
-    # TODO: Originally used over-determined least squares solve, does it matter?
-    CC_dag_inv = np.linalg.pinv(CC_dag)
-    Theta = ZC_dag @ CC_dag_inv
+    # Theta = ZC_dag @ CC_dag_inv
     # Solve ZC_dag = Theta CC_dag
     # -> ZC_dag^T = CC_dag^T Theta^T
-    # Theta_dag, res, rank, s = np.linalg.lstsq(CC_dag.conj().T, ZC_dag.conj().T)
-    # return Theta_dag.conj().T, interp_orbitals
-    return Theta, interp_orbitals
+    Theta_dag, res, rank, s = np.linalg.lstsq(CC_dag.conj().T, ZC_dag.conj().T)
+    return Theta_dag.conj().T, interp_orbitals
 
 
 def supercell_isdf(
