@@ -28,9 +28,9 @@ def test_df_amat_bmat():
     kpts = cell.make_kpts(kmesh)
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = "ncr_test_C_density_fitints.chk"
+    mf.chkfile = "test_C_density_fitints.chk"
     mf.init_guess = "chkfile"
-    mf.with_df._cderi_to_save = "ncr_test_C_density_fitints_gdf.h5"
+    mf.with_df._cderi_to_save = "test_C_density_fitints_gdf.h5"
     mf.with_df.mesh = cell.mesh
     mf.init_guess = "chkfile"
     mf.kernel()
@@ -113,8 +113,8 @@ def test_supercell_df_amat_bmat():
     kmesh = [1, 1, 1]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = "ncr_test_C_density_fitints.chk"
-    mf.with_df._cderi_to_save = "ncr_test_C_density_fitints_gdf.h5"
+    mf.chkfile = "test_C_density_fitints.chk"
+    mf.with_df._cderi_to_save = "test_C_density_fitints_gdf.h5"
     mf.with_df.mesh = cell.mesh
     mf.init_guess = "chkfile"
     mf.kernel()
