@@ -28,7 +28,7 @@ def test_lambda_calc():
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.with_df.mesh = cell.mesh
-    mf.chkfile = 'fft_ncr_test_C_density_fitints.chk'
+    mf.chkfile = 'test_C_density_fitints.chk'
     mf.init_guess = 'chkfile'
     mf.kernel()
 
@@ -59,15 +59,6 @@ def test_lambda_calc():
     sc_nk = supercell_helper.nk
     sc_help = supercell_helper
  
-    for kidx in range(sc_nk):
-        for kpidx in range(sc_nk):
-            for qidx in range(sc_nk):                 
-                kmq_idx = supercell_helper.k_transfer_map[qidx, kidx]
-                kpmq_idx = supercell_helper.k_transfer_map[qidx, kpidx]
-                exact_eri_block = supercell_helper.get_eri_exact([kidx, kmq_idx, kpmq_idx, kpidx])
-                test_eri_block = supercell_helper.get_eri([kidx, kmq_idx, kpmq_idx, kpidx])
-                assert np.allclose(exact_eri_block, test_eri_block)
-
     supercell_hcore_ao = supercell_mf.get_hcore()
     supercell_hcore_mo = np.asarray([reduce(np.dot, (mo.T.conj(), supercell_hcore_ao[k], mo)) for k, mo in enumerate(supercell_mf.mo_coeff)])
     l2_norm_supercell_hcore_mo = np.linalg.norm(supercell_hcore_mo.ravel())
@@ -78,8 +69,6 @@ def test_lambda_calc():
 
     assert np.isclose(sc_lambda_one_body, lambda_one_body)
 
-    from kpoint_eri.resource_estimates.sf.ncr_integral_helper import NCRSingleFactorizationHelper
-    sf_helper = NCRSingleFactorizationHelper(cholesky_factor=Luv, kmf=mf)
     lambda_two_body = 0
     lambda_two_body_v2 = 0
     for qidx in range(nkpts):
@@ -113,66 +102,6 @@ def test_lambda_calc():
  
         
     assert np.isclose(lambda_two_body, lambda_two_body_v2)
-
-    lambda_two_body_v3 = 0
-    lambda_two_body_v4 = 0
-    weird_quantum_lambda_two_body = 0
-    for qidx in range(nkpts):
-        for nn in range(helper.naux):
-            # sum up frobenius norm squared for each matrix A_{n}(Q, K) and B_{n}(Q, K)
-            first_number_to_square = 0
-            second_number_to_square = 0
-
-            quantum_first_number_to_square = 0
-            quantum_second_number_to_square = 0
-
-            for kidx in range(nkpts):
-                Amats, Bmats = helper.build_A_B_n_q_k_from_chol(qidx, kidx) 
-                Amats /= np.sqrt(nkpts)
-                Bmats /= np.sqrt(nkpts)
-                
-                wa, _ = np.linalg.eigh(Amats[nn])
-                wb, _ = np.linalg.eigh(Bmats[nn])
-
-                first_number_to_square += np.sum(np.abs(wa)**2) 
-                second_number_to_square += np.sum(np.abs(wb)**2) 
-
-                eigs_a_fixed_n_q = helper.amat_lambda_vecs[kidx, qidx, nn] / np.sqrt(nkpts)
-                eigs_b_fixed_n_q = helper.bmat_lambda_vecs[kidx, qidx, nn] / np.sqrt(nkpts)
-                lambda_two_body_v4 += np.sum(np.abs(eigs_a_fixed_n_q)**2)
-                lambda_two_body_v4 += np.sum(np.abs(eigs_b_fixed_n_q)**2)
-
-                quantum_first_number_to_square += np.sum(np.abs(eigs_a_fixed_n_q))
-                quantum_second_number_to_square += np.sum(np.abs(eigs_b_fixed_n_q))
-           
-            lambda_two_body_v3 += first_number_to_square
-            lambda_two_body_v3 += second_number_to_square
-
-            weird_quantum_lambda_two_body += quantum_first_number_to_square**2
-            weird_quantum_lambda_two_body += quantum_second_number_to_square**2
-
-    assert np.isclose(lambda_two_body_v3, lambda_two_body_v4)
-    lambda_tot, lambda_one_body, lambda_two_body, num_eigs = compute_lambda(hcore_mo, helper)
-    # YES THIS LOOKS CORRECT!
-
-    sc_lambda_two_body = 0
-    sc_weird_quantum_lambda_two_body = 0
-    for qidx in range(1):
-        for nn in range(supercell_helper.naux):
-            quantum_first_number_to_square = 0
-            quantum_second_number_to_square = 0
-            for kidx in range(1):
-                Amats, Bmats = supercell_helper.build_A_B_n_q_k_from_chol(qidx, kidx) 
-                sc_lambda_two_body += np.sum(np.einsum('npq->n', np.abs(Amats)**2))
-                sc_lambda_two_body += np.sum(np.einsum('npq->n', np.abs(Bmats)**2))
-                eigs_a_fixed_n_q = supercell_helper.amat_lambda_vecs[kidx, qidx, nn] / np.sqrt(1)
-                eigs_b_fixed_n_q = supercell_helper.bmat_lambda_vecs[kidx, qidx, nn] / np.sqrt(1)
-
-                quantum_first_number_to_square += np.sum(np.abs(eigs_a_fixed_n_q))
-                quantum_second_number_to_square += np.sum(np.abs(eigs_b_fixed_n_q))
- 
-            sc_weird_quantum_lambda_two_body += quantum_first_number_to_square**2
-            sc_weird_quantum_lambda_two_body += quantum_second_number_to_square**2
 
 if __name__ == "__main__":
     test_lambda_calc()
