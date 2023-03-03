@@ -71,7 +71,10 @@ def solve_isdf(
     # Theta = ZC_dag @ CC_dag_inv
     # Solve ZC_dag = Theta CC_dag
     # -> ZC_dag^T = CC_dag^T Theta^T
-    Theta_dag, res, rank, s = np.linalg.lstsq(CC_dag.conj().T, ZC_dag.conj().T)
+    # rcond = None uses MACH_EPS * max(M,N) for least squares convergence.
+    Theta_dag, res, rank, s = np.linalg.lstsq(
+        CC_dag.conj().T, ZC_dag.conj().T, rcond=None
+    )
     return Theta_dag.conj().T, interp_orbitals
 
 
@@ -427,7 +430,7 @@ def inverse_G_map_double_translation(
 
 def build_eri_isdf_double_translation(
     chi: np.ndarray,
-    zeta: List[np.ndarray],
+    zeta: np.ndarray,
     q_indx: int,
     kpts_indx: list,
     G_mapping: np.ndarray,
