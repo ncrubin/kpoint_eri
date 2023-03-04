@@ -44,10 +44,12 @@ def test_kmeans():
 
     weight = gen_gaussian(xx, yy, grid)
     kmeans = KMeansCVT(grid)
-    interp_points = kmeans.find_interpolating_points(num_interp_points, weight,
-                                                     verbose=False)
+    interp_points = kmeans.find_interpolating_points(
+        num_interp_points, weight, verbose=False
+    )
     interp_points_ref = [32, 81, 77, 62, 28, 22, 76, 24, 27, 73]
     assert np.allclose(interp_points, interp_points_ref)
+
 
 if __name__ == "__main__":
     test_kmeans()

@@ -17,13 +17,13 @@ import jax.numpy as jnp
 from openfermion.resource_estimates.thc.utils import adagrad
 from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
 
-from kpoint_eri.factorizations.isdf import solve_kmeans_kpisdf, KPointISDF
+from kpoint_eri.factorizations.isdf import solve_kmeans_kpisdf, KPointTHC
 from kpoint_eri.resource_estimates.utils.misc_utils import (
     build_momentum_transfer_mapping,
 )
 
 
-def load_thc_factors(chkfile_name: str) -> KPointISDF:
+def load_thc_factors(chkfile_name: str) -> KPointTHC:
     """Load THC factors from a checkpoint file
 
     Args:
@@ -44,7 +44,34 @@ def load_thc_factors(chkfile_name: str) -> KPointISDF:
             xi = None
         for iq in range(G_mapping.shape[0]):
             zeta[iq] = fh5[f"zeta_{iq}"][:]
-    return KPointISDF(xi=xi, zeta=zeta, G_mapping=G_mapping, chi=chi)
+    return KPointTHC(xi=xi, zeta=zeta, G_mapping=G_mapping, chi=chi)
+
+
+def save_thc_factors(
+    chkfile_name: str,
+    chi: np.ndarray,
+    zeta: np.ndarray,
+    Gpq_map: np.ndarray,
+    xi: Union[np.ndarray, None] = None,
+) -> None:
+    """Write THC factors to file
+
+    Args:
+        chkfile_name: Filename to write to.
+        chi: THC leaf tensor.
+        zeta: THC central tensor.
+        Gpq_map: Maps momentum conserving tuples of kpoints to reciprocal
+            lattice vectors in THC central tensor.
+        xi: Interpolating vectors (optional, Default None).
+    """
+    num_kpts = chi.shape[0]
+    with h5py.File(chkfile_name, "w") as fh5:
+        fh5["chi"] = chi
+        fh5["G_mapping"] = Gpq_map
+        if xi is not None:
+            fh5["xi"] = xi
+        for iq in range(num_kpts):
+            fh5[f"zeta_{iq}"] = zeta[iq]
 
 
 def get_zeta_size(zeta: np.ndarray) -> int:
@@ -498,11 +525,7 @@ def lbfgsb_opt_kpthc_l2reg(
     if chkfile_name is not None:
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(params, num_thc, num_orb, num_kpts, num_G_per_Q)
-        with h5py.File(chkfile_name, "w") as fh5:
-            fh5["chi"] = chi
-            fh5["G_mapping"] = Gpq_map
-            for iq in range(num_kpts):
-                fh5[f"zeta_{iq}"] = zeta[iq]
+        save_thc_factors(chkfile_name, chi, zeta, Gpq_map)
     return np.array(params), loss
 
 
@@ -516,7 +539,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     maxiter: int = 150_000,
     disp_freq: int = 98,
     penalty_param: Union[float, None] = None,
-    batch_size: Union[int, None]=None,
+    batch_size: Union[int, None] = None,
 ) -> Tuple[np.ndarray, float]:
     """Least-squares fit of two-electron integral tensors with  L-BFGS-B with
     l2-regularization of lambda. This version batches over multiple k-points
@@ -660,11 +683,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     if chkfile_name is not None:
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(params, num_thc, num_orb, num_kpts, num_G_per_Q)
-        with h5py.File(chkfile_name, "w") as fh5:
-            fh5["chi"] = chi
-            fh5["G_mapping"] = Gpq_map
-            for iq in range(num_kpts):
-                fh5[f"zeta_{iq}"] = zeta[iq]
+        save_thc_factors(chkfile_name, chi, zeta, Gpq_map)
     return np.array(params), loss
 
 
@@ -783,11 +802,7 @@ def adagrad_opt_kpthc_batched(
     if chkfile_name is not None:
         num_G_per_Q = [len(np.unique(GQ)) for GQ in Gpq_map]
         chi, zeta = unpack_thc_factors(x, num_thc, num_orb, num_kpts, num_G_per_Q)
-        with h5py.File(chkfile_name, "w") as fh5:
-            fh5["chi"] = chi
-            fh5["G_mapping"] = Gpq_map
-            for iq in range(num_kpts):
-                fh5[f"zeta_{iq}"] = zeta[iq]
+        save_thc_factors(chkfile_name, chi, zeta, Gpq_map)
     return params, loss
 
 
@@ -842,7 +857,7 @@ def compute_isdf_loss(chi, zeta, momentum_map, Gpq_map, chol):
         chol: Cholesky factors definining 'exact' eris.
 
     Returns:
-        loss: ISDF loss in ERIs. 
+        loss: ISDF loss in ERIs.
     """
     initial_guess = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
     pack_thc_factors(chi, zeta, initial_guess)
@@ -914,9 +929,9 @@ def kpoint_thc_via_isdf(
     info = {}
     start = time.time()
     if initial_guess is not None:
-        chi, zeta, xi, G_mapping = initial_guess
+        kpt_thc = initial_guess
     else:
-        chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(
+        kpt_thc = solve_kmeans_kpisdf(
             kmf,
             num_thc,
             single_translation=False,
@@ -928,14 +943,10 @@ def kpoint_thc_via_isdf(
         print("Time for generating initial guess {:.4f}".format(time.time() - start))
     num_mo = kmf.mo_coeff[0].shape[-1]
     num_kpts = len(kmf.kpts)
+    chi, zeta, G_mapping = kpt_thc.chi, kpt_thc.zeta, kpt_thc.G_mapping
     if save_checkoints:
         chkfile_name = f"{checkpoint_basename}_isdf.h5"
-        with h5py.File(chkfile_name, "w") as fh5:
-            fh5["chi"] = chi
-            fh5["G_mapping"] = G_mapping
-            fh5["xi"] = xi
-            for iq in range(num_kpts):
-                fh5[f"zeta_{iq}"] = zeta[iq]
+        save_thc_factors(chkfile_name, chi, zeta, G_mapping, kpt_thc.xi)
     momentum_map = build_momentum_transfer_mapping(kmf.cell, kmf.kpts)
     if cholesky is not None:
         cholesky_contiguous = make_contiguous_cholesky(cholesky)

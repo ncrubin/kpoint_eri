@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import itertools
-from typing import List, Tuple
+from typing import Tuple, Union
 import numpy as np
 import scipy.linalg
 
@@ -773,8 +773,8 @@ def setup_isdf(
 
 
 @dataclass
-class KPointISDF:
-    """Light class to hold ISDF tensors.
+class KPointTHC:
+    """Light class to hold THC tensors.
 
     Attributes:
         chi: Cell-periodic MOs evaluated on interpolating points. Leaf Tensor in
@@ -788,8 +788,8 @@ class KPointISDF:
 
     chi: np.ndarray
     zeta: np.ndarray
-    xi: np.ndarray
     G_mapping: np.ndarray
+    xi: Union[np.ndarray, None]
 
     @property
     def num_interp_points(self) -> int:
@@ -808,7 +808,7 @@ def solve_kmeans_kpisdf(
     use_density_guess: bool = False,
     kmeans_weighting_function: str = "density",
     verbose: bool = True,
-) -> KPointISDF:
+) -> KPointTHC:
     r"""Solve for k-point THC factors using k-means CVT ISDF procedure.
 
     Args:
@@ -822,7 +822,7 @@ def solve_kmeans_kpisdf(
         verbose: Whether to print some information.
 
     Returns:
-        solution: THC factors held in KPointISDF object.
+        solution: THC factors held in KPointTHC object.
     """
     if verbose:
         print(f" Number of interpolating points: {num_interp_points}")
@@ -907,7 +907,7 @@ def solve_qrcp_isdf(
         verbose: Whether to print some information.
 
     Returns:
-        solution: THC factors held in KPointISDF object.
+        solution: THC factors held in KPointTHC object.
     """
     # Build real space grid, and orbitals on real space grid
     grid_points, cell_periodic_mo, bloch_orbitals_mo = setup_isdf(mf_inst)
@@ -938,7 +938,7 @@ def solve_for_thc_factors(
     grid_points,
     single_translation=True,
     verbose=True,
-) -> KPointISDF:
+) -> KPointTHC:
     r"""Solve for k-point THC factors using interpolating points as input.
 
     Args:
@@ -953,7 +953,7 @@ def solve_for_thc_factors(
         verbose: Whether to print some information.
 
     Returns:
-        solution: THC factors held in KPointISDF object.
+        solution: THC factors held in KPointTHC object.
     """
     assert isinstance(mf_inst.with_df, df.FFTDF), "mf object must use FFTDF"
     if single_translation:
@@ -981,6 +981,6 @@ def solve_for_thc_factors(
     chi = chi.reshape((num_interp_points, num_kpts, num_mo))
     chi = chi.transpose((1, 2, 0))
 
-    solution = KPointISDF(chi, zeta, xi, G_mapping)
+    solution = KPointTHC(chi=chi, zeta=zeta, xi=xi, G_mapping=G_mapping)
 
     return solution
