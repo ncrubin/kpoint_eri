@@ -4,18 +4,18 @@ from pyscf.pbc import gto
 
 
 @dataclass
-class ResourcesHelper:
+class PBCResources:
     system_name: str
     num_spin_orbitals: int
     num_kpts: int
     dE: float
+    chi: int
     exact_emp2: float 
+    cutoff: list = field(default_factory=list)
     approx_emp2: list = field(default_factory=list)
-    threshold: list = field(default_factory=list)
     lambda_tot: list = field(default_factory=list)
     lambda_one_body: list = field(default_factory=list)
     lambda_two_body: list = field(default_factory=list)
-    number_of_sym_unique_terms: list = field(default_factory=list)
     toffolis_per_step: list = field(default_factory=list)
     total_toffolis: list = field(default_factory=list)
     logical_qubits: list = field(default_factory=list)
@@ -27,21 +27,19 @@ class ResourcesHelper:
         lambda_tot: float,
         lambda_one_body: float,
         lambda_two_body: float,
-        number_of_sym_unique_terms: float,
         toffolis_per_step: float,
         total_toffolis: float,
         logical_qubits: float,
-        threshold: float,
+        cutoff: float,
         mp2_energy: float,
     ) -> None:
         self.lambda_tot.append(lambda_tot)
         self.lambda_one_body.append(lambda_one_body)
         self.lambda_two_body.append(lambda_two_body)
-        self.number_of_sym_unique_terms.append(number_of_sym_unique_terms)
         self.toffolis_per_step.append(toffolis_per_step)
         self.total_toffolis.append(total_toffolis)
         self.logical_qubits.append(logical_qubits)
-        self.threshold.append(threshold)
+        self.cutoff.append(cutoff)
         self.approx_emp2.append(mp2_energy)
 
 

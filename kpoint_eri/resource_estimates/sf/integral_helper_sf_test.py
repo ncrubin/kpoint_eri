@@ -57,5 +57,4 @@ def test_ncr_sf_helper_trunc():
     approx_cc = build_cc(approx_cc, helper)
     eris = approx_cc.ao2mo(lambda x: x)
     emp2, _, _ = approx_cc.init_amps(eris)
-    print()
     assert np.isclose(emp2, exact_emp2)
