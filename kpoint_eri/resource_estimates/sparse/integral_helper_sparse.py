@@ -104,7 +104,7 @@ class SparseFactorizationHelper:
         self.k_transfer_map = k_transfer_map
         self.threshold = threshold
 
-    def get_total_unique_terms_above_thresh(self, return_nk_counter=True):
+    def get_total_unique_terms_above_thresh(self, return_nk_counter=False):
         """
         Determine all unique (pkp, qkq|rkr, sks) given momentum conservation and four fold symmetry
 

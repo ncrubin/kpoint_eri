@@ -1,11 +1,12 @@
 import numpy as np
+from typing import Tuple
 
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
 )
 
 
-def compute_lambda(hcore: np.ndarray, sparse_int_obj: SparseFactorizationHelper):
+def compute_lambda(hcore: np.ndarray, sparse_int_obj: SparseFactorizationHelper) -> Tuple[float, float, float, Tuple[int, int] | int]:
     """
     Compute lambda value for sparse method
 
@@ -63,5 +64,5 @@ def compute_lambda(hcore: np.ndarray, sparse_int_obj: SparseFactorizationHelper)
         lambda_tot,
         lambda_one_body,
         lambda_two_body,
-        sparse_int_obj.get_total_unique_terms_above_thresh(),
+        sparse_int_obj.get_total_unique_terms_above_thresh()
     )

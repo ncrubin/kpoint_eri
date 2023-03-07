@@ -134,7 +134,7 @@ class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
             # (kpts[ikp],kpts[ikq],kpts[ikr],kpts[iks]), compact=False)
             kpts = [ikp, ikq, ikr, iks]
             eri_kpt = eri_helper.get_eri(kpts)
-            if dtype == np.float:
+            if dtype == float:
                 eri_kpt = eri_kpt.real
             eri_kpt = eri_kpt.reshape(nmo, nmo, nmo, nmo)
             for (kp, kq, kr) in khelper.symm_map[(ikp, ikq, ikr)]:
