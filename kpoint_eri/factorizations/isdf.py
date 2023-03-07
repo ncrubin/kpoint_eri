@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import itertools
 from typing import Tuple, Union
 import numpy as np
+import numpy.typing as npt
 import scipy.linalg
 
 from pyscf.pbc import tools, df, gto, scf
@@ -786,10 +787,10 @@ class KPointTHC:
         G_mapping: Maps momentum transfer and k-point index to G_vector index.
     """
 
-    chi: np.ndarray
-    zeta: np.ndarray
-    G_mapping: np.ndarray
-    xi: Union[np.ndarray, None]
+    chi: npt.NDArray[np.complex128] 
+    zeta: npt.NDArray
+    G_mapping: npt.NDArray
+    xi: Union[npt.NDArray[np.complex128], None]
 
     @property
     def num_interp_points(self) -> int:

@@ -6,6 +6,8 @@ from uuid import uuid4
 import math
 import time
 
+from pyscf.pbc import scf
+
 from jax.config import config
 
 config.update("jax_enable_x64", True)
@@ -591,7 +593,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     if batch_size is None:
         batch_size = num_kpts**2
     indx_arrays = prepare_batched_data_indx_arrays(
-        momentum_map, Gpq_map, num_thc, num_orb
+        momentum_map, Gpq_map
     )
     data_amount = batch_size * (
         4 * num_orb * num_thc + num_thc * num_thc  # chi[p,m] + zeta[m,n]
@@ -745,7 +747,7 @@ def adagrad_opt_kpthc_batched(
     if batch_size is None:
         batch_size = num_kpts**2
     indx_arrays = prepare_batched_data_indx_arrays(
-        momentum_map, Gpq_map, num_thc, num_orb
+        momentum_map, Gpq_map
     )
 
     def update(i, opt_state):
@@ -879,23 +881,23 @@ def compute_isdf_loss(chi, zeta, momentum_map, Gpq_map, chol):
 
 
 def kpoint_thc_via_isdf(
-    kmf,
-    cholesky,
-    num_thc,
-    perform_bfgs_opt=True,
-    perform_adagrad_opt=True,
-    bfgs_maxiter=3000,
-    adagrad_maxiter=3000,
-    checkpoint_basename="thc",
-    save_checkoints=True,
-    use_batched_algos=True,
-    penalty_param=None,
-    batch_size=None,
-    max_kmeans_iteration=500,
-    verbose=False,
-    initial_guess=None,
-    isdf_density_guess=False,
-):
+    kmf: scf.RHF,
+    cholesky: np.ndarray,
+    num_thc: int,
+    perform_bfgs_opt: bool=True,
+    perform_adagrad_opt: bool=True,
+    bfgs_maxiter: int=3000,
+    adagrad_maxiter: int=3000,
+    checkpoint_basename: str="thc",
+    save_checkoints: bool=True,
+    use_batched_algos: bool=True,
+    penalty_param: Union[None, float]=None,
+    batch_size: Union[None, bool]=None,
+    max_kmeans_iteration: int=500,
+    verbose: bool=False,
+    initial_guess: Union[None, KPointTHC]=None,
+    isdf_density_guess: bool=False,
+) -> Tuple[KPointTHC, dict]:
     """
     Solve k-point THC using ISDF as an initial guess.
 
@@ -1014,4 +1016,5 @@ def kpoint_thc_via_isdf(
         )
     if verbose:
         print("Time for ADAGRAD {:.4f}".format(time.time() - start))
-    return chi, zeta, G_mapping, info
+    result = KPointTHC(chi=chi, zeta=zeta, G_mapping=G_mapping, xi=kpt_thc.xi)
+    return result, info

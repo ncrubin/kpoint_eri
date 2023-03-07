@@ -1,18 +1,18 @@
 import numpy as np
 import jax.numpy as jnp
 import jax
+import os
 
 from pyscf.pbc import gto, scf, mp
 
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
-from kpoint_eri.resource_estimates.utils.k2gamma import (
-        k2gamma
-        )
-from kpoint_eri.resource_estimates.utils.misc_utils import build_momentum_transfer_mapping
+from kpoint_eri.resource_estimates.utils.misc_utils import (
+    build_momentum_transfer_mapping,
+)
 from kpoint_eri.factorizations.isdf import solve_kmeans_kpisdf
 from kpoint_eri.factorizations.thc_jax import (
+    kpoint_thc_via_isdf,
     pack_thc_factors,
-    load_thc_factors,
     thc_objective_regularized,
     thc_objective_regularized_batched,
     unpack_thc_factors,
@@ -20,8 +20,8 @@ from kpoint_eri.factorizations.thc_jax import (
     make_contiguous_cholesky,
     lbfgsb_opt_kpthc_l2reg,
     lbfgsb_opt_kpthc_l2reg_batched,
+    adagrad_opt_kpthc_batched,
     prepare_batched_data_indx_arrays,
-    kpoint_thc_via_isdf,
 )
 
 from openfermion.resource_estimates.thc.utils.thc_factorization import (
@@ -45,7 +45,7 @@ def test_kpoint_thc_reg_gamma():
     3.370137329, 0.000000000, 3.370137329
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
-    cell.mesh = [11]*3
+    cell.mesh = [11] * 3
     cell.verbose = 0
     cell.build()
 
@@ -56,7 +56,7 @@ def test_kpoint_thc_reg_gamma():
     mf.kernel()
     num_mo = mf.mo_coeff[0].shape[-1]
     num_interp_points = 10 * mf.mo_coeff[0].shape[-1]
-    kpt_thc = solve_kmeans_kpisdf(mf, num_interp_points, single_translation=False) 
+    kpt_thc = solve_kmeans_kpisdf(mf, num_interp_points, single_translation=False)
     chi, zeta, G_mapping = kpt_thc.chi, kpt_thc.zeta, kpt_thc.G_mapping
     momentum_map = build_momentum_transfer_mapping(cell, kpts)
     buffer = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
@@ -77,7 +77,7 @@ def test_kpoint_thc_reg_gamma():
     rsmf.with_df.mesh = mf.cell.mesh
     mymp = mp.KMP2(rsmf)
     Luv = cholesky_from_df_ints(mymp)
-    Luv_cont = make_contiguous_cholesky(Luv) 
+    Luv_cont = make_contiguous_cholesky(Luv)
     eri = np.einsum("npq,nrs->pqrs", Luv_cont[0, 0], Luv_cont[0, 0]).real
     buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
     eri_thc = np.einsum(
@@ -140,7 +140,7 @@ def test_kpoint_thc_reg_batched():
     3.370137329, 0.000000000, 3.370137329
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
-    cell.mesh = [11]*3
+    cell.mesh = [11] * 3
     cell.verbose = 0
     cell.build()
 
@@ -151,7 +151,9 @@ def test_kpoint_thc_reg_batched():
     mf.kernel()
     momentum_map = build_momentum_transfer_mapping(cell, kpts)
     num_interp_points = 10 * cell.nao
-    kpt_thc = solve_kmeans_kpisdf(mf, num_interp_points, single_translation=False, verbose=False) 
+    kpt_thc = solve_kmeans_kpisdf(
+        mf, num_interp_points, single_translation=False, verbose=False
+    )
     chi, zeta, G_mapping = kpt_thc.chi, kpt_thc.zeta, kpt_thc.G_mapping
     rsmf = scf.KRHF(mf.cell, mf.kpts).rs_density_fit()
     rsmf.mo_occ = mf.mo_occ
@@ -160,7 +162,7 @@ def test_kpoint_thc_reg_batched():
     rsmf.with_df.mesh = mf.cell.mesh
     mymp = mp.KMP2(rsmf)
     Luv = cholesky_from_df_ints(mymp)
-    Luv = cholesky_from_df_ints(mymp)
+    Luv_cont = make_contiguous_cholesky(Luv)
     buffer = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
     # Pack THC factors into flat array
     pack_thc_factors(chi, zeta, buffer)
@@ -176,26 +178,39 @@ def test_kpoint_thc_reg_batched():
     # Test objective is the same batched/non-batched
     penalty = 1e-3
     obj_ref = thc_objective_regularized(
-        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv, penalty
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv_cont, penalty
     )
-    # Test gradient is the same
+    # # Test gradient is the same
     indx_arrays = prepare_batched_data_indx_arrays(momentum_map, G_mapping)
-    batch_size = num_kpts ** 2
+    batch_size = num_kpts**2
     obj_batched = thc_objective_regularized_batched(
-        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv,
-        indx_arrays, batch_size, penalty_param=penalty
+        buffer,
+        num_mo,
+        num_interp_points,
+        momentum_map,
+        G_mapping,
+        Luv_cont,
+        indx_arrays,
+        batch_size,
+        penalty_param=penalty,
     )
     assert abs(obj_ref - obj_batched) < 1e-12
     grad_ref_fun = jax.grad(thc_objective_regularized)
     grad_ref = grad_ref_fun(
-        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv,
-        penalty
+        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv_cont, penalty
     )
     # Test gradient is the same
     grad_batched_fun = jax.grad(thc_objective_regularized_batched)
     grad_batched = grad_batched_fun(
-        buffer, num_mo, num_interp_points, momentum_map, G_mapping, Luv,
-        indx_arrays, batch_size, penalty
+        buffer,
+        num_mo,
+        num_interp_points,
+        momentum_map,
+        G_mapping,
+        Luv_cont,
+        indx_arrays,
+        batch_size,
+        penalty,
     )
     assert np.allclose(grad_batched, grad_ref)
     opt_param, _ = lbfgsb_opt_kpthc_l2reg(
@@ -203,7 +218,7 @@ def test_kpoint_thc_reg_batched():
         zeta,
         momentum_map,
         G_mapping,
-        jnp.array(Luv),
+        jnp.array(Luv_cont),
         chkfile_name="thc_opt.h5",
         maxiter=2,
         penalty_param=1e-3,
@@ -213,7 +228,7 @@ def test_kpoint_thc_reg_batched():
         zeta,
         momentum_map,
         G_mapping,
-        jnp.array(Luv),
+        jnp.array(Luv_cont),
         chkfile_name="thc_opt.h5",
         maxiter=2,
         penalty_param=1e-3,
@@ -225,138 +240,99 @@ def test_kpoint_thc_reg_batched():
         zeta,
         momentum_map,
         G_mapping,
-        jnp.array(Luv),
+        jnp.array(Luv_cont),
         batch_size=batch_size,
         chkfile_name="thc_opt.h5",
         maxiter=2,
         penalty_param=1e-3,
     )
     assert np.allclose(opt_param_batched, opt_param_batched_diff_batch)
+    ada_param, _ = adagrad_opt_kpthc_batched(
+        chi,
+        zeta,
+        momentum_map,
+        G_mapping,
+        jnp.array(Luv_cont),
+        chkfile_name="thc_opt.h5",
+        maxiter=2,
+        batch_size=1,
+    )
+    assert np.allclose(opt_param, opt_param_batched)
+    batch_size = 7
+    ada_param_diff_batch, _ = adagrad_opt_kpthc_batched(
+        chi,
+        zeta,
+        momentum_map,
+        G_mapping,
+        jnp.array(Luv_cont),
+        batch_size=batch_size,
+        chkfile_name="thc_opt.h5",
+        maxiter=2,
+    )
+    assert np.allclose(ada_param, ada_param_diff_batch)
 
-# def test_kpoint_thc_utility_function():
-#     cell = gto.Cell()
-#     cell.atom = """
-#     C 0.000000000000   0.000000000000   0.000000000000
-#     C 1.685068664391   1.685068664391   1.685068664391
-#     """
-#     cell.basis = "gth-szv"
-#     cell.pseudo = "gth-hf-rev"
-#     cell.mesh = [11]*3
-#     cell.a = """
-#     0.000000000, 3.370137329, 3.370137329
-#     3.370137329, 0.000000000, 3.370137329
-#     3.370137329, 3.370137329, 0.000000000"""
-#     cell.unit = "B"
-#     cell.verbose = 4
-#     cell.build()
 
-#     kmesh = [1, 2, 2]
-#     kpts = cell.make_kpts(kmesh)
-#     num_kpts = len(kpts)
-#     mf = scf.KRHF(cell, kpts)
-#     mf.kernel()
-#     rsmf = scf.KRHF(mf.cell, mf.kpts).rs_density_fit()
-#     # Force same MOs as FFTDF at least
-#     rsmf.mo_occ = mf.mo_occ
-#     rsmf.mo_coeff = mf.mo_coeff
-#     rsmf.mo_energy = mf.mo_energy
-#     rsmf.with_df.mesh = mf.cell.mesh
-#     mymp = mp.KMP2(rsmf)
-#     Luv = cholesky_from_df_ints(mymp)
-#     num_thc = 4 * mf.mo_coeff[0].shape[-1]
-#     # ISDF only
-#     chi, zeta, G_map, info = kpoint_thc_via_isdf(mf, Luv, num_thc,
-#                                     perform_adagrad_opt=False,
-#                                     perform_bfgs_opt=False,
-#                                     bfgs_maxiter=100,
-#                                     )
-#     kpt_thc_load = load_thc_factors("thc_isdf.h5")
-#     assert np.allclose(chi, kpt_thc_load.chi)
-#     eri = np.einsum("xpq,xrs->pqrs", Luv[0,0], Luv[0,0])
-#     buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
-#     buffer[: chi.size] = chi.T.real.ravel()
-#     buffer[chi.size :] = zeta[0][0,0].real.ravel()
-#     lbfgsb_opt_thc_l2reg(
-#         eri,
-#         num_thc,
-#         maxiter=10,
-#         initial_guess=buffer,
-#         )
+def test_kpoint_thc_helper():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.mesh = [11] * 3
+    cell.verbose = 0
+    cell.build()
 
-# def test_kpoint_thc_utility_function_k2gamma():
-#     cell = gto.Cell()
-#     cell.atom = """
-#     C 0.000000000000   0.000000000000   0.000000000000
-#     C 1.685068664391   1.685068664391   1.685068664391
-#     """
-#     cell.basis = "gth-szv"
-#     cell.pseudo = "gth-hf-rev"
-#     cell.a = """
-#     0.000000000, 3.370137329, 3.370137329
-#     3.370137329, 0.000000000, 3.370137329
-#     3.370137329, 3.370137329, 0.000000000"""
-#     cell.unit = "B"
-#     cell.mesh = [11]*3
-#     cell.verbose = 4
-#     cell.build()
+    kmesh = [1, 1, 2]
+    kpts = cell.make_kpts(kmesh)
+    num_kpts = len(kpts)
+    mf = scf.KRHF(cell, kpts)
+    mf.kernel()
+    rsmf = scf.KRHF(mf.cell, mf.kpts).rs_density_fit()
+    rsmf.verbose = 0
+    rsmf.mo_occ = mf.mo_occ
+    rsmf.mo_coeff = mf.mo_coeff
+    rsmf.mo_energy = mf.mo_energy
+    rsmf.with_df.mesh = mf.cell.mesh
+    mymp = mp.KMP2(rsmf)
+    Luv = cholesky_from_df_ints(mymp)
+    cthc = 5
+    num_mo = mf.mo_coeff[0].shape[-1]
+    # Just testing function runs
+    kpt_thc, loss_isdf = kpoint_thc_via_isdf(
+        mf, Luv, cthc * num_mo, perform_adagrad_opt=False, perform_bfgs_opt=False
+    )
+    kpt_thc_bfgs, loss_bfgs = kpoint_thc_via_isdf(
+        mf,
+        Luv,
+        cthc * num_mo,
+        perform_adagrad_opt=False,
+        perform_bfgs_opt=True,
+        bfgs_maxiter=10,
+        initial_guess=kpt_thc,
+    )
+    kpt_thc_ada, loss_ada = kpoint_thc_via_isdf(
+        mf,
+        Luv,
+        cthc * num_mo,
+        perform_adagrad_opt=True,
+        perform_bfgs_opt=True,
+        bfgs_maxiter=10,
+        adagrad_maxiter=10,
+        initial_guess=kpt_thc_bfgs,
+    )
 
-#     kmesh = [1, 1, 2]
-#     kpts = cell.make_kpts(kmesh)
-#     num_kpts = len(kpts)
-#     mf = scf.KRHF(cell, kpts)
-#     mf.chkfile = "test_thc_kpoint_build_batched.chk"
-#     mf.init_guess = "chkfile"
-#     mf.kernel()
-#     sc_mf = k2gamma(mf)
-#     G = sc_mf.cell.reciprocal_vectors()
-#     R = sc_mf.cell.lattice_vectors()
-#     rsmf = scf.KRHF(sc_mf.cell, sc_mf.kpts).rs_density_fit()
-#     # Force same MOs as FFTDF at least
-#     rsmf.mo_occ = sc_mf.mo_occ
-#     rsmf.mo_coeff = sc_mf.mo_coeff
-#     rsmf.mo_energy = sc_mf.mo_energy
-#     rsmf.with_df.mesh = sc_mf.cell.mesh
-#     mymp = mp.KMP2(rsmf)
-#     Luv = cholesky_from_df_ints(mymp)
-#     num_thc = 4 * sc_mf.mo_coeff[0].shape[-1]
-#     # ISDF only
-#     chi, zeta, G_mapping, info = kpoint_thc_via_isdf(sc_mf, Luv, num_thc,
-#                                     perform_adagrad_opt=False,
-#                                     perform_bfgs_opt=False,
-#                                     bfgs_maxiter=100,
-#                                     max_kmeans_iteration=1,
-#                                     verbose=True
-#                                     )
-#     kpt_thc = load_thc_factors("thc_isdf.h5")
-#     assert np.allclose(chi, kpt_thc.chi)
-#     eri = np.einsum("xpq,xrs->pqrs", Luv[0,0], Luv[0,0])
-#     buffer = np.zeros((chi.size + get_zeta_size(zeta)), dtype=np.float64)
-#     buffer[: chi.size] = chi.T.real.ravel()
-#     buffer[chi.size :] = zeta[0][0,0].real.ravel()
-#     lbfgsb_opt_thc_l2reg(
-#         eri,
-#         num_thc,
-#         maxiter=2,
-#         initial_guess=buffer,
-#         )
-#     momentum_map = build_momentum_transfer_mapping(sc_mf.cell, sc_mf.kpts)
-#     from kpoint_eri.factorizations.thc_jax import make_contiguous_cholesky
-#     Luv_cont = make_contiguous_cholesky(Luv)
-#     opt_param = lbfgsb_opt_kpthc_l2reg(
-#         chi,
-#         zeta,
-#         momentum_map,
-#         G_mapping,
-#         jnp.array(Luv_cont),
-#         chkfile_name="thc_opt.h5",
-#         maxiter=2,
-#     )
-#     opt_param_batched = lbfgsb_opt_kpthc_l2reg_batched(
-#         chi,
-#         zeta,
-#         momentum_map,
-#         G_mapping,
-#         jnp.array(Luv_cont),
-#         chkfile_name="thc_opt.h5",
-#         maxiter=2,
-#     )
+def teardown_module(self):
+    cwd = os.getcwd()
+    files = ["thc_bfgs.h5", "thc_adagrad.h5", "thc_isdf.h5", "thc_opt.h5", "thc_opt_gamma.h5"]
+    for f in files:
+        try:
+            os.remove(cwd + "/" + f)
+        except OSError:
+            pass
