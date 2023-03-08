@@ -887,7 +887,7 @@ def kpoint_thc_via_isdf(
     bfgs_maxiter=3000,
     adagrad_maxiter=3000,
     checkpoint_basename="thc",
-    save_checkoints=True,
+    save_checkoints=False,
     use_batched_algos=True,
     penalty_param=None,
     batch_size=None,
