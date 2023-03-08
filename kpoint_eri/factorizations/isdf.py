@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import itertools
 from typing import Tuple, Union
 import numpy as np
@@ -805,8 +805,8 @@ def solve_kmeans_kpisdf(
     mf_inst: scf.RHF,
     num_interp_points: int,
     max_kmeans_iteration: int = 500,
-    single_translation: bool = True,
-    use_density_guess: bool = False,
+    single_translation: bool = False,
+    use_density_guess: bool = True,
     kmeans_weighting_function: str = "density",
     verbose: bool = True,
 ) -> KPointTHC:

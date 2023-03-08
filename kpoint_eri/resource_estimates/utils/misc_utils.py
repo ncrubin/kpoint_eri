@@ -42,6 +42,9 @@ class PBCResources:
         self.cutoff.append(cutoff)
         self.approx_emp2.append(mp2_energy)
 
+def compute_beta_for_resources(num_spin_orbs, num_kpts, dE_for_qpe):
+    return np.ceil(5.652 + np.log2(num_spin_orbs * num_kpts / dE_for_qpe))
+
 
 def build_momentum_transfer_mapping(cell: gto.Cell, kpoints: np.ndarray) -> np.ndarray:
     # Define mapping momentum_transfer_map[Q][k1] = k2 that satisfies

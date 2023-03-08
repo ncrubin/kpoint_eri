@@ -48,7 +48,7 @@ def compute_lambda_real(
     return lambda_tot, lambda_T, lambda_z
 
 
-def compute_lambda(hcore: list, thc_obj: KPTHCHelperDoubleTranslation):
+def compute_lambda(hcore: np.ndarray, thc_obj: KPTHCHelperDoubleTranslation):
     """
     Compute one-body and two-body lambda for qubitization of
     tensor hypercontraction LUC
