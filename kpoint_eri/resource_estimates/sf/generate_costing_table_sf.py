@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import json
 from functools import reduce
 
 import pandas as pd
@@ -18,6 +19,7 @@ from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
 from kpoint_eri.resource_estimates.sf.compute_sf_resources import (
     kpoint_single_factorization_costs,
 )
+
 
 @dataclass
 class SFResources(PBCResources):
@@ -48,14 +50,14 @@ class SFResources(PBCResources):
         self.num_aux.append(num_aux)
 
 
-
 def generate_costing_table(
     pyscf_mf: scf.HF,
     cutoffs: np.ndarray,
     name="pbc",
     chi: int = 10,
     dE_for_qpe=0.0016,
-):
+    write_to_file=True,
+) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
     exact_cc = cc.KRCCSD(pyscf_mf)
@@ -88,7 +90,7 @@ def generate_costing_table(
         chi=chi,
         exact_emp2=exact_emp2,
     )
-    naux = Luv[0,0].shape[0]
+    naux = Luv[0, 0].shape[0]
     for cutoff in cutoffs:
         naux_cutoff = max(int(cutoff * naux), 1)
         sf_helper = SingleFactorizationHelper(
@@ -142,4 +144,8 @@ def generate_costing_table(
             mp2_energy=approx_emp2,
         )
 
-    return pd.DataFrame(sf_resource_obj.dict())
+    df = pd.DataFrame(sf_resource_obj.dict())
+    if write_to_file:
+        df.to_csv(f"{name}_sf_num_kpts_{num_kpts}.csv")
+
+    return df 

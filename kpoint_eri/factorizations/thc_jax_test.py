@@ -327,19 +327,3 @@ def test_kpoint_thc_helper():
         adagrad_maxiter=10,
         initial_guess=kpt_thc_bfgs,
     )
-
-
-def teardown_module(self):
-    cwd = os.getcwd()
-    files = [
-        "thc_bfgs.h5",
-        "thc_adagrad.h5",
-        "thc_isdf.h5",
-        "thc_opt.h5",
-        "thc_opt_gamma.h5",
-    ]
-    for f in files:
-        try:
-            os.remove(cwd + "/" + f)
-        except OSError:
-            pass

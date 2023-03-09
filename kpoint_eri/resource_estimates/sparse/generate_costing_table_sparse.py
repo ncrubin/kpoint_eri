@@ -55,6 +55,7 @@ def generate_costing_table(
     chi: int = 10,
     thresholds: np.ndarray = np.logspace(-1, -5, 6),
     dE_for_qpe=0.0016,
+    write_to_file=True,
 ):
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
@@ -131,12 +132,16 @@ def generate_costing_table(
             lambda_tot=sparse_lambda_tot,
             lambda_one_body=sparse_lambda_one_body,
             lambda_two_body=sparse_lambda_two_body,
-            number_of_sym_unique_terms=num_nnz,
+            num_sym_unique=num_nnz,
             toffolis_per_step=sparse_res_cost[0],
             total_toffolis=sparse_res_cost[1],
             logical_qubits=sparse_res_cost[2],
-            threshold=thresh,
+            cutoff=thresh,
             mp2_energy=approx_emp2,
         )
 
-    return pd.DataFrame(sparse_resource_obj.dict())
+    df = pd.DataFrame(sparse_resource_obj.dict())
+    if write_to_file:
+        df.to_csv(f"{name}_sparse_num_kpts_{num_kpts}.csv")
+
+    return df 

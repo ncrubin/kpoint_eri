@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 
 from pyscf.pbc import gto, scf
@@ -31,5 +32,9 @@ def test_generate_costing_table_sparse():
     table = generate_costing_table(mf, thresholds=thresh, chi=17, dE_for_qpe=1e-3)
     assert np.allclose(table.dE, 1e-3)
     assert np.allclose(table.chi, 17)
-    assert np.allclose(table.threshold, thresh)
+    assert np.allclose(table.cutoff, thresh)
     assert np.isclose(table.approx_emp2.values[2], table.exact_emp2.values[0])
+    filename = f"pbc_sparse_num_kpts_3.csv"
+    df_from_file = pd.read_csv(filename, index_col=0)
+    assert np.allclose(df_from_file.total_toffolis, table.total_toffolis) 
+    assert np.allclose(df_from_file.approx_emp2, table.approx_emp2) 

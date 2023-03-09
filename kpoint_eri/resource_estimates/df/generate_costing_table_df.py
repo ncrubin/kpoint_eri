@@ -57,8 +57,9 @@ def generate_costing_table(
     name="pbc",
     chi: int = 10,
     beta: int = 20,
-    dE_for_qpe=0.0016,
-):
+    dE_for_qpe: float=0.0016,
+    write_to_file: bool=True,
+) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
     exact_cc = cc.KRCCSD(pyscf_mf)
@@ -148,4 +149,8 @@ def generate_costing_table(
             mp2_energy=approx_emp2,
         )
 
-    return pd.DataFrame(df_resource_obj.dict())
+    df = pd.DataFrame(df_resource_obj.dict())
+    if write_to_file:
+        df.to_csv(f"{name}_df_num_kpts_{num_kpts}.csv")
+
+    return df 

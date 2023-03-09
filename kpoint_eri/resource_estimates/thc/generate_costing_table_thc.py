@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from functools import reduce
+import json
 from typing import Union
 
 import pandas as pd
@@ -63,7 +64,8 @@ def generate_costing_table(
     bfgs_maxiter: int = 3000,
     adagrad_maxiter: int = 3000,
     fft_df_mesh: Union[None, list] = None,
-):
+    write_to_file: bool=True,
+) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
     exact_cc = cc.KRCCSD(pyscf_mf)
@@ -91,11 +93,11 @@ def generate_costing_table(
     thc_resource_obj = THCResources(
         system_name=name,
         num_spin_orbitals=num_spin_orbs,
-        num_kpts=num_kpts,
+        num_kpts=int(num_kpts),
         dE=dE_for_qpe,
         chi=chi,
         beta=beta,
-        exact_emp2=exact_emp2,
+        exact_emp2=float(exact_emp2),
     )
     # For the ISDF guess we need an FFTDF MF object (really just need the grids so a bit of a hack)
     # Have not checked carefully the sensitivity of ISDF to real space grid size
@@ -156,12 +158,16 @@ def generate_costing_table(
             lambda_tot=thc_lambda_tot,
             lambda_one_body=thc_lambda_one_body,
             lambda_two_body=thc_lambda_two_body,
-            cutoff=thc_rank,
+            cutoff=int(thc_rank),
             toffolis_per_step=thc_res_cost[0],
             total_toffolis=thc_res_cost[1],
             logical_qubits=thc_res_cost[2],
-            mp2_energy=approx_emp2,
+            mp2_energy=float(approx_emp2),
             num_thc=num_thc,
         )
 
-    return pd.DataFrame(thc_resource_obj.dict())
+    df = pd.DataFrame(thc_resource_obj.dict())
+    if write_to_file:
+        df.to_csv(f"{name}_thc_num_kpts_{num_kpts}.csv")
+
+    return df 
