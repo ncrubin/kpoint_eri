@@ -71,7 +71,7 @@ def QI2(L1, Lv2):
     return int(min_val)
 
 
-def kpoint_single_factorization_costs(
+def cost_single_factorization(
     n: int,
     lam: float,
     M: int,

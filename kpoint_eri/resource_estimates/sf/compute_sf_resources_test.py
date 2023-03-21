@@ -1,5 +1,5 @@
 import numpy as np
-from kpoint_eri.resource_estimates.sf.compute_sf_resources import kpoint_single_factorization_costs, QR2, QI2
+from kpoint_eri.resource_estimates.sf.compute_sf_resources import cost_single_factorization, kpoint_single_factorization_costs, QR2, QI2
 
 def test_qr2():
     L = 728
@@ -32,13 +32,13 @@ def test_estimate():
     dE = 0.001
     chi = 10
     
-    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 3, 3)
+    res = cost_single_factorization(n, lam, L, dE, chi, 20_000, 3, 3, 3)
     # 1663687, 8027577592851, 438447}
     assert np.isclose(res[0], 1663687)
     assert np.isclose(res[1], 8027577592851)
     assert np.isclose(res[2], 438447)
 
-    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 5, 1)
+    res = cost_single_factorization(n, lam, L, dE, chi, 20_000, 3, 5, 1)
     # 907828, 4380427154244, 219526
     assert np.isclose(res[0], 907828)
     assert np.isclose(res[1], 4380427154244)
