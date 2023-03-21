@@ -28,8 +28,6 @@ def test_lambda_calc():
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.with_df.mesh = cell.mesh
-    mf.chkfile = 'test_C_density_fitints.chk'
-    mf.init_guess = 'chkfile'
     mf.kernel()
 
 

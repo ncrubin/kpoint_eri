@@ -29,8 +29,6 @@ def test_thc_helper():
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts)
-    mf.chkfile = "integrals.chk"
-    mf.init_guess = "chkfile"
     mf.kernel()
 
     exact_cc = cc.KRCCSD(mf)

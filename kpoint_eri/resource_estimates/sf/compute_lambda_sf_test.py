@@ -30,10 +30,7 @@ def test_lambda_calc():
     kpts = cell.make_kpts(kmesh)
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = 'ncr_test_C_density_fitints.chk'
     mf.with_df.mesh = mf.cell.mesh
-    mf.with_df._cderi_to_save = 'ncr_test_C_density_fitints_gdf.h5'
-    mf.init_guess = 'chkfile'
     mf.kernel()
 
     from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
@@ -110,10 +107,7 @@ def test_padding():
     kpts = cell.make_kpts(kmesh)
     nkpts = len(kpts)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = 'sf_H_padding.chk'
     mf.with_df.mesh = cell.mesh
-    mf.with_df._cderi_to_save = mf.chkfile
-    mf.init_guess = 'chkfile'
     mf.kernel()
 
     from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
