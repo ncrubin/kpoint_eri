@@ -30,8 +30,6 @@ def test_lambda_sparse():
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = "ncr_test_C_density_fitints.chk"
-    mf.init_guess = "chkfile"
     mf.with_df.mesh = cell.mesh
     mf.kernel()
 

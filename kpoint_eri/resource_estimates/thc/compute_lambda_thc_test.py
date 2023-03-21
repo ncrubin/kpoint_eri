@@ -37,8 +37,6 @@ def test_kpoint_thc_lambda():
     kpts = cell.make_kpts(kmesh)
     num_kpts = len(kpts)
     mf = scf.KRHF(cell, kpts)
-    mf.chkfile = "test_thc_kpoint_build.chk"
-    mf.init_guess = "chkfile"
     mf.kernel()
     #
     # Build kpoint THC eris

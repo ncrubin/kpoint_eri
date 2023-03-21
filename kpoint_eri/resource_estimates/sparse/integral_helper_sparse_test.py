@@ -27,10 +27,7 @@ def test_sparse_int_obj():
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = "ncr_test_C_density_fitints.chk"
-    mf.with_df._cderi_to_save = "ncr_test_C_density_fitints_gdf.h5"
     mf.with_df.mesh = cell.mesh
-    mf.init_guess = "chkfile"
     mf.kernel()
 
     mymp = mp.KMP2(mf)
@@ -75,10 +72,7 @@ def test_get_num_unique():
     nk = len(kpts)
     nmo = cell.nao
 
-    from pyscf.pbc.scf.chkfile import load_scf
-
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = "test_sparse_iterate.chk"
     mf.with_df.mesh = cell.mesh
     mf.kernel()
 

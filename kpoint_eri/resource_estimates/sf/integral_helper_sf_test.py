@@ -26,10 +26,7 @@ def test_ncr_sf_helper_trunc():
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.chkfile = "ncr_test_C_density_fitints.chk"
-    mf.with_df._cderi_to_save = "ncr_test_C_density_fitints_gdf.h5"
     mf.with_df.mesh = mf.cell.mesh
-    mf.init_guess = "chkfile"
     mf.kernel()
 
     exact_cc = cc.KRCCSD(mf)
