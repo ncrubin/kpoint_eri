@@ -17,7 +17,7 @@ from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
 from kpoint_eri.resource_estimates.sf.compute_sf_resources import (
-    kpoint_single_factorization_costs,
+    cost_single_factorization,
 )
 
 
@@ -104,7 +104,7 @@ def generate_costing_table(
         L = (
             sf_helper.naux
         )  # No factor of 2 accounting for A and B because they use the same data
-        sf_res_cost = kpoint_single_factorization_costs(
+        sf_res_cost = cost_single_factorization(
             n=num_spin_orbs,
             lam=sf_lambda_tot,
             M=L,
@@ -115,7 +115,7 @@ def generate_costing_table(
             Nky=kmesh[0],
             Nkz=kmesh[0],
         )
-        sf_res_cost = kpoint_single_factorization_costs(
+        sf_res_cost = cost_single_factorization(
             n=num_spin_orbs,
             lam=sf_lambda_tot,
             M=L,

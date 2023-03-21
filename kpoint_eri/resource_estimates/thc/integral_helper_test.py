@@ -38,14 +38,14 @@ def test_thc_helper():
     approx_cc = cc.KRCCSD(mf)
     approx_cc.verbose = 0
     nmo_k = mf.mo_coeff[0].shape[-1]
-    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(
+    kpt_thc = solve_kmeans_kpisdf(
         mf,
         np.prod(cell.mesh),  # Use the whole grid to avoid any precision issues
         single_translation=False,
         use_density_guess=True,
     )
 
-    helper = KPTHCHelperDoubleTranslation(chi, zeta, mf)
+    helper = KPTHCHelperDoubleTranslation(kpt_thc.chi, kpt_thc.zeta, mf)
     from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
 
     num_kpts = len(mf.kpts)
@@ -64,10 +64,10 @@ def test_thc_helper():
     eris = approx_cc.ao2mo(lambda x: x)
     emp2, _, _ = approx_cc.init_amps(eris)
     assert np.isclose(emp2, exact_emp2)
-    chi, zeta, xi, G_mapping = solve_kmeans_kpisdf(
+    kpt_thc = solve_kmeans_kpisdf(
         mf, np.prod(cell.mesh), single_translation=True
     )
-    helper = KPTHCHelperSingleTranslation(chi, zeta, mf)
+    helper = KPTHCHelperSingleTranslation(kpt_thc.chi, kpt_thc.zeta, mf)
     from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
 
     for iq in range(num_kpts):

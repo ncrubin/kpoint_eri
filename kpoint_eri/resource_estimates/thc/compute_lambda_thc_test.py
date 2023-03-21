@@ -52,7 +52,7 @@ def test_kpoint_thc_lambda():
     Luv = cholesky_from_df_ints(mymp)
     cthc = 4
     num_thc = cthc * mf.mo_coeff[0].shape[-1]
-    chi, zeta, mapping, info = kpoint_thc_via_isdf(
+    kpt_thc, info = kpoint_thc_via_isdf(
         mf,
         Luv,
         num_thc,
@@ -68,7 +68,7 @@ def test_kpoint_thc_lambda():
             for k, mo in enumerate(mf.mo_coeff)
         ]
     )
-    helper = KPTHCHelperDoubleTranslation(chi, zeta, mf)
+    helper = KPTHCHelperDoubleTranslation(kpt_thc.chi, kpt_thc.zeta, mf)
     lambda_tot_kp, lambda_one_body_kp, lambda_two_body_kp = compute_lambda(
         hcore_mo,
         helper,
@@ -91,15 +91,15 @@ def test_kpoint_thc_lambda():
     rsmf.with_df.mesh = supercell_mf.cell.mesh
     mymp = mp.KMP2(rsmf)
     Luv_sc = cholesky_from_df_ints(mymp)
-    chi, zeta, mapping, info = kpoint_thc_via_isdf(
+    kpt_thc, info = kpoint_thc_via_isdf(
         supercell_mf,
         Luv_sc,
         num_thc,
         perform_adagrad_opt=False,
         perform_bfgs_opt=False,
     )
-    chi_mol = chi[0].T.real.copy()
-    zeta_mol = zeta[0][0, 0].real.copy()
+    chi_mol = kpt_thc.chi[0].T.real.copy()
+    zeta_mol = kpt_thc.zeta[0][0, 0].real.copy()
     hcore_ao = supercell_mf.get_hcore()
     hcore_mo = np.asarray(
         [
