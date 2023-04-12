@@ -59,11 +59,20 @@ The philosophy is that all costing methods are captured in the namespace related
 from openfermion.resource_estimates import df, thc
 
 # make pretty DF costing table
-df.generate_costing_table(mf, name='carbon-diamond', cutoffs=[1e-2,5e-3,1e-3,5e-4,1e-4,5e-5,1e-5]) 
+# We need to specify eigenvalue threshold for second factorization.
+df_cutoffs = [1e-2, 5e-3, 1e-3, 5e-4, 1e-4, 5e-5, 1e-5]
+df.generate_costing_table(
+    mf,
+    name='carbon-diamond',
+    cutoffs=df_cutoffs)
 
-# make pretty THC costing table
+# make pretty THC costing table.
+# Specify THC rank papameter we wish to scan over.
+# Note THC dimension M = thc_rank_param * N, N = number of spin orbitals in the
+# unit cell. 
+thc_rank_params = [2, 4, 6]
 # if you want to save each THC result to a file, you can set 'save_thc' to True
-thc.generate_costing_table(mf, name='carbon-diamond', thc_rank_params=[2, 4, 6]) 
+thc.generate_costing_table(mf, name='carbon-diamond', thc_rank_params=thc_rank_params) 
 ```
 
 More fine-grained control is given by subroutines that compute the factorization, the lambda values, and the cost estimates.
