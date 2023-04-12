@@ -332,13 +332,13 @@ if __name__ == "__main__":
     chi = 10
 
     # stps = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)[0]
-    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 3, 3)
+    res = cost_single_factorization(n, lam, L, dE, chi, 20_000, 3, 3, 3)
     # 1663687, 8027577592851, 438447}
     assert np.isclose(res[0], 1663687)
     assert np.isclose(res[1], 8027577592851)
     assert np.isclose(res[2], 438447)
 
-    res = kpoint_single_factorization_costs(n, lam, L, dE, chi, 20_000, 3, 5, 1)
+    res = cost_single_factorization(n, lam, L, dE, chi, 20_000, 3, 5, 1)
     # 907828, 4380427154244, 219526
     assert np.isclose(res[0], 907828)
     assert np.isclose(res[1], 4380427154244)

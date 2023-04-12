@@ -21,7 +21,9 @@
 from functools import reduce
 import numpy as np
 
+import copy
 from pyscf import lib
+from pyscf.lib import logger
 from pyscf.pbc.mp.kmp2 import (
     get_nocc,
     padded_mo_coeff,
@@ -150,3 +152,43 @@ class _ERIS:  # (pyscf.cc.ccsd._ChemistsERIs):
                 self.vvvv[kp, kr, kq] = eri_kpt_symm[nocc:, nocc:, nocc:, nocc:] / nkpts
 
         self.dtype = dtype
+
+def update_eris(cc, eris, eri_helper, inplace=True):
+    """Update coupled cluster eris object with approximate integrals defined by eri_helper. 
+
+    Arguments:
+        cc: pyscf PBC KRCCSD object. On output the eris attribute will be
+        modified by eri_helper.
+        eri_helper: Approximate ERIs helper function which defines MO integrals.
+    """
+    log = logger.Logger(cc.stdout, cc.verbose)
+    kconserv = cc.khelper.kconserv
+    khelper = cc.khelper
+    nocc = cc.nocc
+    nkpts = cc.nkpts
+    dtype = cc.mo_coeff[0].dtype
+    if inplace:
+        log.info(f"Modifying inplace coupled cluster _ERIS object using {eri_helper.__class__}.")
+        out_eris = eris
+    else:
+        log.info(f"Rebuilding coupled cluster _ERIS object using {eri_helper.__class__}.")
+        out_eris = copy.deepcopy(eris)
+    for ikp, ikq, ikr in khelper.symm_map.keys():
+        iks = kconserv[ikp, ikq, ikr]
+        kpts = [ikp, ikq, ikr, iks]
+        eri_kpt = eri_helper.get_eri(kpts)
+        if dtype == float:
+            eri_kpt = eri_kpt.real
+        eri_kpt = eri_kpt
+        for kp, kq, kr in khelper.symm_map[(ikp, ikq, ikr)]:
+            eri_kpt_symm = khelper.transform_symm(eri_kpt, kp, kq, kr).transpose(
+                0, 2, 1, 3
+            )
+            out_eris.oooo[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, :nocc, :nocc] / nkpts
+            out_eris.ooov[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, :nocc, nocc:] / nkpts
+            out_eris.oovv[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, nocc:, nocc:] / nkpts
+            out_eris.ovov[kp, kr, kq] = eri_kpt_symm[:nocc, nocc:, :nocc, nocc:] / nkpts
+            out_eris.voov[kp, kr, kq] = eri_kpt_symm[nocc:, :nocc, :nocc, nocc:] / nkpts
+            out_eris.vovv[kp, kr, kq] = eri_kpt_symm[nocc:, :nocc, nocc:, nocc:] / nkpts
+            out_eris.vvvv[kp, kr, kq] = eri_kpt_symm[nocc:, nocc:, nocc:, nocc:] / nkpts
+    return out_eris

@@ -7,7 +7,7 @@ from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
 
-def test_ncr_sf_helper_trunc():
+def test_sf_helper_trunc():
     cell = gto.Cell()
     cell.atom = """
     C 0.000000000000   0.000000000000   0.000000000000
@@ -20,7 +20,7 @@ def test_ncr_sf_helper_trunc():
     3.370137329, 0.000000000, 3.370137329
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
-    cell.verbose = 0
+    cell.verbose = 4
     cell.build()
 
     kmesh = [1, 1, 3]
@@ -40,7 +40,7 @@ def test_ncr_sf_helper_trunc():
 
     print(" naux  error (Eh)")
     approx_cc = cc.KRCCSD(mf)
-    approx_cc.verbose = 0
+    approx_cc.verbose = 4
     helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf, naux=10)
     from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
 
@@ -48,9 +48,23 @@ def test_ncr_sf_helper_trunc():
     eris = approx_cc.ao2mo(lambda x: x)
     emp2, _, _ = approx_cc.init_amps(eris)
     assert not np.isclose(emp2, exact_emp2)
-    helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf, naux=naux)
-    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
 
+    from kpoint_eri.resource_estimates.cc_helper.custom_ao2mo import update_eris
+    out_eris = update_eris(approx_cc, eris, helper, inplace=False)
+    emp2_2, _, _ = approx_cc.init_amps(out_eris)
+    assert not np.isclose(emp2, exact_emp2)
+    assert np.isclose(emp2, emp2_2)
+    helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf, naux=5)
+    out_eris = update_eris(approx_cc, eris, helper, inplace=False)
+    emp2_2, _, _ = approx_cc.init_amps(out_eris)
+    assert not np.isclose(emp2, exact_emp2)
+    assert not np.isclose(emp2, emp2_2)
+    out_eris = update_eris(approx_cc, eris, helper, inplace=True)
+    emp2_3, _, _ = approx_cc.init_amps(out_eris)
+    assert not np.isclose(emp2, exact_emp2)
+    assert np.isclose(emp2_2, emp2_3)
+
+    helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf, naux=naux)
     approx_cc = build_cc(approx_cc, helper)
     eris = approx_cc.ao2mo(lambda x: x)
     emp2, _, _ = approx_cc.init_amps(eris)
