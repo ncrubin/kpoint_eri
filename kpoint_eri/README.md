@@ -1,12 +1,12 @@
 # Resource Estimation for Periodic Systems 
 
-Module `openfermion.resource_estimates.pbc` to facilitate fault-tolerant (FT) resource estimates for second-quantized symmetry-adapted Hamiltonians with periodic boundary conditions (PBC).
+Module `openfermion.resource_estimates.pbc` facilitates fault-tolerant (FT) resource estimates for second-quantized symmetry-adapted Hamiltonians with periodic boundary conditions (PBC).
 
 The module provides symmetry adapated sparse, single, double and tensor hypercontraction representations of the Hamiltonians. 
 
 For the methods listed above, there are sub-routines which:
 * factorize the two-electron integrals if appropriate
-* compute the lambda values, `compute_lambda()`
+* compute the associated lambda values, `compute_lambda()`
 * estimate the number of logical qubits and Toffoli gates required to simulate with this factorization, `compute_cost()`
 
 ### Details
@@ -51,7 +51,7 @@ which outputs to a file called `single_factorization_water.json`, and contains:
 ```
 ```
 
-Note that the automated costing relies on error in MP2 which may be a poor model chemistry depending on the system. 
+Note that the automated costing computes the MP2 correlation energy error as a reference point for monitoring the convergence of the factorization with respect to sparsity or the size of auxiliary dimension. MP2 may be a poor model chemistry depending on the system, changing the option `error_metric = "CCSD"` will use CCSD instead, but this rapidly becomes very expensive as the system size grows.
 
 The philosophy is that all costing methods are captured in the namespace related to the type of factorization (e.g., . So if one wanted to repeat the costing for DF or THC factorizations, one could 
 
@@ -68,7 +68,7 @@ thc.generate_costing_table(mf, name='carbon-diamond', thc_rank_params=[2, 4, 6])
 
 More fine-grained control is given by subroutines that compute the factorization, the lambda values, and the cost estimates.
 
-Again, since we do not wish to burden all OpenFermion users with these dependencies, testing with GitHub workflows is disabled, but if you install the dependencies, running `pytest` should pass.
+Similar to the case of molecular resource estimation, we do not wish to burden all OpenFermion users with these dependencies, and testing with GitHub workflows is disabled. Local testing is encouraged using `pytest`.
 
 ## Requirements
 
