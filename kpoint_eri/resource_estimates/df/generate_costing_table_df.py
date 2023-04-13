@@ -58,7 +58,6 @@ def generate_costing_table(
     chi: int = 10,
     beta: int = 20,
     dE_for_qpe: float=0.0016,
-    write_to_file: bool=True,
 ) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
@@ -81,7 +80,6 @@ def generate_costing_table(
     )
     num_spin_orbs = 2 * hcore_mo[0].shape[-1]
 
-    ### SPARSE RESOURCE ESTIMATE ###
     num_kpts = np.prod(kmesh)
 
     df_resource_obj = DFResources(
@@ -94,6 +92,7 @@ def generate_costing_table(
         exact_emp2=exact_emp2,
     )
     naux = Luv[0, 0].shape[0]
+    # Save some space and overwrite eris object from exact CC 
     approx_eris = exact_eris
     for cutoff in cutoffs:
         df_helper = DFABKpointIntegrals(cholesky_factor=Luv, kmf=pyscf_mf)
@@ -116,7 +115,7 @@ def generate_costing_table(
             Nkx=kmesh[0],
             Nky=kmesh[1],
             Nkz=kmesh[2],
-            stps=20000,
+            stps=20_000,
         )
         df_res_cost = compute_cost(
             n=num_spin_orbs,
@@ -131,7 +130,7 @@ def generate_costing_table(
             Nkz=kmesh[2],
             stps=df_res_cost[0],
         )
-        approx_eris = build_approximate_eris(cc_inst, approx_eris, df_helper) 
+        approx_eris = build_approximate_eris(cc_inst, df_helper, eris=approx_eris)
         approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
         df_resource_obj.add_resources(
             lambda_tot=df_lambda_tot,
@@ -147,7 +146,5 @@ def generate_costing_table(
         )
 
     df = pd.DataFrame(df_resource_obj.dict())
-    if write_to_file:
-        df.to_csv(f"{name}_df_num_kpts_{num_kpts}.csv")
 
     return df 

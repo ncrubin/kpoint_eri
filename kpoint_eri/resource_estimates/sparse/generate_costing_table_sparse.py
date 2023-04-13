@@ -55,8 +55,7 @@ def generate_costing_table(
     chi: int = 10,
     thresholds: np.ndarray = np.logspace(-1, -5, 6),
     dE_for_qpe=0.0016,
-    write_to_file=True,
-):
+) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
     cc_inst = cc.KRCCSD(pyscf_mf)
@@ -78,7 +77,6 @@ def generate_costing_table(
     )
     num_spin_orbs = 2 * hcore_mo[0].shape[-1]
 
-    ### SPARSE RESOURCE ESTIMATE ###
     num_kpts = np.prod(kmesh)
 
     sparse_resource_obj = SparseResources(
@@ -94,7 +92,7 @@ def generate_costing_table(
         sparse_helper = SparseFactorizationHelper(
             cholesky_factor=Luv, kmf=pyscf_mf, threshold=thresh
         )
-        approx_eris = build_approximate_eris(cc_inst, approx_eris, sparse_helper)
+        approx_eris = build_approximate_eris(cc_inst, sparse_helper, eris=approx_eris)
         approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
 
         (
@@ -139,7 +137,5 @@ def generate_costing_table(
         )
 
     df = pd.DataFrame(sparse_resource_obj.dict())
-    if write_to_file:
-        df.to_csv(f"{name}_sparse_num_kpts_{num_kpts}.csv")
 
     return df 

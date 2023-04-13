@@ -56,7 +56,6 @@ def generate_costing_table(
     name="pbc",
     chi: int = 10,
     dE_for_qpe=0.0016,
-    write_to_file=True,
 ) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
@@ -126,7 +125,7 @@ def generate_costing_table(
             Nky=kmesh[0],
             Nkz=kmesh[0],
         )
-        approx_eris = build_approximate_eris(exact_cc, eris, sf_helper) 
+        approx_eris = build_approximate_eris(exact_cc, sf_helper, eris=eris)
         approx_emp2, _, _ = exact_cc.init_amps(approx_eris)
 
         sf_resource_obj.add_resources(
@@ -142,7 +141,5 @@ def generate_costing_table(
         )
 
     df = pd.DataFrame(sf_resource_obj.dict())
-    if write_to_file:
-        df.to_csv(f"{name}_sf_num_kpts_{num_kpts}.csv")
 
-    return df 
+    return df

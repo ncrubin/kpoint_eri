@@ -63,7 +63,6 @@ def generate_costing_table(
     bfgs_maxiter: int = 3000,
     adagrad_maxiter: int = 3000,
     fft_df_mesh: Union[None, list] = None,
-    write_to_file: bool = True,
 ) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
     cc_inst = cc.KRCCSD(pyscf_mf)
@@ -147,7 +146,7 @@ def generate_costing_table(
             Nkz=kmesh[2],
             stps=20_000,
         )
-        approx_eris = build_approximate_eris(cc_inst, approx_eris, thc_helper)
+        approx_eris = build_approximate_eris(cc_inst, thc_helper, eris=approx_eris)
         approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
         thc_resource_obj.add_resources(
             lambda_tot=thc_lambda_tot,
@@ -162,7 +161,5 @@ def generate_costing_table(
         )
 
     df = pd.DataFrame(thc_resource_obj.dict())
-    if write_to_file:
-        df.to_csv(f"{name}_thc_num_kpts_{num_kpts}.csv")
 
     return df
