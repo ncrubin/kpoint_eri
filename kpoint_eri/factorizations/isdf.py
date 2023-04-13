@@ -5,12 +5,12 @@ electron integrals which should converge to the FFTDF representation of the ERIs
 in the limit of large THC rank. This differs from the assumption of using RSGDF
 throughout the rest of the resource estimation scripts. However, we typically
 are only interested in ISDF as an initial guess for the THC factors which are
-then subsequently reoptimized to regularize $\lambda$. The assumption here is
+then subsequently reoptimized to regularize lambda. The assumption here is
 that FFTDF / ISDF is a good enough approximation to the RSGDF ERIs and thus
 serves as a good initial guess.
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import itertools
 from typing import Tuple, Union
 import numpy as np
@@ -29,9 +29,9 @@ from kpoint_eri.factorizations.kmeans import KMeansCVT
 
 
 def check_isdf_solution(
-    orbitals: np.ndarray,
-    interp_orbitals: np.ndarray,
-    xi: np.ndarray,
+    orbitals: npt.NDArray,
+    interp_orbitals: npt.NDArray,
+    xi: npt.NDArray,
 ) -> float:
     r"""Check accuracy of isdf least squares solution.
 
@@ -43,9 +43,9 @@ def check_isdf_solution(
       xi: interpolating vectors. [num_grid, num_interp]
     Returns
       error: |phi_{ij}(r) - \sum_m xi_m(r) phi_{ij}(r_m)
-      orbitals: np.ndarray:
-      interp_orbitals: np.ndarray:
-      xi: np.ndarray:
+      orbitals: npt.NDArray:
+      interp_orbitals: npt.NDArray:
+      xi: npt.NDArray:
     """
 
     lhs = np.einsum("Ri,Rj->Rij", orbitals.conj(), orbitals, optimize=True)
@@ -57,8 +57,8 @@ def check_isdf_solution(
 
 
 def solve_isdf(
-    orbitals: np.ndarray, interp_indx: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
+    orbitals: npt.NDArray, interp_indx: npt.NDArray
+) -> Tuple[npt.NDArray, npt.NDArray]:
     """Solve for interpolating vectors given interpolating points and orbitals.
 
     Used for supercell and k-point so factor out as function.
@@ -67,8 +67,8 @@ def solve_isdf(
       orbitals: orbitals on a grid of shape [num_grid_points, num_orbitals]
       interp_indx: array indexing interpolating points (subset of grid
         points to use selected by K-Means algorithm. shape is [num_interp_points].
-      orbitals: np.ndarray:
-      interp_indx: np.ndarray:
+      orbitals: npt.NDArray:
+      interp_indx: npt.NDArray:
 
     Returns:
       tuple: (Interpolang vectors, interpolating orbitals) (xi_mu(r),
@@ -101,11 +101,11 @@ def solve_isdf(
 
 def supercell_isdf(
     mydf: df.FFTDF,
-    interp_indx: np.ndarray,
-    orbitals: np.ndarray,
-    grid_points: np.ndarray,
+    interp_indx: npt.NDArray,
+    orbitals: npt.NDArray,
+    grid_points: npt.NDArray,
     kpoint=np.zeros(3),
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
     r"""
     Build ISDF-THC tensors.
 
@@ -151,11 +151,11 @@ def supercell_isdf(
 def build_kpoint_zeta(
     df_inst: df.FFTDF,
     Q: int,
-    delta_G: np.ndarray,
-    delta_G_prime: np.ndarray,
-    grid_points: np.ndarray,
-    xi_mu: np.ndarray,
-) -> np.ndarray:
+    delta_G: npt.NDArray,
+    delta_G_prime: npt.NDArray,
+    grid_points: npt.NDArray,
+    xi_mu: npt.NDArray,
+) -> npt.NDArray:
     """Build k-point THC zeta (central tensor) for given Q, delta_G,
     delta_G_prime.
 
@@ -194,10 +194,10 @@ def build_kpoint_zeta(
 def build_kpoint_zeta_single_tranlsation(
     df_inst: df.FFTDF,
     q: int,
-    delta_G: np.ndarray,
-    grid_points: np.ndarray,
-    xi_mu: np.ndarray,
-) -> np.ndarray:
+    delta_G: npt.NDArray,
+    grid_points: npt.NDArray,
+    xi_mu: npt.NDArray,
+) -> npt.NDArray:
     """Build k-point THC zeta (central tensor) for given Q, delta_G,
     delta_G_prime.
 
@@ -231,7 +231,7 @@ def build_kpoint_zeta_single_tranlsation(
     return zeta
 
 
-def build_G_vectors(cell: gto.Cell) -> np.ndarray:
+def build_G_vectors(cell: gto.Cell) -> npt.NDArray:
     """Build all 27 Gvectors
 
     Args:
@@ -259,8 +259,8 @@ def build_G_vectors(cell: gto.Cell) -> np.ndarray:
 
 
 def find_unique_G_vectors(
-    G_vectors: np.ndarray, G_mapping: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
+    G_vectors: npt.NDArray, G_mapping: npt.NDArray
+) -> Tuple[npt.NDArray, npt.NDArray]:
     """Find all unique G-vectors and build mapping to original set.
 
     Args:
@@ -288,9 +288,9 @@ def find_unique_G_vectors(
 
 def build_G_vector_mappings_double_translation(
     cell: gto.Cell,
-    kpts: np.ndarray,
-    momentum_map: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    kpts: npt.NDArray,
+    momentum_map: npt.NDArray,
+) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
     """Build G-vector mappings that map k-point differences to 1BZ.
 
     Args:
@@ -325,7 +325,7 @@ def build_G_vector_mappings_double_translation(
     return G_vectors, Gpq_mapping, Gpq_mapping_unique, delta_Gs
 
 
-def get_miller(lattice_vectors: np.ndarray, G: np.ndarray) -> np.ndarray:
+def get_miller(lattice_vectors: npt.NDArray, G: npt.NDArray) -> npt.NDArray:
     """Convert G to miller indx.
 
     Args:
@@ -343,8 +343,8 @@ def get_miller(lattice_vectors: np.ndarray, G: np.ndarray) -> np.ndarray:
 
 
 def build_minus_Q_G_mapping(
-    cell: gto.Cell, kpts: np.ndarray, momentum_map: np.ndarray
-) -> np.ndarray:
+    cell: gto.Cell, kpts: npt.NDArray, momentum_map: npt.NDArray
+) -> npt.NDArray:
     """Build mapping for G that satisfied (-Q) + G + (Q + Gpq) = 0 (*)
     and kp - kq = Q + Gpq.
 
@@ -396,9 +396,9 @@ def build_minus_Q_G_mapping(
 
 def build_G_vector_mappings_single_translation(
     cell: gto.Cell,
-    kpts: np.ndarray,
+    kpts: npt.NDArray,
     kpts_pq: list,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
     """Build G-vector mappings that map k-point differences to 1BZ.
 
     Args:
@@ -437,9 +437,9 @@ def build_G_vector_mappings_single_translation(
 
 def inverse_G_map_double_translation(
     cell: gto.Cell,
-    kpts: np.ndarray,
-    momentum_map: np.ndarray,
-) -> np.ndarray:
+    kpts: npt.NDArray,
+    momentum_map: npt.NDArray,
+) -> npt.NDArray:
     """For given Q and G figure out all k which satisfy Q - k + G = 0
 
     Args:
@@ -485,12 +485,12 @@ def inverse_G_map_double_translation(
 
 
 def build_eri_isdf_double_translation(
-    chi: np.ndarray,
-    zeta: np.ndarray,
+    chi: npt.NDArray,
+    zeta: npt.NDArray,
     q_indx: int,
     kpts_indx: list,
-    G_mapping: np.ndarray,
-) -> np.ndarray:
+    G_mapping: npt.NDArray,
+) -> npt.NDArray:
     """Build (pkp qkq | rkr sks) from k-point ISDF factors.
 
     Args:
@@ -520,12 +520,12 @@ def build_eri_isdf_double_translation(
 
 
 def build_eri_isdf_single_translation(
-    chi: np.ndarray,
-    zeta: np.ndarray,
+    chi: npt.NDArray,
+    zeta: npt.NDArray,
     q_indx: int,
     kpts_indx: list,
-    G_mapping: np.ndarray,
-) -> np.ndarray:
+    G_mapping: npt.NDArray,
+) -> npt.NDArray:
     """Build (pkp qkq | rkr sks) from k-point ISDF factors.
 
     Args:
@@ -555,12 +555,12 @@ def build_eri_isdf_single_translation(
 
 def kpoint_isdf_double_translation(
     df_inst: df.FFTDF,
-    interp_indx: np.ndarray,
-    kpts: np.ndarray,
-    orbitals: np.ndarray,
-    grid_points: np.ndarray,
+    interp_indx: npt.NDArray,
+    kpts: npt.NDArray,
+    orbitals: npt.NDArray,
+    grid_points: npt.NDArray,
     only_unique_G: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
     r"""
     Build kpoint ISDF-THC tensors.
 
@@ -636,11 +636,11 @@ def kpoint_isdf_double_translation(
 
 def kpoint_isdf_single_translation(
     df_inst: df.FFTDF,
-    interp_indx: np.ndarray,
-    kpts: np.ndarray,
-    orbitals: np.ndarray,
-    grid_points: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    interp_indx: npt.NDArray,
+    kpts: npt.NDArray,
+    orbitals: npt.NDArray,
+    grid_points: npt.NDArray,
+) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
     r"""
     Build kpoint ISDF-THC tensors.
 
@@ -710,7 +710,7 @@ def kpoint_isdf_single_translation(
     return chi, zeta, xi, G_map_unique
 
 
-def build_isdf_orbital_inputs(mf_inst: scf.RHF) -> np.ndarray:
+def build_isdf_orbital_inputs(mf_inst: scf.RHF) -> npt.NDArray:
     """Build orbital product inputs from mean field object
 
     Args:
@@ -742,11 +742,11 @@ def build_isdf_orbital_inputs(mf_inst: scf.RHF) -> np.ndarray:
 
 
 def density_guess(
-    density: np.ndarray,
+    density: npt.NDArray,
     grid_inst: UniformGrids,
-    grid_points: np.ndarray,
+    grid_points: npt.NDArray,
     num_interp_points: int,
-) -> np.ndarray:
+) -> npt.NDArray:
     """Select initial centroids based on electronic density.
 
     Args:
@@ -771,7 +771,7 @@ def density_guess(
 
 
 def interp_indx_from_qrcp(
-    Z: np.ndarray, num_interp_pts: np.ndarray, return_diagonal: bool = False
+    Z: npt.NDArray, num_interp_pts: npt.NDArray, return_diagonal: bool = False
 ):
     """Find interpolating points via QRCP
 
@@ -782,7 +782,7 @@ def interp_indx_from_qrcp(
     Args:
       orbitals_on_grid: cell-periodic part of bloch orbitals on real space grid of shape (num_grid_points, num_kpts*num_mo)
       num_interp_pts: integer corresponding to number of interpolating points to select from full real space grid.
-      Z: np.ndarray:
+      Z: npt.NDArray:
       return_diagonal: bool:  (Default value = False)
 
     Returns:
@@ -804,7 +804,7 @@ def interp_indx_from_qrcp(
 
 def setup_isdf(
     mf_inst: scf.RHF, verbose: bool = False
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
     """Setup common data for ISDF solution.
 
     Args:
@@ -865,7 +865,7 @@ class KPointTHC:
     Examples:
         The following pseudocode shows how you can build an ERI matrix block given elements of this class.
 
-        >>> kthc = solve_kmeans_kpisdf(...) 
+        >>> kthc = solve_kmeans_kpisdf(...)
         >>> ikp, ikq, ikr, iks = kpts_indx
         >>> Gpq = kthc.G_mapping[q_indx, ikp]
         >>> Gsr = kthc.G_mapping[q_indx, iks]
@@ -878,7 +878,7 @@ class KPointTHC:
             kthc.chi[iks],
             optimize=True,
         )
-    
+
     """
 
     chi: npt.NDArray[np.complex128]
