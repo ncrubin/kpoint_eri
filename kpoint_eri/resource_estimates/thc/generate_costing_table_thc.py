@@ -5,7 +5,7 @@ from typing import Union
 import pandas as pd
 import numpy as np
 
-from pyscf.pbc import scf, mp, cc, df
+from pyscf.pbc import scf, mp, cc
 from pyscf.pbc.mp.kmp2 import _add_padding
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
@@ -69,7 +69,7 @@ def generate_costing_table(
     cc_inst = cc.KRCCSD(pyscf_mf)
     cc_inst.verbose = 0
     exact_eris = cc_inst.ao2mo()
-    exact_emp2, _, _ = cc_inst.init_amps(eris)
+    exact_emp2, _, _ = cc_inst.init_amps(exact_eris)
 
     mp2_inst = mp.KMP2(pyscf_mf)
     Luv = cholesky_from_df_ints(mp2_inst)  # [kpt, kpt, naux, nmo_padded, nmo_padded]
@@ -116,11 +116,10 @@ def generate_costing_table(
     mf_fftdf.mo_occ = pyscf_mf.mo_occ
     if fft_df_mesh is not None:
         mf_fftdf.with_df.mesh = fft_df_mesh
-    naux = Luv[0, 0].shape[0]
     approx_eris = exact_eris
     for thc_rank in thc_rank_params:
         num_thc = thc_rank * num_spin_orbs // 2
-        kpt_thc, loss = kpoint_thc_via_isdf(
+        kpt_thc, _ = kpoint_thc_via_isdf(
             mf_fftdf,
             Luv,
             num_thc,

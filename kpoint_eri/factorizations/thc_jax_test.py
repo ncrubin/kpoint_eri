@@ -112,6 +112,7 @@ def test_kpoint_thc_reg_gamma():
         chkfile_name="thc_opt.h5",
         maxiter=10,
         penalty_param=None,
+        disp_freq=-1,
     )
     chi_unpacked, zeta_unpacked = unpack_thc_factors(
         opt_param, num_interp_points, num_mo, num_kpts, num_G_per_Q
@@ -222,6 +223,7 @@ def test_kpoint_thc_reg_batched():
         chkfile_name="thc_opt.h5",
         maxiter=2,
         penalty_param=1e-3,
+        disp_freq=-1,
     )
     opt_param_batched, _ = lbfgsb_opt_kpthc_l2reg_batched(
         chi,
@@ -232,6 +234,7 @@ def test_kpoint_thc_reg_batched():
         chkfile_name="thc_opt.h5",
         maxiter=2,
         penalty_param=1e-3,
+        disp_freq=-1,
     )
     assert np.allclose(opt_param, opt_param_batched)
     batch_size = 7
@@ -245,6 +248,7 @@ def test_kpoint_thc_reg_batched():
         chkfile_name="thc_opt.h5",
         maxiter=2,
         penalty_param=1e-3,
+        disp_freq=-1,
     )
     assert np.allclose(opt_param_batched, opt_param_batched_diff_batch)
     ada_param, _ = adagrad_opt_kpthc_batched(

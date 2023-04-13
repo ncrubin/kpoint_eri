@@ -60,9 +60,8 @@ def test_thc_helper():
                 )
                 assert np.allclose(eri_thc, eri_exact)
 
-    approx_cc = build_approximate_eris(approx_cc, helper)
-    eris = approx_cc.ao2mo(lambda x: x)
-    emp2, _, _ = approx_cc.init_amps(eris)
+    eris_approx = build_approximate_eris(approx_cc, eris, helper, inplace=False)
+    emp2, _, _ = approx_cc.init_amps(eris_approx)
     assert np.isclose(emp2, exact_emp2)
     kpt_thc = solve_kmeans_kpisdf(
         mf, np.prod(cell.mesh), single_translation=True
@@ -81,9 +80,8 @@ def test_thc_helper():
                 )
                 assert np.allclose(eri_thc, eri_exact)
 
-    approx_cc = build_approximate_eris(approx_cc, helper)
-    eris = approx_cc.ao2mo(lambda x: x)
-    emp2, _, _ = approx_cc.init_amps(eris)
+    eris_approx = build_approximate_eris(approx_cc, eris, helper, inplace=False)
+    emp2, _, _ = approx_cc.init_amps(eris_approx)
     assert np.isclose(emp2, exact_emp2)
 
 

@@ -438,11 +438,7 @@ def lbfgsb_opt_kpthc_l2reg(
     Returns:
         objective: THC objective function
     """
-    if disp_freq > 98 or disp_freq < 1:
-        raise ValueError(
-            "disp_freq {} is not valid. must be between [1, 98]".format(disp_freq)
-        )
-
+    print(disp_freq)
     if chkfile_name is None:
         # chkfile_name = str(uuid4()) + '.h5'
         callback_func = None
@@ -509,7 +505,7 @@ def lbfgsb_opt_kpthc_l2reg(
         args=(num_orb, num_thc, momentum_map, Gpq_map, jnp.array(chol), penalty_param),
         jac=thc_grad,
         method="L-BFGS-B",
-        options={"disp": None, "iprint": disp_freq, "maxiter": maxiter},
+        options={"disp": disp_freq > 0, "iprint": disp_freq, "maxiter": maxiter},
         callback=callback_func,
     )
 
@@ -568,11 +564,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
     Returns:
         objective: THC objective function
     """
-    if disp_freq > 98 or disp_freq < 1:
-        raise ValueError(
-            "disp_freq {} is not valid. must be between [1, 98]".format(disp_freq)
-        )
-
+    print(disp_freq)
     if chkfile_name is None:
         # chkfile_name = str(uuid4()) + '.h5'
         callback_func = None
@@ -666,7 +658,7 @@ def lbfgsb_opt_kpthc_l2reg_batched(
         ),
         jac=thc_grad,
         method="L-BFGS-B",
-        options={"disp": None, "iprint": disp_freq, "maxiter": maxiter},
+        options={"disp": disp_freq > 0, "iprint": disp_freq, "maxiter": maxiter},
         callback=callback_func,
     )
     loss = thc_objective_regularized_batched(
@@ -737,6 +729,7 @@ def adagrad_opt_kpthc_batched(
 
     # callback func stores checkpoints
     callback_func = CallBackStore(chkfile_name)
+
     # set initial guess
     initial_guess = np.zeros(2 * (chi.size + get_zeta_size(zeta)), dtype=np.float64)
     pack_thc_factors(chi, zeta, initial_guess)
@@ -972,6 +965,7 @@ def kpoint_thc_via_isdf(
                 maxiter=bfgs_maxiter,
                 penalty_param=penalty_param,
                 batch_size=batch_size,
+                disp_freq=(98 if verbose else -1),
             )
             info["loss_bfgs"] = loss_bfgs
         else:
@@ -984,6 +978,7 @@ def kpoint_thc_via_isdf(
                 chkfile_name=chkfile_name,
                 maxiter=bfgs_maxiter,
                 penalty_param=penalty_param,
+                disp_freq=(98 if verbose else -1),
             )
             info["loss_bfgs"] = loss_bfgs
         num_G_per_Q = [len(np.unique(GQ)) for GQ in G_mapping]

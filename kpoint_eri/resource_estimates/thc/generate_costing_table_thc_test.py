@@ -9,7 +9,7 @@ from kpoint_eri.resource_estimates.thc.generate_costing_table_thc import (
 )
 
 
-def test_generate_costing_table_df():
+def test_generate_costing_table_thc():
     kmesh = [1, 1, 3]
     cell = gto.M(
         unit="B",
@@ -40,6 +40,7 @@ def test_generate_costing_table_df():
         bfgs_maxiter=10,
         adagrad_maxiter=10,
         fft_df_mesh=[11] * 3,
+        write_to_file=True,
     )
     num_kpts = np.prod(kmesh)
     assert np.allclose(table.dE, 1e-3)
