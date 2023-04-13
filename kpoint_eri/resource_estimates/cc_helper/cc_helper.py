@@ -1,41 +1,42 @@
 """Utilities for overwriting CCSD pbc eris with integral factorizations."""
 import copy
+import numpy as np
 
 from pyscf.lib import logger
 from pyscf.pbc.lib.kpts_helper import loop_kkk
-from pyscf.pbc.cc.kccsd_uhf import _make_df_eris
+from pyscf.pbc.cc.kccsd_uhf import _make_eris_incore
+from pyscf.pbc.cc.kccsd_rhf import _ERIS
 
 
-def build_approximate_eris(cc, eris, eri_helper, inplace=True):
+def build_approximate_eris(krcc_inst, eri_helper, eris=None):
     """Update coupled cluster eris object with approximate integrals defined by eri_helper.
 
     Arguments:
         cc: pyscf PBC KRCCSD object.
-        eris: pyscf _ERIS object.
         eri_helper: Approximate ERIs helper function which defines MO integrals.
-        inplace: If true we overwrite the input eris integrals with those
-            constructed from eri_helper.
+        eris: pyscf _ERIS object. Optional, if present overwrite this eris
+            object rather than build from scratch.
 
     Returns:
-        eris: pyscf _ERIS object updated to hold approximate eris defined by
-            eri_helper. 
+        eris: pyscf _ERIS object updated to hold approximate eris
+            defined by eri_helper.
     """
-    log = logger.Logger(cc.stdout, cc.verbose)
-    kconserv = cc.khelper.kconserv
-    khelper = cc.khelper
-    nocc = cc.nocc
-    nkpts = cc.nkpts
-    dtype = cc.mo_coeff[0].dtype
-    if inplace:
+    log = logger.Logger(krcc_inst.stdout, krcc_inst.verbose)
+    kconserv = krcc_inst.khelper.kconserv
+    khelper = krcc_inst.khelper
+    nocc = krcc_inst.nocc
+    nkpts = krcc_inst.nkpts
+    dtype = krcc_inst.mo_coeff[0].dtype
+    if eris is not None:
         log.info(
-            f"Modifying inplace coupled cluster _ERIS object using {eri_helper.__class__}."
+            f"Modifying coupled cluster _ERIS object inplace using {eri_helper.__class__}."
         )
         out_eris = eris
     else:
         log.info(
             f"Rebuilding coupled cluster _ERIS object using {eri_helper.__class__}."
         )
-        out_eris = copy.deepcopy(eris)
+        out_eris = _ERIS(krcc_inst) 
     for ikp, ikq, ikr in khelper.symm_map.keys():
         iks = kconserv[ikp, ikq, ikr]
         kpts = [ikp, ikq, ikr, iks]
@@ -57,35 +58,36 @@ def build_approximate_eris(cc, eris, eri_helper, inplace=True):
     return out_eris
 
 
-def build_approximate_eris_rohf(cc, eris, eri_helper, inplace=True):
-    """Update coupled cluster eris object with approximate integrals defined by eri_helper.
+def build_approximate_eris_rohf(kucc_inst, eri_helper, eris=None):
+    """Update unrestricted coupled cluster eris object with approximate
+    integrals defined by eri_helper.
+
+    KROCCSD is run through KUCCSD object, but we expect (and build) RO integrals only.
 
     Arguments:
-        cc: pyscf PBC KUCCSD object. Only ROHF integrals are supported.
-        eris: pyscf _ERIS object.
+        kucc_inst: pyscf PBC KUCCSD object. Only ROHF integrals are supported.
         eri_helper: Approximate ERIs helper function which defines MO integrals.
-        inplace: If true we overwrite the input eris integrals with those
-            constructed from eri_helper.
+        eris: pyscf _ERIS object. Optional, if present overwrite this eris
+            object rather than build from scratch.
 
     Returns:
         eris: pyscf _ERIS object updated to hold approximate eris defined by
-            eri_helper. 
+            eri_helper.
     """
-    log = logger.Logger(cc.stdout, cc.verbose)
-    kconserv = cc.khelper.kconserv
-    khelper = cc.khelper
-    nocca, noccb = cc.nocc
-    nkpts = cc.nkpts
-    if inplace:
+    log = logger.Logger(kucc_inst.stdout, kucc_inst.verbose)
+    kconserv = kucc_inst.khelper.kconserv
+    nocca, noccb = kucc_inst.nocc
+    nkpts = kucc_inst.nkpts
+    if eris is not None:
         log.info(
-            f"Modifying inplace coupled cluster _ERIS object using {eri_helper.__class__}."
+            f"Modifying coupled cluster _ERIS object inplace using {eri_helper.__class__}."
         )
         out_eris = eris
     else:
         log.info(
             f"Rebuilding coupled cluster _ERIS object using {eri_helper.__class__}."
         )
-        out_eris = _make_df_eris(cc) 
+        out_eris = _make_eris_incore(kucc_inst)
     for kp, kq, kr in loop_kkk(nkpts):
         ks = kconserv[kp, kq, kr]
         kpts = [kp, kq, kr, ks]
@@ -145,10 +147,8 @@ def build_approximate_eris_rohf(cc, eris, eri_helper, inplace=True):
         out_eris.VOvv[kq, kp, ks] = (
             tmp[:noccb, noccb:, nocca:, nocca:].conj().transpose(1, 0, 3, 2)
         )
-    # Assuming spin-free integrals (RHF/ROHF)
-    for ki in range(nkpts):
-        for kj in range(nkpts):
-            out_eris.Lpv[ki, kj] = eri_helper.chol[ki, kj][:, :, nocca:]
-            out_eris.LPV[ki, kj] = eri_helper.chol[ki, kj][:, :, noccb:]
+    # Force CCSD to use eri tensors.
+    out_eris.Lpv = None
+    out_eris.LPV = None
 
     return out_eris

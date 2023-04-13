@@ -7,6 +7,7 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
     build_momentum_transfer_mapping,
 )
 
+
 # Single-Factorization
 class SingleFactorizationHelper:
     def __init__(self, cholesky_factor: np.ndarray, kmf: scf.HF, naux: int = None):
