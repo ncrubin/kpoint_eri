@@ -14,7 +14,7 @@ from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
 )
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.sparse.compute_lambda_sparse import compute_lambda
 from kpoint_eri.resource_estimates.sparse.compute_sparse_resources import cost_sparse
@@ -59,10 +59,10 @@ def generate_costing_table(
 ):
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
-    exact_cc = cc.KRCCSD(pyscf_mf)
-    exact_cc.verbose = 0
-    eris = exact_cc.ao2mo()
-    exact_emp2, _, _ = exact_cc.init_amps(eris)
+    cc_inst = cc.KRCCSD(pyscf_mf)
+    cc_inst.verbose = 0
+    exact_eris = cc_inst.ao2mo()
+    exact_emp2, _, _ = cc_inst.init_amps(exact_eris)
 
     mp2_inst = mp.KMP2(pyscf_mf)
     Luv = cholesky_from_df_ints(mp2_inst)  # [kpt, kpt, naux, nmo_padded, nmo_padded]
@@ -89,15 +89,13 @@ def generate_costing_table(
         chi=chi,
         exact_emp2=exact_emp2,
     )
+    approx_eris = exact_eris
     for thresh in thresholds:
         sparse_helper = SparseFactorizationHelper(
             cholesky_factor=Luv, kmf=pyscf_mf, threshold=thresh
         )
-        approx_cc = cc.KRCCSD(pyscf_mf)
-        approx_cc.verbose = 0
-        approx_cc = build_cc(approx_cc, sparse_helper)
-        eris = approx_cc.ao2mo(lambda x: x)
-        approx_emp2, _, _ = approx_cc.init_amps(eris)
+        approx_eris = build_approximate_eris(cc_inst, approx_eris, sparse_helper)
+        approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
 
         (
             sparse_lambda_tot,

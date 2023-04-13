@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+from typing import Union, Tuple
 
 from pyscf.pbc import scf
 from pyscf.pbc.lib.kpts_helper import KptsHelper, loop_kkk
@@ -104,7 +105,7 @@ class SparseFactorizationHelper:
         self.k_transfer_map = k_transfer_map
         self.threshold = threshold
 
-    def get_total_unique_terms_above_thresh(self, return_nk_counter=False):
+    def get_total_unique_terms_above_thresh(self, return_nk_counter=False) -> Union[int, Tuple[int, int]]:
         """
         Determine all unique (pkp, qkq|rkr, sks) given momentum conservation and four fold symmetry
 

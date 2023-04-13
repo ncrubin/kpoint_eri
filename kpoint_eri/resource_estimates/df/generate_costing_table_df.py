@@ -10,7 +10,7 @@ from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 from kpoint_eri.resource_estimates.df.integral_helper_df import DFABKpointIntegrals
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.df.compute_lambda_df import compute_lambda
 from kpoint_eri.resource_estimates.df.compute_df_resources import (
@@ -62,10 +62,10 @@ def generate_costing_table(
 ) -> pd.DataFrame:
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
-    exact_cc = cc.KRCCSD(pyscf_mf)
-    exact_cc.verbose = 0
-    eris = exact_cc.ao2mo()
-    exact_emp2, _, _ = exact_cc.init_amps(eris)
+    cc_inst = cc.KRCCSD(pyscf_mf)
+    cc_inst.verbose = 0
+    exact_eris = cc_inst.ao2mo()
+    exact_emp2, _, _ = cc_inst.init_amps(exact_eris)
 
     mp2_inst = mp.KMP2(pyscf_mf)
     Luv = cholesky_from_df_ints(mp2_inst)  # [kpt, kpt, naux, nmo_padded, nmo_padded]
@@ -94,6 +94,7 @@ def generate_costing_table(
         exact_emp2=exact_emp2,
     )
     naux = Luv[0, 0].shape[0]
+    approx_eris = exact_eris
     for cutoff in cutoffs:
         df_helper = DFABKpointIntegrals(cholesky_factor=Luv, kmf=pyscf_mf)
         df_helper.double_factorize(thresh=cutoff)
@@ -104,7 +105,6 @@ def generate_costing_table(
             num_eigs,
         ) = compute_lambda(hcore_mo, df_helper)
         L = df_helper.naux * 2 * df_helper.nk  # factor of 2 accounts for A and B terms
-        Lxi = num_eigs
         df_res_cost = compute_cost(
             n=num_spin_orbs,
             lam=df_lambda_tot,
@@ -131,11 +131,8 @@ def generate_costing_table(
             Nkz=kmesh[2],
             stps=df_res_cost[0],
         )
-        approx_cc = cc.KRCCSD(pyscf_mf)
-        approx_cc.verbose = 0
-        approx_cc = build_cc(approx_cc, df_helper)
-        eris = approx_cc.ao2mo(lambda x: x)
-        approx_emp2, _, _ = approx_cc.init_amps(eris)
+        approx_eris = build_approximate_eris(cc_inst, approx_eris, df_helper) 
+        approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
         df_resource_obj.add_resources(
             lambda_tot=df_lambda_tot,
             lambda_one_body=df_lambda_one_body,

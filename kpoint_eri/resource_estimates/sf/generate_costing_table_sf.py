@@ -13,7 +13,7 @@ from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
     SingleFactorizationHelper,
 )
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
 from kpoint_eri.resource_estimates.sf.compute_sf_resources import (
@@ -126,11 +126,8 @@ def generate_costing_table(
             Nky=kmesh[0],
             Nkz=kmesh[0],
         )
-        approx_cc = cc.KRCCSD(pyscf_mf)
-        approx_cc.verbose = 0
-        approx_cc = build_cc(approx_cc, sf_helper)
-        eris = approx_cc.ao2mo(lambda x: x)
-        approx_emp2, _, _ = approx_cc.init_amps(eris)
+        approx_eris = build_approximate_eris(exact_cc, eris, sf_helper) 
+        approx_emp2, _, _ = exact_cc.init_amps(approx_eris)
 
         sf_resource_obj.add_resources(
             lambda_tot=sf_lambda_tot,

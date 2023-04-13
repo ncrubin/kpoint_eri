@@ -1,5 +1,6 @@
 import numpy as np
 from pyscf.pbc import gto, scf, mp, cc
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 
 from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
     SingleFactorizationHelper,
@@ -42,30 +43,26 @@ def test_sf_helper_trunc():
     approx_cc = cc.KRCCSD(mf)
     approx_cc.verbose = 4
     helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf, naux=10)
-    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
 
-    approx_cc = build_cc(approx_cc, helper)
-    eris = approx_cc.ao2mo(lambda x: x)
+    eris = build_approximate_eris(approx_cc, eris, helper, inplace=False)
     emp2, _, _ = approx_cc.init_amps(eris)
     assert not np.isclose(emp2, exact_emp2)
 
-    from kpoint_eri.resource_estimates.cc_helper.custom_ao2mo import update_eris
-    out_eris = update_eris(approx_cc, eris, helper, inplace=False)
+    out_eris = build_approximate_eris(approx_cc, eris, helper, inplace=False)
     emp2_2, _, _ = approx_cc.init_amps(out_eris)
     assert not np.isclose(emp2, exact_emp2)
     assert np.isclose(emp2, emp2_2)
     helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf, naux=5)
-    out_eris = update_eris(approx_cc, eris, helper, inplace=False)
+    out_eris = build_approximate_eris(approx_cc, eris, helper, inplace=False)
     emp2_2, _, _ = approx_cc.init_amps(out_eris)
     assert not np.isclose(emp2, exact_emp2)
     assert not np.isclose(emp2, emp2_2)
-    out_eris = update_eris(approx_cc, eris, helper, inplace=True)
+    out_eris = build_approximate_eris(approx_cc, eris, helper, inplace=True)
     emp2_3, _, _ = approx_cc.init_amps(out_eris)
     assert not np.isclose(emp2, exact_emp2)
     assert np.isclose(emp2_2, emp2_3)
 
     helper = SingleFactorizationHelper(cholesky_factor=Luv, kmf=mf, naux=naux)
-    approx_cc = build_cc(approx_cc, helper)
-    eris = approx_cc.ao2mo(lambda x: x)
-    emp2, _, _ = approx_cc.init_amps(eris)
+    out_eris = build_approximate_eris(approx_cc, eris, helper, inplace=False)
+    emp2, _, _ = approx_cc.init_amps(out_eris)
     assert np.isclose(emp2, exact_emp2)

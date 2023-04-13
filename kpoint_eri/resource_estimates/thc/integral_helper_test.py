@@ -46,7 +46,7 @@ def test_thc_helper():
     )
 
     helper = KPTHCHelperDoubleTranslation(kpt_thc.chi, kpt_thc.zeta, mf)
-    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
+    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 
     num_kpts = len(mf.kpts)
     for iq in range(num_kpts):
@@ -60,7 +60,7 @@ def test_thc_helper():
                 )
                 assert np.allclose(eri_thc, eri_exact)
 
-    approx_cc = build_cc(approx_cc, helper)
+    approx_cc = build_approximate_eris(approx_cc, helper)
     eris = approx_cc.ao2mo(lambda x: x)
     emp2, _, _ = approx_cc.init_amps(eris)
     assert np.isclose(emp2, exact_emp2)
@@ -68,7 +68,7 @@ def test_thc_helper():
         mf, np.prod(cell.mesh), single_translation=True
     )
     helper = KPTHCHelperSingleTranslation(kpt_thc.chi, kpt_thc.zeta, mf)
-    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
+    from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 
     for iq in range(num_kpts):
         for ik in range(num_kpts):
@@ -81,7 +81,7 @@ def test_thc_helper():
                 )
                 assert np.allclose(eri_thc, eri_exact)
 
-    approx_cc = build_cc(approx_cc, helper)
+    approx_cc = build_approximate_eris(approx_cc, helper)
     eris = approx_cc.ao2mo(lambda x: x)
     emp2, _, _ = approx_cc.init_amps(eris)
     assert np.isclose(emp2, exact_emp2)

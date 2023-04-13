@@ -29,6 +29,7 @@ def test_generate_costing_table_df():
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts=kpts, exxdiv=None).rs_density_fit()
     mf.kernel()
+    print(mf.with_df)
     thc_rank_params = np.array([2, 4, 6])
     table = generate_costing_table(
         mf,
