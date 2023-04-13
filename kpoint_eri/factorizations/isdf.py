@@ -8,25 +8,8 @@ are only interested in ISDF as an initial guess for the THC factors which are
 then subsequently reoptimized to regularize $\lambda$. The assumption here is
 that FFTDF / ISDF is a good enough approximation to the RSGDF ERIs and thus
 serves as a good initial guess.
-
-Let's start by comparing the ISDF-MP2 energy as a function of the THC rank
-parameter, recall that $M = c_\mathrm{THC} N/2$, where $c_\mathrm{THC}$ is the
-THC rank parameter and $N$ is the number of spin orbitals. $M$ is what we call
-num_thc in the code. 
-
-It's important to recall what we are doing in the ISDF algorithm, that is we
-solve
-
-\begin{equation}
-
-u_{p\mathrm{k}}^*(\mathbf{r}_i) u_{q\mathbf{k}'}(\mathbf{r}_i) = \sum_\mu^M \xi_\mu(\mathbf{r}_i) u_{p\mathrm{k}}^*(\mathbf{r}_\mu) u_{q\mathbf{k}'}(\mathbf{r}_\mu)
-
-\end{equation}
-
-for $\xi_\mu(\mathbf{r}_i)$ given a set of interpolating points $(\{r_\mu\})$ which are selected from the original real space $(\{\mathbf{r}_i\})$ (FFT) grid of size $N_g$ using the KMeans-CVT algorithm.
 """
 
-For the purposes of this notebook it is helpful to use a value of $N_g$ which is smaller than that required to fully converge the FFTDF error. We will investigate this more at the end of the tutorial. 
 from dataclasses import dataclass, asdict
 import itertools
 from typing import Tuple, Union
@@ -870,7 +853,33 @@ def setup_isdf(
 
 @dataclass
 class KPointTHC:
-    """Light class to hold THC tensors."""
+    """Light class to hold THC tensors.
+
+    Atributes:
+        chi: THC leaf tensor. shape = [num_kpts, num_mo, num_thc]
+        zeta: THC central tensor. shape = [num_kpts, num_G, num_G, num_thc, num_thc]
+        G_mapping: For a given Q and k index this array gives the G index for zeta.
+        xi: ISDF interpolating vectors. May be none if this class holds
+            reoptimized THC decomposition.
+
+    Examples:
+        The following pseudocode shows how you can build an ERI matrix block given elements of this class.
+
+        >>> kthc = solve_kmeans_kpisdf(...) 
+        >>> ikp, ikq, ikr, iks = kpts_indx
+        >>> Gpq = kthc.G_mapping[q_indx, ikp]
+        >>> Gsr = kthc.G_mapping[q_indx, iks]
+        >>> eri = np.einsum(
+            "pm,qm,mn,rn,sn->pqrs",
+            kthc.chi[ikp].conj(),
+            kthc.chi[ikq],
+            kthc.zeta[q_indx][Gpq, Gsr],
+            kthc.chi[ikr].conj(),
+            kthc.chi[iks],
+            optimize=True,
+        )
+    
+    """
 
     chi: npt.NDArray[np.complex128]
     zeta: npt.NDArray
@@ -1052,7 +1061,6 @@ def solve_for_thc_factors(
             mf_inst.kpts,
             cell_periodic_mo,
             grid_points,
-            only_unique_G=True,
         )
     else:
         chi, zeta, xi, G_mapping = kpoint_isdf_double_translation(

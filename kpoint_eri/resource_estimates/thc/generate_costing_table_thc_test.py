@@ -40,14 +40,9 @@ def test_generate_costing_table_thc():
         bfgs_maxiter=10,
         adagrad_maxiter=10,
         fft_df_mesh=[11] * 3,
-        write_to_file=True,
     )
     num_kpts = np.prod(kmesh)
     assert np.allclose(table.dE, 1e-3)
     assert np.allclose(table.chi, 10)
     assert np.allclose(table.beta, 22)
     assert np.allclose(table.cutoff, thc_rank_params)
-    filename = f"pbc_thc_num_kpts_{num_kpts}.csv"
-    df_from_file = pd.read_csv(filename, index_col=0)
-    assert np.allclose(df_from_file.total_toffolis, table.total_toffolis) 
-    assert np.allclose(df_from_file.approx_emp2, table.approx_emp2) 

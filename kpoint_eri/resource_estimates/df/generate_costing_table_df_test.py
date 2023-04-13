@@ -36,7 +36,3 @@ def test_generate_costing_table_df():
     assert np.allclose(table.cutoff, thresh)
     assert np.allclose(table.num_aux, [108, 108, 108])
     assert np.isclose(table.approx_emp2.values[2], table.exact_emp2.values[0])
-    filename = f"pbc_df_num_kpts_3.csv"
-    df_from_file = pd.read_csv(filename, index_col=0)
-    assert np.allclose(df_from_file.total_toffolis, table.total_toffolis) 
-    assert np.allclose(df_from_file.approx_emp2, table.approx_emp2) 
