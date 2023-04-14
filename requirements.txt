@@ -1,3 +1,5 @@
 openfermion
 pyscf
 numpy
+jax
+jaxlib
