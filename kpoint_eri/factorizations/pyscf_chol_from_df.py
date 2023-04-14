@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+import numpy.typing as npt
 import h5py
 
 from pyscf.pbc import gto, scf, cc, mp
@@ -8,19 +9,20 @@ from pyscf.pbc.mp.kmp2 import _add_padding
 from pyscf import lib
 
 
-def cholesky_from_df_ints(mp, pad_mos_with_zeros=True):
+def cholesky_from_df_ints(mp, pad_mos_with_zeros: bool=True) -> npt.NDArray:
     """Compute 3-center electron repulsion integrals, i.e. (L|ov),
     where `L` denotes DF auxiliary basis functions and `o` and `v` occupied and virtual
     canonical crystalline orbitals. Note that `o` and `v` contain kpt indices `ko` and `kv`,
     and the third kpt index `kL` is determined by the conservation of momentum.
-    Arguments:
-        mp (KMP2) -- A KMP2 instance
-        pad_mos_with_zeros -- Whether to follow KMP2 class and pad mo coefficients with
-            zeros if system has varying number of occupied / virtuals at each
-            k-point which is the default behaviour for KMP2 / KCC methods in
-            pyscf.
+
+    Args:
+        mp: pyscf K-RMP2 object
+        pad_mos_with_zeros: Whether to follow KMP2 class and pad mo coefficients
+            with (Default value = True) if system has varying number of
+            occupied orbitals.
+
     Returns:
-        Lov (numpy.ndarray) -- 3-center DF ints, with shape (nkpts, nkpts, naux, nmo, nmo)
+        Lchol: 3-center DF ints, with shape (nkpts, nkpts, naux, nmo, nmo)
     """
     from pyscf.pbc.df import df
     from pyscf.ao2mo import _ao2mo
@@ -98,16 +100,6 @@ def cholesky_from_df_ints(mp, pad_mos_with_zeros=True):
     log.timer_debug1("transforming DF-AO integrals to MO", *cput0)
 
     return Lchol
-
-
-def _format_jks(vj, dm, kpts_band):
-    if kpts_band is None:
-        vj = vj.reshape(dm.shape)
-    elif kpts_band.ndim == 1:  # a single k-point on bands
-        vj = vj.reshape(dm.shape)
-    elif getattr(dm, "ndim", 0) == 2:
-        vj = vj[0]
-    return vj
 
 
 if __name__ == "__main__":
