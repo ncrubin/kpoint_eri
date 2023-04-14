@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+from numpy.typing import npt
 from typing import Tuple
 
 from pyscf.pbc import scf
@@ -9,14 +10,20 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
 )
 
 
-def get_df_factor(mat: np.ndarray, thresh: float, verify_adjoint=False) -> Tuple:
-    """
-    Represent a matrix via non-zero eigenvalue vector pairs.
+def get_df_factor(
+    mat: npt.NDArray, thresh: float, verify_adjoint: bool = False
+) -> Tuple[npt.NDArray, npt.NDArray]:
+    """Represent a matrix via non-zero eigenvalue vector pairs.
     anything above thresh is considered non-zero
 
-    :params np.ndarray mat: matrix to diagonalize should be hermitian
-    :params float thresh: threshold that indicates a non-zero eigenvalue
-    :returns: Tuple eigen values and eigen vectors (lambda, V)
+    Args:
+      mat: Matrix to double factorize.
+      thresh: Double factorization eigenvalue threshold
+      verify_adjoint: Verify input matrix is Hermitian (Default value = False)
+
+    Returns:
+      Tuple eigen values and eigen vectors (lambda, V)
+
     """
     if verify_adjoint:
         assert np.allclose(mat, mat.conj().T)
@@ -36,19 +43,19 @@ def get_df_factor(mat: np.ndarray, thresh: float, verify_adjoint=False) -> Tuple
 
 
 class DFABKpointIntegrals:
-    def __init__(self, cholesky_factor: np.ndarray, kmf: scf.HF):
-        """
-        Initialize a ERI object for CCSD from Cholesky factors and a
+    def __init__(self, cholesky_factor: npt.NDArray, kmf: scf.HF):
+        """Initialize a ERI object for CCSD from Cholesky factors and a
         pyscf mean-field object
 
         We need to form the A and B objects which are indexed by Cholesky index n and
         momentum mode Q. This is accomplished by constructing rho[Q, n, kpt, nao, nao] by
         reshaping the cholesky object.  We don't form the matrix
 
-        :param cholesky_factor: Cholesky factor tensor that is [nkpts, nkpts, naux, nao, nao]
-        :param kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
-                    must have an attribute kpts which len(self.kmf.kpts) returns number of
-                    kpts.
+        Arguments:
+            cholesky_factor: Cholesky factor tensor that is [nkpts, nkpts, naux, nao, nao]
+            kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
+                must have an attribute kpts which len(self.kmf.kpts) returns number of
+                kpts.
         """
         self.chol = cholesky_factor
         self.kmf = kmf
@@ -74,8 +81,7 @@ class DFABKpointIntegrals:
         self.b_mats = None
 
     def build_A_B_n_q_k_from_chol(self, qidx, kidx):
-        """
-        Builds matrices that are block in two momentum indices
+        """Builds matrices that are block in two momentum indices
 
               k  | k-Q |
             ------------
@@ -87,8 +93,13 @@ class DFABKpointIntegrals:
         where the off diagonal blocks are the ones that are populated.  All
         matrices for every Cholesky vector is constructed.
 
-        :param qidx: index for momentum mode Q.
-        :param kidx: index for momentum mode K.
+        Args:
+          qidx: index for momentum mode Q.
+          kidx: index for momentum mode K.
+
+        Returns:
+            Amat: A matrix
+            Bmat: A matrix
         """
         k_minus_q_idx = self.k_transfer_map[qidx, kidx]
         naux = self.chol[kidx, k_minus_q_idx].shape[0]
@@ -124,18 +135,21 @@ class DFABKpointIntegrals:
         self,
         kidx: int,
         qidx: int,
-        Amats: np.ndarray,
-        Bmats: np.ndarray,
-    ) -> np.ndarray:
-        """
-        Construct rho_{n, k, Q} which is equal to the cholesky factor by summing
+        Amats: npt.NDArray,
+        Bmats: npt.NDArray,
+    ) -> npt.NDArray:
+        """Construct rho_{n, k, Q} which is equal to the cholesky factor by summing
         together via the following relationships
 
-        :param kidx: k-momentum index
-        :param qidx: Q-momentum index
-        :param Amats: [naux, 2 * nmo, 2 * nmo]
-        :param Bmats: [naux, 2 * nmo, 2 * nmo]
-        :returns: cholesky factors 3-tensors (k, k-Q)[naux, nao, nao], (kp, kp-Q)[naux, nao, nao]
+        Args:
+          kidx: k-momentum index
+          qidx: Q-momentum index
+          Amats: naux, 2 * nmo, 2 * nmo]
+          Bmats: naux, 2 * nmo, 2 * nmo]
+
+        Returns:
+          cholesky factors 3-tensors (k, k-Q)[naux, nao, nao], (kp, kp-Q)[naux, nao, nao]
+
         """
         k_minus_q_idx = self.k_transfer_map[qidx, kidx]
         nmo = self.nao
@@ -145,12 +159,12 @@ class DFABKpointIntegrals:
             return Amats[:, :nmo, nmo:] + -1j * Bmats[:, :nmo, nmo:]
 
     def double_factorize(self, thresh=None) -> None:
-        """
-        construct a double factorization of the Hamiltonian.
+        """construct a double factorization of the Hamiltonian.
 
         Iterate through qidx, kidx and get factorized Amat and Bmat for each Cholesky rank
 
-        :returns: None. we mutate the object and store listed objects above
+        Args:
+          thresh: Double factorization eigenvalue threshold (Default value = None)
         """
         if thresh is None:
             thresh = 1.0e-13
@@ -160,8 +174,12 @@ class DFABKpointIntegrals:
         nkpts = self.nk
         nmo = self.nao
         naux = self.naux
-        self.amat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
-        self.bmat_n_mats = np.zeros((nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128)
+        self.amat_n_mats = np.zeros(
+            (nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128
+        )
+        self.bmat_n_mats = np.zeros(
+            (nkpts, nkpts, naux, 2 * nmo, 2 * nmo), dtype=np.complex128
+        )
         self.amat_lambda_vecs = np.empty((nkpts, nkpts, naux), dtype=object)
         self.bmat_lambda_vecs = np.empty((nkpts, nkpts, naux), dtype=object)
         for qidx, kidx in itertools.product(range(nkpts), repeat=2):
@@ -170,20 +188,27 @@ class DFABKpointIntegrals:
             assert naux_qk <= naux
             for nc in range(naux_qk):
                 amat_n_eigs, amat_n_eigv = get_df_factor(Amats[nc], thresh)
-                self.amat_n_mats[kidx, qidx][nc, :, :] = amat_n_eigv @ np.diag(amat_n_eigs) @ amat_n_eigv.conj().T
+                self.amat_n_mats[kidx, qidx][nc, :, :] = (
+                    amat_n_eigv @ np.diag(amat_n_eigs) @ amat_n_eigv.conj().T
+                )
                 self.amat_lambda_vecs[kidx, qidx, nc] = amat_n_eigs
 
                 bmat_n_eigs, bmat_n_eigv = get_df_factor(Bmats[nc], thresh)
-                self.bmat_n_mats[kidx, qidx][nc, :, :] = bmat_n_eigv @ np.diag(bmat_n_eigs) @ bmat_n_eigv.conj().T
+                self.bmat_n_mats[kidx, qidx][nc, :, :] = (
+                    bmat_n_eigv @ np.diag(bmat_n_eigs) @ bmat_n_eigv.conj().T
+                )
                 self.bmat_lambda_vecs[kidx, qidx, nc] = bmat_n_eigs
 
         return
 
-    def get_eri(self, ikpts):
-        """
-        Construct (pkp qkq| rkr sks) via A and B tensors that have already been constructed
+    def get_eri(self, ikpts: list) -> npt.NDArray:
+        """Construct (pkp qkq| rkr sks) via A and B tensors that have already been constructed
 
-        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        Args:
+          ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+
+        Returns:
+            eris: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = ikpts  # (k, k-q, k'-q, k')
         qidx = self.reverse_k_transfer_map[ikp, ikq]
@@ -203,12 +228,15 @@ class DFABKpointIntegrals:
             "npq,nsr->pqrs", chol_val_k_kmq, chol_val_kp_kpmq.conj(), optimize=True
         )
 
-    def get_eri_exact(self, ikpts):
-        """
-        Construct (pkp qkq| rkr sks) exactly from Cholesky vector.  This is for constructing the J and K like terms
+    def get_eri_exact(self, ikpts: list) -> npt.NDArray:
+        """Construct (pkp qkq| rkr sks) exactly from Cholesky vector.  This is for constructing the J and K like terms
         needed for the one-body component lambda
 
-        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        Args:
+          ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+
+        Returns:
+            eris: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = ikpts
         return np.einsum(

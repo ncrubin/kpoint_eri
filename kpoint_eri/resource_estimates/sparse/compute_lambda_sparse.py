@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 from typing import Tuple
 
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
@@ -6,17 +7,23 @@ from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
 )
 
 
-def compute_lambda(hcore: np.ndarray, sparse_int_obj: SparseFactorizationHelper) -> Tuple[float, float, float, Tuple[int, int] | int]:
-    """
-    Compute lambda value for sparse method
+def compute_lambda(
+    hcore: npt.NDArray, sparse_int_obj: SparseFactorizationHelper
+) -> Tuple[float, float, float, Tuple[int, int] | int]:
+    """Compute lambda value for sparse method
 
-    :param hcore: array of hcore(k) by kpoint. k-point order
-                  is pyscf order generated for this problem.
-    :sparse_int_obj: The sparse integral object that is used
-                     to compute eris and the number of unique
-                     terms.
-    :returns: total-lambda, one-Body lambda, two-body lambda,
-              number of unique terms above threshold
+    Arguments:
+        hcore: array of hcore(k) by kpoint. k-point order
+            is pyscf order generated for this problem.
+        sparse_int_obj: The sparse integral object that is used
+            to compute eris and the number of unique
+            terms.
+
+    Returns:
+        lambda_tot: Total lambda
+        lambda_one_body: One-body lambda
+        lambda_two_body: Two-body lambda
+        num_sym_unique: Number of symmetry unique terms.
     """
     kpts = sparse_int_obj.kmf.kpts
     nkpts = len(kpts)
@@ -64,5 +71,5 @@ def compute_lambda(hcore: np.ndarray, sparse_int_obj: SparseFactorizationHelper)
         lambda_tot,
         lambda_one_body,
         lambda_two_body,
-        sparse_int_obj.get_total_unique_terms_above_thresh()
+        sparse_int_obj.get_total_unique_terms_above_thresh(),
     )

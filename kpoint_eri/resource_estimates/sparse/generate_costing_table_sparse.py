@@ -54,6 +54,19 @@ def generate_costing_table(
     thresholds: np.ndarray = np.logspace(-1, -5, 6),
     dE_for_qpe=0.0016,
 ) -> pd.DataFrame:
+    """Generate resource estimate costing table given a set of cutoffs for
+        sparse Hamiltonian.
+
+    Arguments:
+        pyscf_mf: k-point pyscf mean-field object
+        name: Optional descriptive name for simulation.
+        chi: the number of bits for the representation of the coefficients
+        thresholds: Array of sparse thresholds to generate the table for.
+        dE_for_qpe: Phase estimation epsilon.
+
+    Returns
+        resources: Table of resource estimates.
+    """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
     cc_inst = cc.KRCCSD(pyscf_mf)

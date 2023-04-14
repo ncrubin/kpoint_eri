@@ -59,6 +59,20 @@ def generate_costing_table(
     beta: int = 20,
     dE_for_qpe: float=0.0016,
 ) -> pd.DataFrame:
+    """Generate resource estimate costing table given a set of cutoffs for
+        double-factorized Hamiltonian.
+
+    Arguments:
+        pyscf_mf: k-point pyscf mean-field object
+        cutoffs: Array of (integer) auxiliary index cutoff values
+        name: Optional descriptive name for simulation.
+        chi: the number of bits for the representation of the coefficients
+        beta: the number of bits for rotations.
+        dE_for_qpe: Phase estimation epsilon.
+
+    Returns
+        resources: Table of resource estimates.
+    """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
     cc_inst = cc.KRCCSD(pyscf_mf)

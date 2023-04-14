@@ -32,25 +32,26 @@ def QR_ncr(L, M1):
 
 def cost_sparse(n: int, lam: float, d: int, dE: float, chi: int,
                 stps: int, Nkx: int, Nky: int, Nkz: int) -> Tuple[int, int, int]:
-    """ Determine fault-tolerant costs using sparse decomposition in quantum
-        chemistry
-    Args:
-        n (int) - the number of spin-orbitals
-        lam (float) - the lambda-value for the Hamiltonian
-        d (int) - number of symmetry unique terms kept in the sparse Hamiltonian
-        dE (float) - allowable error in phase estimation
-        chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
+    """ Determine fault-tolerant costs using sparse representaion of symmetry
+        adapted integrals. 
+
+    Arguments:
+        n: the number of spin-orbitals
+        lam: the lambda-value for the Hamiltonian
+        d: number of symmetry unique terms kept in the sparse Hamiltonian
+        dE: allowable error in phase estimation
+        chi: equivalent to aleph_1 and aleph_2 in the document, the
             number of bits for the representation of the coefficients
-        stps (int) - an approximate number of steps to choose the precision
+        stps: an approximate number of steps to choose the precision
             of single qubit rotations in preparation of the equal superposition
             state
-        Nkx (int) - number of k-points in x-direction
-        Nky (int) - number of k-points in y-direction
-        Nkz (int) - number of k-points in z-direction
+        Nkx: number of k-points in x-direction
+        Nky: number of k-points in y-direction
+        Nkz: number of k-points in z-direction
     Returns:
-        step_cost (int) - Toffolis per step
-        total_cost (int) - Total number of Toffolis
-        ancilla_cost (int) - Total ancilla cost
+        step_cost: Toffolis per step
+        total_cost: Total number of Toffolis
+        ancilla_cost: Total ancilla cost
     """
     if n % 2 != 0:
         raise ValueError("The number of spin orbitals is always even!")

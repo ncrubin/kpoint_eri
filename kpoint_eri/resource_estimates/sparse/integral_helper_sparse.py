@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+import numpy.typing as npt
 from typing import Union, Tuple
 
 from pyscf.pbc import scf
@@ -52,7 +53,8 @@ def unique_iter_pq_rs(nmo):
 def _ps_qr_two_body_terms(quad):
     """kp = ks and kq = kr
     Thus a subset of the four-fold symmetry can be applied
-    (pkp,qkq|rkq,skp) -> (skp,rkq|qkq,pkp) by complex conj and dummy index exchange"""
+    (pkp,qkq|rkq,skp) -> (skp,rkq|qkq,pkp) by complex conj and dummy index exchange
+    """
     p, q, r, s = quad
     yield p, q, r, s
     yield s, r, q, p
@@ -69,7 +71,8 @@ def unique_iter_ps_qr(nmo):
 def _pr_qs_two_body_terms(quad):
     """kp = kr and kq = ks
     Thus a subset of the four-fold symmetry can be applied
-    (pkp,qkq|rkp,skq) -> (rkp,skq|pkp,rkq) by dummy index exchange"""
+    (pkp,qkq|rkp,skq) -> (rkp,skq|pkp,rkq) by dummy index exchange
+    """
     p, q, r, s = quad
     yield p, q, r, s
     yield r, s, p, q
@@ -85,17 +88,16 @@ def unique_iter_pr_qs(nmo):
 
 class SparseFactorizationHelper:
     def __init__(self, cholesky_factor: np.ndarray, kmf: scf.HF, threshold=1.0e-14):
-        """
-        Initialize a ERI object for CCSD from Cholesky factors and a
-        pyscf mean-field object
+        """Initialize a ERI object for CCSD from Cholesky factors and a
+            pyscf mean-field object
 
-        :param cholesky_factor: Cholesky factor tensor that is [nkpts, nkpts, naux, nao, nao].
-                                To see how to generate this go to
-                                kpoint_eri.factorizations.pyscf_chol_form_df.py
-        :param kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
-                    must have an attribute kpts which len(self.kmf.kpts) returns number of
-                    kpts.
-        :param threshold: Default 1.0E-8 is the value at which to ignore the integral
+        Args:
+            cholesky_factor: Cholesky factor tensor that is [nkpts, nkpts, naux, nao, nao].
+                To see how to generate this go to kpoint_eri.factorizations.pyscf_chol_form_df.py
+            kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
+                must have an attribute kpts which len(self.kmf.kpts) returns number of
+                kpts.
+            threshold: Default 1.0E-8 is the value at which to ignore the integral
         """
         self.chol = cholesky_factor
         self.kmf = kmf
@@ -105,12 +107,16 @@ class SparseFactorizationHelper:
         self.k_transfer_map = k_transfer_map
         self.threshold = threshold
 
-    def get_total_unique_terms_above_thresh(self, return_nk_counter=False) -> Union[int, Tuple[int, int]]:
-        """
-        Determine all unique (pkp, qkq|rkr, sks) given momentum conservation and four fold symmetry
+    def get_total_unique_terms_above_thresh(
+        self, return_nk_counter=False
+    ) -> Union[int, Tuple[int, int]]:
+        """Determine all unique (pkp, qkq|rkr, sks) given momentum conservation and four fold symmetry
 
-        :returns: set of tuples (kp, kq, kr, p, q, r, s). To regenerate the last momentum you can
-                  use kts_helper = KptsHelper(self.kmf.cell, self.kmf.kpts); ks = kpts_helper.kconserv[kp, kq, kr]
+        Arguments:
+            return_nk_counter: Return number of visited k-points.
+
+        Returns:
+            num_sym_unique: Number of symmetry unique terms above the threshold
         """
         kpts_helper = KptsHelper(self.kmf.cell, self.kmf.kpts)
         nkpts = len(self.kmf.kpts)
@@ -204,14 +210,17 @@ class SparseFactorizationHelper:
             return counter, nk_counter
         return counter
 
-    def get_eri(self, ikpts, check_eq=False):
-        """
-        Construct (pkp qkq| rkr sks) via \\sum_{n}L_{pkp,qkq,n}L_{sks, rkr, n}^{*}
+    def get_eri(self, ikpts, check_eq=False) -> npt.NDArray:
+        """Construct (pkp qkq| rkr sks) via \\sum_{n}L_{pkp,qkq,n}L_{sks, rkr, n}^{*}
 
         Note: 3-tensor L_{sks, rkr} = L_{rkr, sks}^{*}
 
-        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
-        :param check_eq: optional value to confirm a symmetry in the Cholesky vectors.
+        Arguments:
+          ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+          check_eq: optional value to confirm a symmetry in the Cholesky vectors. (Default value = False)
+
+        Returns:
+            eris: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = ikpts
         if check_eq:
@@ -239,22 +248,16 @@ class SparseFactorizationHelper:
         kpoint_eri_tensor[zero_mask] = 0
         return kpoint_eri_tensor
 
-    def get_eri_exact(self, kpts):
-        """
-        Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
+    def get_eri_exact(self, kpts) -> npt.NDArray:
+        """Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
         needed for the one-body component lambda
 
-        :param kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
-        """
-        # kp, kq, kr, ks = kpts
-        # eri_kpt = self.kmf.with_df.ao2mo([self.kmf.mo_coeff[i] for i in (kp,kq,kr,ks)],
-        #                                 [self.kmf.kpts[i] for i in
-        #                                  (kp,kq,kr,ks)],
-        #                                  compact=False)
-        # shape_pqrs = [self.kmf.mo_coeff[i].shape[-1] for i in (kp,kq,kr,ks)]
-        # eri_kpt = eri_kpt.reshape(shape_pqrs)
-        # return eri_kpt
+        Args:
+          kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
 
+        Returns:
+            eris: ([pkp][qkq]|[rkr][sks])
+        """
         ikp, ikq, ikr, iks = kpts
         return np.einsum(
             "npq,nsr->pqrs",
