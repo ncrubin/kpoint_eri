@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from openfermion.resource_estimates.thc.utils.thc_factorization import (
     lbfgsb_opt_thc_l2reg,
 )
@@ -29,6 +30,7 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
 )
 
 
+@pytest.mark.slow
 def test_kpoint_thc_reg_gamma():
     cell = gto.Cell()
     cell.atom = """
@@ -44,7 +46,7 @@ def test_kpoint_thc_reg_gamma():
     cell.unit = "B"
     cell.mesh = [11] * 3
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 1, 1]
     kpts = cell.make_kpts(kmesh)
@@ -125,6 +127,7 @@ def test_kpoint_thc_reg_gamma():
     assert mol_obj - gam_obj < 1e-12
 
 
+@pytest.mark.slow
 def test_kpoint_thc_reg_batched():
     cell = gto.Cell()
     cell.atom = """
@@ -140,7 +143,7 @@ def test_kpoint_thc_reg_batched():
     cell.unit = "B"
     cell.mesh = [11] * 3
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
@@ -273,6 +276,7 @@ def test_kpoint_thc_reg_batched():
     assert np.allclose(ada_param, ada_param_diff_batch)
 
 
+@pytest.mark.slow
 def test_kpoint_thc_helper():
     cell = gto.Cell()
     cell.atom = """
@@ -288,7 +292,7 @@ def test_kpoint_thc_helper():
     cell.unit = "B"
     cell.mesh = [11] * 3
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 1, 2]
     kpts = cell.make_kpts(kmesh)

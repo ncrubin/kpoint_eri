@@ -1,6 +1,6 @@
 import itertools
 import numpy as np
-from numpy.typing import npt
+import numpy.typing as npt
 from typing import Tuple
 
 from pyscf.pbc import scf

@@ -1,5 +1,6 @@
 from pyscf.pbc import gto, scf, mp
 from pyscf.pbc.cc import KRCCSD
+import pytest
 import numpy as np
 
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import (
@@ -11,6 +12,7 @@ from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
 )
 
 
+@pytest.mark.slow
 def test_cc_helper_rohf():
     cell = gto.Cell()
     cell.atom = """
@@ -113,6 +115,7 @@ def test_cc_helper_rohf():
     assert abs(ecc_exact - ecc_approx) > 1e-12
 
 
+@pytest.mark.slow
 def test_cc_helper_rhf():
     cell = gto.Cell()
     cell.atom = """

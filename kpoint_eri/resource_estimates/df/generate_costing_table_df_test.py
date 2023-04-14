@@ -1,4 +1,3 @@
-import pandas as pd
 import numpy as np
 
 from pyscf.pbc import gto, scf
@@ -22,8 +21,9 @@ def test_generate_costing_table_df():
         basis="gth-szv",
         pseudo="gth-hf-rev",
         verbose=0,
+        parse_arg=False,
     )
-    cell.build()
+    cell.build(parse_arg=False)
 
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts=kpts, exxdiv=None).rs_density_fit()

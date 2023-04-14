@@ -1,6 +1,5 @@
 import numpy as np
-import os
-import pandas as pd
+import pytest
 
 from pyscf.pbc import gto, scf
 
@@ -9,6 +8,7 @@ from kpoint_eri.resource_estimates.thc.generate_costing_table_thc import (
 )
 
 
+@pytest.mark.slow
 def test_generate_costing_table_thc():
     kmesh = [1, 1, 3]
     cell = gto.M(

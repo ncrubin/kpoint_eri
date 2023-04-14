@@ -21,7 +21,7 @@ def test_momentum_transfer_map():
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
     kpts = cell.make_kpts([2, 2, 1], scaled_center=[0.1, 0.2, 0.3])
     mom_map = build_momentum_transfer_mapping(cell, kpts)
     for i, Q in enumerate(kpts):

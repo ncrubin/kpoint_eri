@@ -1,6 +1,6 @@
 from typing import Tuple
 import numpy as np
-from numpy.typing import npt
+import numpy.typing as npt
 
 from kpoint_eri.resource_estimates.df.integral_helper_df import DFABKpointIntegrals
 

@@ -1,6 +1,7 @@
 from functools import reduce
 import numpy as np
 from pyscf.pbc import gto, scf, mp
+import pytest
 
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
@@ -8,6 +9,7 @@ from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
 
+@pytest.mark.slow
 def test_sparse_int_obj():
     cell = gto.Cell()
     cell.atom = """
@@ -22,7 +24,7 @@ def test_sparse_int_obj():
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
@@ -51,6 +53,7 @@ def test_sparse_int_obj():
         print(thresh, abs_sum_coeffs)  # this should always be increasing
 
 
+@pytest.mark.slow
 def test_get_num_unique():
     cell = gto.Cell()
     cell.atom = """
@@ -65,7 +68,7 @@ def test_get_num_unique():
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 2, 3]
     kpts = cell.make_kpts(kmesh)

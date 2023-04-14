@@ -2,12 +2,14 @@ import numpy as np
 import pandas as pd 
 
 from pyscf.pbc import gto, scf
+import pytest
 
 from kpoint_eri.resource_estimates.sf.generate_costing_table_sf import (
     generate_costing_table,
 )
 
 
+@pytest.mark.slow
 def test_generate_costing_table_sf():
     kmesh = [1, 1, 3]
     cell = gto.M(

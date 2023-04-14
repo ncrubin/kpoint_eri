@@ -1,21 +1,18 @@
-import numpy as np
-from pyscf.pbc import gto, scf, mp
 from functools import reduce
 
-from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
+import numpy as np
+import pytest
+from pyscf.pbc import gto, mp, scf
 
-
-from kpoint_eri.resource_estimates.thc.integral_helper import (
-    KPTHCHelperDoubleTranslation,
-)
-
-from kpoint_eri.resource_estimates.thc.compute_lambda_thc import (
-    compute_lambda,
-    compute_lambda_real,
-)
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
+from kpoint_eri.resource_estimates.thc.compute_lambda_thc import (
+    compute_lambda, compute_lambda_real)
+from kpoint_eri.resource_estimates.thc.integral_helper_thc import \
+    KPTHCHelperDoubleTranslation
 
 
+@pytest.mark.slow
 def test_kpoint_thc_lambda():
     cell = gto.Cell()
     cell.atom = """
@@ -79,7 +76,7 @@ def test_kpoint_thc_lambda():
     #
     #
     #
-    from kpoint_eri.resource_estimates.utils.k2gamma import k2gamma, get_phase
+    from kpoint_eri.resource_estimates.utils.k2gamma import get_phase, k2gamma
 
     supercell_mf = k2gamma(mf)
     rsmf = scf.KRHF(supercell_mf.cell, supercell_mf.kpts).rs_density_fit()

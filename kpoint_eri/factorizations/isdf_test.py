@@ -5,6 +5,7 @@ from pyscf.pbc import gto, scf
 from pyscf.pbc.dft import numint
 from pyscf.pbc.tools import pyscf_ase
 from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, member
+import pytest
 
 from kpoint_eri.factorizations.kmeans import KMeansCVT
 from kpoint_eri.factorizations.isdf import (
@@ -25,6 +26,7 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
 )
 
 
+@pytest.mark.slow
 def test_supercell_isdf_gamma():
     cell = gto.Cell()
     cell.atom = """
@@ -99,6 +101,7 @@ def test_supercell_isdf_gamma():
     assert np.allclose(eri_thc, eri_ref)
 
 
+@pytest.mark.slow
 def test_supercell_isdf_complex():
     cell = gto.Cell()
     cell.atom = """
@@ -187,7 +190,7 @@ def test_G_vector_mapping_double_translation():
     cell.basis = "gth-szv"
     cell.pseudo = "gth-hf-rev"
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     nk = 3
     kmesh = [nk, nk, nk]
@@ -230,7 +233,7 @@ def test_G_vector_mapping_single_translation():
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     nk = 3
     kmesh = [nk, nk, nk]
@@ -269,6 +272,7 @@ def test_G_vector_mapping_single_translation():
                 assert np.allclose(delta_G_expected, delta_G)
 
 
+@pytest.mark.slow
 def test_kpoint_isdf_double_translation():
     cell = gto.Cell()
     cell.atom = """
@@ -284,7 +288,7 @@ def test_kpoint_isdf_double_translation():
     cell.unit = "B"
     cell.verbose = 0
     cell.mesh = [11] * 3  # set to coarse value to just check ERIS numerically.
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 2, 1]
     kpts = cell.make_kpts(kmesh)
@@ -325,6 +329,7 @@ def test_kpoint_isdf_double_translation():
                 assert np.allclose(eri_pqrs, eri_pqrs_isdf)
 
 
+@pytest.mark.slow
 def test_kpoint_isdf_single_translation():
     cell = gto.Cell()
     cell.atom = """
@@ -340,7 +345,7 @@ def test_kpoint_isdf_single_translation():
     cell.unit = "B"
     cell.verbose = 0
     cell.mesh = [11] * 3  # set to coarse value to just check ERIS numerically.
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 2, 1]
     kpts = cell.make_kpts(kmesh)
@@ -391,6 +396,7 @@ def get_complement(miller_indx, kmesh):
     return complement
 
 
+@pytest.mark.slow
 def test_kpoint_isdf_symmetries():
     cell = gto.Cell()
     cell.atom = """
@@ -406,7 +412,7 @@ def test_kpoint_isdf_symmetries():
     cell.unit = "B"
     cell.mesh = [11] * 3
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 2, 3]
     kpts = cell.make_kpts(kmesh)
@@ -521,7 +527,7 @@ def test_symmetry_of_G_maps():
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [3, 3, 3]
     kpts = cell.make_kpts(kmesh)
@@ -584,6 +590,7 @@ def test_symmetry_of_G_maps():
             assert np.allclose(Gpq_comp, Gpq_comp_from_map)
 
 
+@pytest.mark.slow
 def test_isdf_qrcp():
     cell = gto.Cell()
     cell.atom = """

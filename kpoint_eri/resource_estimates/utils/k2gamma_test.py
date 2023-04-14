@@ -20,7 +20,7 @@ def test_make_real():
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
 
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)

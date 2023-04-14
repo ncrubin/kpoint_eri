@@ -1,14 +1,16 @@
 import numpy as np
+import pytest
 
 from pyscf.pbc import gto, scf, cc
 
 from kpoint_eri.factorizations.isdf import solve_kmeans_kpisdf
-from kpoint_eri.resource_estimates.thc.integral_helper import (
+from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
     KPTHCHelperDoubleTranslation,
     KPTHCHelperSingleTranslation,
 )
 
 
+@pytest.mark.slow
 def test_thc_helper():
     cell = gto.Cell()
     cell.atom = """

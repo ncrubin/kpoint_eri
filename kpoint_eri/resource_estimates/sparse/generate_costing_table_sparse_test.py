@@ -2,12 +2,14 @@ import pandas as pd
 import numpy as np
 
 from pyscf.pbc import gto, scf
+import pytest
 
 from kpoint_eri.resource_estimates.sparse.generate_costing_table_sparse import (
     generate_costing_table,
 )
 
 
+@pytest.mark.slow
 def test_generate_costing_table_sparse():
     kmesh = [1, 1, 3]
     cell = gto.M(

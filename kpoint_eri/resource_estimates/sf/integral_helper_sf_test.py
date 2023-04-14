@@ -1,5 +1,6 @@
 import numpy as np
 from pyscf.pbc import gto, scf, mp, cc
+import pytest
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 
 from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
@@ -8,6 +9,7 @@ from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
 
+@pytest.mark.slow
 def test_sf_helper_trunc():
     cell = gto.Cell()
     cell.atom = """

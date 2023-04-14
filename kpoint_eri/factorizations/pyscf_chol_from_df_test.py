@@ -2,9 +2,11 @@ import itertools
 import numpy as np
 
 from pyscf.pbc import gto, scf, mp, cc
+import pytest
 
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints 
 
+@pytest.mark.slow
 def test_pyscf_chol_from_df():
     cell = gto.Cell()
     cell.atom = """

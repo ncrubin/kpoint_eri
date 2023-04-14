@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 from typing import Tuple
 
-from kpoint_eri.resource_estimates.thc.integral_helper import (
+from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
     KPTHCHelperDoubleTranslation,
 )
 
@@ -13,7 +13,7 @@ def compute_lambda_real(
     MPQ: npt.NDArray,
     chol: npt.NDArray,
 ) -> Tuple[float, float, float]:
-    """Compute lambda thc assuming real THC factors (molecular way) but without
+    """Compute lambda assuming real THC factors (molecular way) but without
     needing a molecular object as in openfermion. Just pared down function from
     openfermion.
 

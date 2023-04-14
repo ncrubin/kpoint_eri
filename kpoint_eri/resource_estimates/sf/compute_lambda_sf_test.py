@@ -1,5 +1,6 @@
 from functools import reduce
 import numpy as np
+import pytest
 
 from ase.build import bulk
 
@@ -10,6 +11,7 @@ from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
 from kpoint_eri.resource_estimates.sf.integral_helper_sf import SingleFactorizationHelper
 
 
+@pytest.mark.slow
 def test_lambda_calc():
     cell = gto.Cell()
     cell.atom = '''
@@ -93,6 +95,7 @@ def test_lambda_calc():
     lambda_two_body_v2 *= 0.5
     assert np.isclose(lambda_two_body_v2, lambda_two_body)
 
+@pytest.mark.slow
 def test_padding():
     ase_atom = bulk("H", "bcc", a=2.0, cubic=True)
     cell = gto.Cell()

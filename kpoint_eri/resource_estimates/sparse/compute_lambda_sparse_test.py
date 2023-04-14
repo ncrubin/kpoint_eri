@@ -2,6 +2,7 @@ from functools import reduce
 import numpy as np
 from pyscf.pbc import gto, scf, mp
 from pyscf.pbc.lib.kpts_helper import loop_kkk, get_kconserv
+import pytest
 
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
@@ -11,6 +12,7 @@ from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.sparse.compute_lambda_sparse import compute_lambda
 
 
+@pytest.mark.slow
 def test_lambda_sparse():
     cell = gto.Cell()
     cell.atom = """

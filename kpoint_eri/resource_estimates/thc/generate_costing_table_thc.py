@@ -11,7 +11,7 @@ from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
 from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
-from kpoint_eri.resource_estimates.thc.integral_helper import (
+from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
     KPTHCHelperDoubleTranslation,
 )
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris

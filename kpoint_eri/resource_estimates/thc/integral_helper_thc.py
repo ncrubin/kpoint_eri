@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 
 from pyscf.pbc import scf
 from pyscf.pbc.lib.kpts_helper import unique, member
@@ -28,13 +29,13 @@ class KPTHCHelperDoubleTranslation:
         Initialize a ERI object for CCSD from KP-THC factors and a
         pyscf mean-field object
 
-        :param chi: array of interpolating orbitals of shape [num_kpts, num_mo, num_interp_points]
-        :param zeta: central tensor of dimension [num_kpts, num_G, num_G, num_interp_points, num_interp_points].
-        :param kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
-                    must have an attribute kpts which len(self.kmf.kpts) returns number of
-                    kpts.
-        :param cholesky_factor: Cholesky object for computing exact integrals
-
+        Arguments:
+            chi: array of interpolating orbitals of shape [num_kpts, num_mo, num_interp_points]
+            zeta: central tensor of dimension [num_kpts, num_G, num_G, num_interp_points, num_interp_points].
+            kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
+                must have an attribute kpts which len(self.kmf.kpts) returns number of
+                kpts.
+            cholesky_factor: Cholesky object for computing exact integrals
         """
         self.chi = chi
         self.zeta = zeta
@@ -62,16 +63,15 @@ class KPTHCHelperDoubleTranslation:
         self.G_mapping = G_map_unique
         self.chol = chol
 
-    def get_eri(self, ikpts):
+    def get_eri(self, ikpts: list) -> npt.NDArray:
         """Construct (pkp qkq| rkr sks) via \\sum_{mu nu} zeta[iq, dG, dG', mu, nu]
             chi[kp,p,mu]* chi[kq,q,mu] chi[kp,p,nu]* chi[ks,s,nu]
 
-        Args:
+        Arguments:
           ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
-          check_eq: optional value to confirm a symmetry in the Cholesky vectors.
 
         Returns:
-
+            eris: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = ikpts
         q_indx = self.reverse_k_transfer_map[ikp, ikq]
@@ -79,15 +79,14 @@ class KPTHCHelperDoubleTranslation:
             self.chi, self.zeta, q_indx, ikpts, self.G_mapping
         )
 
-    def get_eri_exact(self, kpts):
-        """Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
-        needed for the one-body component lambda
+    def get_eri_exact(self, kpts: list) -> npt.NDArray:
+        """Construct (pkp qkq| rkr sks) exactly from cholesky factors.
 
-        Args:
+        Arguments:
           kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
 
         Returns:
-
+            eris: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = kpts
         if self.chol is not None:
@@ -120,12 +119,13 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         Initialize a ERI object for CCSD from KP-THC factors and a
         pyscf mean-field object
 
-        :param chi: array of interpolating orbitals of shape [num_kpts, num_mo, num_interp_points]
-        :param zeta: central tensor of dimension [num_kpts, num_G, num_G, num_interp_points, num_interp_points].
-        :param kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
-                    must have an attribute kpts which len(self.kmf.kpts) returns number of
-                    kpts.
-        :param cholesky factor: for computing exact integrals
+        Arguments:
+            chi: array of interpolating orbitals of shape [num_kpts, num_mo, num_interp_points]
+            zeta: central tensor of dimension [num_kpts, num_G, num_G, num_interp_points, num_interp_points].
+            kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
+                must have an attribute kpts which len(self.kmf.kpts) returns number of
+                kpts.
+            cholesky_factor: Cholesky object for computing exact integrals
         """
         super().__init__(chi, zeta, kmf, nthc)
         # one-translation ISDF zeta[iq, dG]
@@ -149,12 +149,11 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         """Construct (pkp qkq| rkr sks) via \\sum_{mu nu} zeta[iq, dG, mu, nu]
             chi[kp,p,mu]* chi[kq,q,mu] chi[kp,p,nu]* chi[ks,s,nu]
 
-        Args:
-          ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
-          check_eq: optional value to confirm a symmetry in the Cholesky vectors.
+        Arguments:
+          kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
 
         Returns:
-
+            eris: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = ikpts
         mom_transfer = self.kpts[ikp] - self.kpts[ikq]
@@ -164,14 +163,13 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         )
 
     def get_eri_exact(self, kpts):
-        """Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
-        needed for the one-body component lambda
+        """Construct (pkp qkq| rkr sks) exactly from cholesky factors.
 
-        Args:
+        Arguments:
           kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
 
         Returns:
-
+            eris: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = kpts
         if self.chol is not None:
