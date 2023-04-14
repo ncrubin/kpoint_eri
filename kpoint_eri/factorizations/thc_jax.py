@@ -902,31 +902,35 @@ def kpoint_thc_via_isdf(
     """
     Solve k-point THC using ISDF as an initial guess.
 
-    :param kmf: instance of pyscf.pbc.KRHF object. Must be using FFTDF density
-        fitting for integrals.
-    :param cholesky: 3-index cholesky integrals needed for BFGS optimization.
-    :param num_thc: THC dimensions (int), usually nthc = c_thc * n, where n is the
-        number of spatial orbitals in the unit cell and c_thc is some
-        poisiitve integer (typically <= 15).
-    :param perform_bfgs_opt: Perform subsequent BFGS optimization of THC
-        factors?
-    :param perform_adagrad_opt: Perform subsequent adagrad optimization of THC
-        factors? This is performed after BFGD if perform_bfgs_opt is True.
-    :param bfgs_maxiter: Maximum iteration for adagrad optimization.
-    :param adagrad_maxiter: Maximum iteration for adagrad optimization.
-    :param save_checkoints: Whether to save checkpoint files or not (which will
-        store THC factors. For each step we store checkpoints as
-        {checkpoint_basename}_{thc_method}.h5, where thc_method is one of the
-        strings (isdf, bfgs or adagrad).
-    :param checkpoint_basename: Base name for checkpoint files. string,
-        default "thc".
-    :param use_batched_algos: Whether to use batched algorithms which may be
-        faster but have higher memory cost. Bool. Default True.
-    :param penalty_param: Penalty parameter for l2 regularization. Float. Default None.
-    :param max_kmeans_iteration: Maximum number of iterations for KMeansCVT
-        step. int. Default 500.
-    :param verbose: Print information? Bool, default False.
-    :returns (chi, zeta, G_map)
+    Arguments:
+        kmf: instance of pyscf.pbc.KRHF object. Must be using FFTDF density
+            fitting for integrals.
+        cholesky: 3-index cholesky integrals needed for BFGS optimization.
+        num_thc: THC dimensions (int), usually nthc = c_thc * n, where n is the
+            number of spatial orbitals in the unit cell and c_thc is some
+            poisiitve integer (typically <= 15).
+        perform_bfgs_opt: Perform subsequent BFGS optimization of THC
+            factors?
+        perform_adagrad_opt: Perform subsequent adagrad optimization of THC
+            factors? This is performed after BFGD if perform_bfgs_opt is True.
+        bfgs_maxiter: Maximum iteration for adagrad optimization.
+        adagrad_maxiter: Maximum iteration for adagrad optimization.
+        save_checkoints: Whether to save checkpoint files or not (which will
+            store THC factors. For each step we store checkpoints as
+            {checkpoint_basename}_{thc_method}.h5, where thc_method is one of the
+            strings (isdf, bfgs or adagrad).
+        checkpoint_basename: Base name for checkpoint files. string,
+            default "thc".
+        use_batched_algos: Whether to use batched algorithms which may be
+            faster but have higher memory cost. Bool. Default True.
+        penalty_param: Penalty parameter for l2 regularization. Float. Default None.
+        max_kmeans_iteration: Maximum number of iterations for KMeansCVT
+            step. int. Default 500.
+        verbose: Print information? Bool, default False.
+
+    Returns:
+        kthc: k-point THC factors
+        info: dictionary of losses for each stage of factorization.
     """
     # Perform initial ISDF calculation of THC factors
     info = {}
