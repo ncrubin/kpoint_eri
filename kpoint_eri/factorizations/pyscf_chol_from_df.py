@@ -8,16 +8,17 @@ from pyscf.lib import logger
 from pyscf.pbc.df import df
 from pyscf.pbc.lib.kpts_helper import gamma_point
 from pyscf.pbc.mp.kmp2 import _add_padding
+from pyscf.pbc import mp
 
 
-def cholesky_from_df_ints(mp, pad_mos_with_zeros: bool = True) -> npt.NDArray:
+def cholesky_from_df_ints(mf, pad_mos_with_zeros: bool = True) -> npt.NDArray:
     """Compute 3-center electron repulsion integrals, i.e. (L|ov),
     where `L` denotes DF auxiliary basis functions and `o` and `v` occupied and virtual
     canonical crystalline orbitals. Note that `o` and `v` contain kpt indices `ko` and `kv`,
     and the third kpt index `kL` is determined by the conservation of momentum.
 
     Args:
-        mp: pyscf K-RMP2 object
+        mf: pyscf K-RMHF object
         pad_mos_with_zeros: Whether to follow KMP2 class and pad mo coefficients
             with (Default value = True) if system has varying number of
             occupied orbitals.
@@ -26,12 +27,12 @@ def cholesky_from_df_ints(mp, pad_mos_with_zeros: bool = True) -> npt.NDArray:
         Lchol: 3-center DF ints, with shape (nkpts, nkpts, naux, nmo, nmo)
     """
 
-    log = logger.Logger(mp.stdout, mp.verbose)
+    log = logger.Logger(mf.stdout, mf.verbose)
 
-    if mp._scf.with_df._cderi is None:
-        mp._scf.with_df.build()
+    if mf.with_df._cderi is None:
+        mf.with_df.build()
 
-    cell = mp._scf.cell
+    cell = mf.cell
     if cell.dimension == 2:
         # 2D ERIs are not positive definite. The 3-index tensors are stored in
         # two part. One corresponds to the positive part and one corresponds
@@ -43,16 +44,16 @@ def cholesky_from_df_ints(mp, pad_mos_with_zeros: bool = True) -> npt.NDArray:
     nao = cell.nao_nr()
 
     if pad_mos_with_zeros:
-        mo_coeff = _add_padding(mp, mp.mo_coeff, mp.mo_energy)[0]
-        # nocc = mp.nocc
-        nmo = mp.nmo
+        mp_inst = mp.KMP2(mf)
+        mo_coeff = _add_padding(mp_inst, mp_inst.mo_coeff, mp_inst.mo_energy)[0]
+        nmo = mp_inst.nmo
     else:
-        mo_coeff = mp._scf.mo_coeff
+        mo_coeff = mf.mo_coeff
         nmo = nao
         num_mo_per_kpt = np.array([C.shape[-1] for C in mo_coeff])
         err_msg = "Number of MOs differs at each k-point or is not the same as the number of AOs."
         assert (num_mo_per_kpt == nmo).all(), err_msg
-    kpts = mp.kpts
+    kpts = mf.kpts
     nkpts = len(kpts)
     if gamma_point(kpts):
         dtype = np.double
@@ -67,7 +68,7 @@ def cholesky_from_df_ints(mp, pad_mos_with_zeros: bool = True) -> npt.NDArray:
     bra_end = nmo
     ket_start = nmo
     ket_end = 2 * nmo
-    with h5py.File(mp._scf.with_df._cderi, "r") as f:
+    with h5py.File(mf.with_df._cderi, "r") as f:
         kptij_lst = f["j3c-kptij"][:]
         tao = []
         ao_loc = None
