@@ -13,7 +13,6 @@ from kpoint_eri.resource_estimates.thc.compute_lambda_thc import (
     compute_lambda,
     compute_lambda_real,
 )
-from kpoint_eri.resource_estimates.utils.misc_utils import build_momentum_transfer_mapping
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
 

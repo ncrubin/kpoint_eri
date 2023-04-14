@@ -27,7 +27,7 @@ config.update("jax_enable_x64", True)
 
 import jax
 import jax.numpy as jnp
-import jax.typing as jnt
+import jax.typing as jnpt
 from openfermion.resource_estimates.thc.utils import adagrad
 from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
 
@@ -164,10 +164,10 @@ def pack_thc_factors(chi: npt.NDArray, zeta: npt.NDArray, buffer: npt.NDArray) -
 
 @jax.jit
 def compute_objective_batched(
-    chis: Tuple[jnt.ArrayLike, jnt.ArrayLike, jnt.ArrayLike, jnt.ArrayLike],
-    zetas: jnt.ArrayLike,
-    chols: Tuple[jnt.ArrayLike, jnt.ArrayLike],
-    norm_factors: Tuple[jnt.ArrayLike, jnt.ArrayLike, jnt.ArrayLike, jnt.ArrayLike],
+    chis: Tuple[jnpt.ArrayLike, jnpt.ArrayLike, jnpt.ArrayLike, jnpt.ArrayLike],
+    zetas: jnpt.ArrayLike,
+    chols: Tuple[jnpt.ArrayLike, jnpt.ArrayLike],
+    norm_factors: Tuple[jnpt.ArrayLike, jnpt.ArrayLike, jnpt.ArrayLike, jnpt.ArrayLike],
     num_kpts: int,
     penalty_param: float = 0.0,
 ) -> float:
@@ -247,7 +247,7 @@ def prepare_batched_data_indx_arrays(
 
 
 @jax.jit
-def get_batched_data_1indx(array: jnpt.NDArray, indx: jnpt.NDArray) -> jnpt.NDArray:
+def get_batched_data_1indx(array: jnpt.ArrayLike, indx: jnpt.ArrayLike) -> jnpt.ArrayLike:
     """Helper function to extract entries of array given another array.
 
     Args:
@@ -262,8 +262,8 @@ def get_batched_data_1indx(array: jnpt.NDArray, indx: jnpt.NDArray) -> jnpt.NDAr
 
 @jax.jit
 def get_batched_data_2indx(
-    array: jnpt.NDArray, indxa: jnpt.NDArray, indxb: jnpt.NDArray
-) -> jnpt.NDArray:
+    array: jnpt.ArrayLike, indxa: jnpt.ArrayLike, indxb: jnpt.ArrayLike
+) -> jnpt.ArrayLike:
     """Helper function to extract entries of 2D array given another array
 
     Args:
@@ -278,13 +278,13 @@ def get_batched_data_2indx(
 
 
 def thc_objective_regularized_batched(
-    xcur: jnt.ArrayLike,
+    xcur: jnpt.ArrayLike,
     num_orb: int,
     num_thc: int,
     momentum_map: npt.NDArray,
     Gpq_map: npt.NDArray,
-    chol: jnt.ArrayLike,
-    indx_arrays: Tuple[jnt.ArrayLike, jnt.ArrayLike],
+    chol: jnpt.ArrayLike,
+    indx_arrays: Tuple[jnpt.ArrayLike, jnpt.ArrayLike],
     batch_size: int,
     penalty_param=0.0,
 ) -> float:

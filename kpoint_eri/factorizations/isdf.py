@@ -10,22 +10,23 @@ that FFTDF / ISDF is a good enough approximation to the RSGDF ERIs and thus
 serves as a good initial guess.
 """
 
-from dataclasses import dataclass
 import itertools
+from dataclasses import dataclass
 from typing import Tuple, Union
+
 import numpy as np
 import numpy.typing as npt
 import scipy.linalg
 
-from pyscf.pbc import tools, df, gto, scf
-from pyscf.pbc.lib.kpts_helper import unique, get_kconserv, conj_mapping
+from pyscf.pbc import df, gto, scf, tools
 from pyscf.pbc.dft import numint
 from pyscf.pbc.dft.gen_grid import UniformGrids
+from pyscf.pbc.lib.kpts_helper import conj_mapping, get_kconserv, unique
 
+from kpoint_eri.factorizations.kmeans import KMeansCVT
 from kpoint_eri.resource_estimates.utils.misc_utils import (
     build_momentum_transfer_mapping,
 )
-from kpoint_eri.factorizations.kmeans import KMeansCVT
 
 
 def check_isdf_solution(
