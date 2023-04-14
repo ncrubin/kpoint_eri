@@ -47,27 +47,27 @@ def compute_cost(
 ) -> Tuple[int, int, int]:
     """Determine fault-tolerant costs using DF decomposition in quantum chem
 
-    Args:
-        n (int) - the number of spin-orbitals.
-        lam (float) - the lambda-value for the Hamiltonian
-        dE (float) - allowable error in phase estimation
-        L (int) - the rank of the first decomposition
-        Lxi (int) - the total number of eigenvectors
-        chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
+    Arguments:
+        n: the number of spin-orbitals.
+        lam: the lambda-value for the Hamiltonian
+        dE: allowable error in phase estimation
+        L: the rank of the first decomposition
+        Lxi: the total number of eigenvectors
+        chi: equivalent to aleph_1 and aleph_2 in the document, the
             number of bits for the representation of the coefficients
-        beta (int) - equivalent to beth in the document, the number of bits
+        beta: equivalent to beth in the document, the number of bits
             for the rotations
-        Nkx (int) - Number of k-points in x-direction
-        Nky (int) - Number of k-points in y-direction
-        Nkz (int) - Number of k-points in z-direction
-        stps (int) - an approximate number of steps to choose the precision of
+        Nkx: Number of k-points in x-direction
+        Nky: Number of k-points in y-direction
+        Nkz:  Number of k-points in z-direction
+        stps: an approximate number of steps to choose the precision of
             single qubit rotations in preparation of the equal superpositn state
-        verbose (bool) - do additional printing of intermediates?
+        verbose: do additional printing of intermediates?
 
     Returns:
-        step_cost (int) - Toffolis per step
-        total_cost (int) - Total number of Toffolis
-        ancilla_cost (int) - Total ancilla cost
+        step_cost: Toffolis per step
+        total_cost: Total number of Toffolis
+        ancilla_cost: Total ancilla cost
     """
     nNk = (
         max(np.ceil(np.log2(Nkx)), 1)
@@ -302,46 +302,3 @@ def compute_cost(
     ancilla_cost = int(ancilla_cost)
 
     return step_cost, total_cost, ancilla_cost
-
-
-if __name__ == "__main__":
-    nRe = 108
-    lamRe = 294.8
-    dE = 0.001
-    LRe = 360
-    LxiRe = 13031
-    chi = 10
-    betaRe = 16
-
-    # (*The Li et al orbitals.*)
-    nLi = 152
-    lamLi = 1171.2
-    LLi = 394
-    LxiLi = 20115
-    betaLi = 20
-
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 2, 2, 2, 20_000)
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 2, 2, 2, res[0])
-    # 48250, 22343175750, 8174
-    assert np.isclose(res[0], 48250)
-    assert np.isclose(res[1], 22343175750)
-    assert np.isclose(res[2], 8174)
-
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 3, 5, 1, 20_000)
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 3, 5, 1, res[0])
-    # 53146, 24610371366, 8945
-    assert np.isclose(res[0], 53146)
-    assert np.isclose(res[1], 24610371366)
-    assert np.isclose(res[2], 8945)
-
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 2, 2, 2, 20_000)
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 2, 2, 2, res[0])
-    # print(res) # 79212, 145727663004, 13873
-    assert np.isclose(res[0], 79212)
-    assert np.isclose(res[1], 145727663004)
-    assert np.isclose(res[2], 13873)
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 3, 5, 1, res[0])
-    # print(res) # 86042, 158292930114, 14952
-    assert np.isclose(res[0], 86042)
-    assert np.isclose(res[1], 158292930114)
-    assert np.isclose(res[2], 14952)

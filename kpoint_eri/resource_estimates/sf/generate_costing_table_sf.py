@@ -1,24 +1,24 @@
 from dataclasses import dataclass, field
-import json
 from functools import reduce
 
-import pandas as pd
 import numpy as np
+import numpy.typing as npt
+import pandas as pd
 
-from pyscf.pbc import scf, mp, cc
+from pyscf.pbc import cc, mp, scf
 from pyscf.pbc.mp.kmp2 import _add_padding
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
-from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
-from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
-    SingleFactorizationHelper,
-)
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
 from kpoint_eri.resource_estimates.sf.compute_sf_resources import (
     cost_single_factorization,
 )
+from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
+    SingleFactorizationHelper,
+)
+from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 
 
 @dataclass
@@ -52,11 +52,24 @@ class SFResources(PBCResources):
 
 def generate_costing_table(
     pyscf_mf: scf.HF,
-    cutoffs: np.ndarray,
-    name="pbc",
+    cutoffs: npt.NDArray[np.int32],
+    name: str = "pbc",
     chi: int = 10,
     dE_for_qpe=0.0016,
 ) -> pd.DataFrame:
+    """Generate resource estimate costing table given a set of cutoffs for
+        single-factorized Hamiltonian.
+
+    Arguments:
+        pyscf_mf: k-point pyscf mean-field object
+        cutoffs: Array of (integer) auxiliary index cutoff values
+        name: Optional descriptive name for simulation.
+        chi: the number of bits for the representation of the coefficients
+        dE_for_qpe: Phase estimation epsilon.
+
+    Returns
+        resources: Table of resource estimates.
+    """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
 
     exact_cc = cc.KRCCSD(pyscf_mf)

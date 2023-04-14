@@ -3,17 +3,13 @@ Estimate the physical, logical, and Toffoli gate requirements for
 single-factorization qubitization.  Single-Factorization uses
 an LCU formed from a symmeterized Cholesky decomposition of the integrals
 """
-import sys
 from typing import Tuple
+
 import numpy as np
-
 from numpy.lib.scimath import arccos, arcsin  # has analytic continutn to cplx
-from sympy import factorint
-
-from openfermion.resource_estimates.utils import (
-    QI,
-)
+from openfermion.resource_estimates.utils import QI
 from openfermion.resource_estimates.utils import QR2 as QR2_of
+from sympy import factorint
 
 
 def QR_ncr(L, M1):
@@ -86,24 +82,24 @@ def cost_single_factorization(
     """Determine fault-tolerant costs using SF decomposition in quantum chem
 
     Args:
-        n (int) - the number of spin-orbitals. When using this for
+        n: - the number of spin-orbitals. When using this for
                   k-point sampling, this is equivalent to N times N_k.
-        lam (float) - the lambda-value for the Hamiltonian
-        M (int) - The combined number of values of n
-        dE (float) - allowable error in phase estimation
-        chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
+        lam: the lambda-value for the Hamiltonian
+        M: The combined number of values of n
+        dE:  allowable error in phase estimation
+        chi: equivalent to aleph_1 and aleph_2 in the document, the
             number of bits for the representation of the coefficients
-        stps (int) - an approximate number of steps to choose the precision of
+        stps: an approximate number of steps to choose the precision of
             single qubit rotations in preparation of the equal superposn state
-        verbose (bool) - do additional printing of intermediates?
-        Nkx (int) - num k-points in x-direction
-        Nky (int) - num k-points in y-direction
-        Nkz (int) - num k-points in z-direction
+        Nkx: num k-points in x-direction
+        Nky: num k-points in y-direction
+        Nkz: num k-points in z-direction
+        verbose: do additional printing of intermediates?
 
     Returns:
-        step_cost (int) - Toffolis per step
-        total_cost (int) - Total number of Toffolis
-        total_qubit_count (int) - Total qubit count
+        step_cost: Toffolis per step
+        total_cost: Total number of Toffolis
+        total_qubit_count: Total qubit count
     """
     nNk = (
         max(np.ceil(np.log2(Nkx)), 1)
@@ -322,24 +318,3 @@ def cost_single_factorization(
     total_qubit_count = int(total_qubit_count)
 
     return step_cost, total_cost, total_qubit_count
-
-
-if __name__ == "__main__":
-    n = 152
-    lam = 3071.8
-    L = 275
-    dE = 0.001
-    chi = 10
-
-    # stps = kpoint_single_factorization_costs(n, lam, L, 8, dE, chi, 20_000)[0]
-    res = cost_single_factorization(n, lam, L, dE, chi, 20_000, 3, 3, 3)
-    # 1663687, 8027577592851, 438447}
-    assert np.isclose(res[0], 1663687)
-    assert np.isclose(res[1], 8027577592851)
-    assert np.isclose(res[2], 438447)
-
-    res = cost_single_factorization(n, lam, L, dE, chi, 20_000, 3, 5, 1)
-    # 907828, 4380427154244, 219526
-    assert np.isclose(res[0], 907828)
-    assert np.isclose(res[1], 4380427154244)
-    assert np.isclose(res[2], 219526)

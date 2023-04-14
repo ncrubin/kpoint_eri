@@ -1,22 +1,30 @@
+from typing import Tuple
 import numpy as np
+from numpy.typing import npt
 
 from kpoint_eri.resource_estimates.df.integral_helper_df import DFABKpointIntegrals
 
-def compute_lambda(hcore: np.ndarray, df_obj: DFABKpointIntegrals):
-    """
-    Compute one-body and two-body lambda for qubitization of 
+def compute_lambda(hcore: npt.NDArray, df_obj: DFABKpointIntegrals) -> Tuple[float, float, float, int]:
+    """Compute one-body and two-body lambda for qubitization of
     single-factorized Hamiltonian.
-
-    one-body term h_pq(k) = hcore_{pq}(k) 
-                            - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk) 
+    
+    one-body term h_pq(k) = hcore_{pq}(k)
+                            - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk)
                             + 0.5 sum_{Q}sum_{r}(pkqk|rQrQ)
     The first term is the kinetic energy + pseudopotential (or electron-nuclear),
     second term is from rearranging two-body operator into chemist charge-charge
     type notation, and the third is from the one body term obtained when
     squaring the two-body A and B operators.
 
-    :param hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
-    :param df_obj: Object of DFABKpointIntegrals
+    Arguments:
+      hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
+      df_obj: DFABKpointIntegrals integral helper.
+
+    Returns:
+        lambda_tot: Total lambda
+        lambda_one_body: One-body lambda 
+        lambda_two_body: Two-body lambda 
+        num_eigs: Number of retained eigenvalues.
     """
     kpts = df_obj.kmf.kpts
     nkpts = len(kpts)

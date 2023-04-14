@@ -1,17 +1,18 @@
 import numpy as np
+import numpy.typing as npt
+from typing import Tuple
 
 from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
     SingleFactorizationHelper,
 )
 
 
-def compute_lambda(hcore: np.ndarray, sf_obj: SingleFactorizationHelper):
-    """
-    this should be the same as above but written in a more explicit way
-
+def compute_lambda(hcore: npt.NDArray, sf_obj: SingleFactorizationHelper) -> Tuple[float, float, float]:
+    """Lambda for single-factorized Hamiltonian.
+    
     Compute one-body and two-body lambda for qubitization of
     single-factorized Hamiltonian.
-
+    
     one-body term h_pq(k) = hcore_{pq}(k)
                             - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk)
                             + sum_{Q}sum_{r}(pkqk|rQrQ)
@@ -19,13 +20,21 @@ def compute_lambda(hcore: np.ndarray, sf_obj: SingleFactorizationHelper):
     second term is from rearranging two-body operator into chemist charge-charge
     type notation, and the third is from the one body term obtained when
     squaring the two-body A and B operators.
-
+    
     two-body term V = 0.5 sum_{Q}sum_{n}(A_{n}(Q)^2 +_ B_{n}(Q)^2)
     or V = 0.5 sum_{Q}sum_{n'}W_{n}(Q)^{2} where n' is twice the range of n.
     lambda is 0.5sum_{Q}sum_{n'}(sum_{p,q}^{N_{k}N/2}|Re[W_{p,q}(Q)^{n}]| + |Im[W_{pq}(Q)^{n}]|)^{2}
 
-    :param hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
-    :param sf_obj: SingleFactorization object.
+    Args:
+      hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
+      sf_obj: SingleFactorization object.
+      hcore: np.ndarray: 
+      sf_obj: SingleFactorizationHelper: 
+
+    Returns:
+        lambda_tot: Total lambda
+        lambda_one_body: One-body lambda 
+        lambda_two_body: Two-body lambda 
     """
     kpts = sf_obj.kmf.kpts
     nkpts = len(kpts)

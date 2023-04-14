@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+import numpy.typing as npt
 
 from pyscf.pbc import scf
 
@@ -10,17 +11,16 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
 
 # Single-Factorization
 class SingleFactorizationHelper:
-    def __init__(self, cholesky_factor: np.ndarray, kmf: scf.HF, naux: int = None):
-        """
-        Initialize a ERI object for CCSD from Cholesky factors and a
-        pyscf mean-field object
+    def __init__(self, cholesky_factor: npt.NDArray, kmf: scf.HF, naux: int = None):
+        """Initialize a ERI object for CCSD from Cholesky factors and a
+            pyscf mean-field object
 
-        :param cholesky_factor: Cholesky factor tensor that is [nkpts, nkpts, naux, nao, nao].
-                                To see how to generate this go to
-                                kpoint_eri.factorizations.pyscf_chol_form_df.py
-        :param kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
-                    must have an attribute kpts which len(self.kmf.kpts) returns number of
-                    kpts.
+        Args:
+            cholesky_factor: Cholesky factor tensor that is [nkpts, nkpts, naux, nao, nao].
+                To see how to generate this go to kpoint_eri.factorizations.pyscf_chol_form_df.py
+            kmf: pyscf k-object.  Currently only used to obtain the number of k-points.
+                must have an attribute kpts which len(self.kmf.kpts) returns number of
+                kpts.
         """
         self.chol = cholesky_factor
         self.kmf = kmf
@@ -33,13 +33,16 @@ class SingleFactorizationHelper:
         self.k_transfer_map = k_transfer_map
 
     def build_AB_from_chol(self, qidx: int):
-        """
-        Construct A and B matrices given Q-kpt idx.  This constructs
+        """Construct A and B matrices given Q-kpt idx.  This constructs
         all matrices association with n-chol
 
-        :param qidx: index for momentum mode Q.
-        :returns: Tuple(np.ndarray, np.ndarray) where each array is
-                  [naux, nmo * kpts, nmk * kpts] set of matrices.
+        Args:
+          qidx: index for momentum mode Q.
+          qidx: int: 
+
+        Returns:
+            A:  A matrix of size [naux, nmo * kpts, nmk * kpts]
+            B:  B matrix of size [naux, nmo * kpts, nmk * kpts]
         """
         nmo = self.nao  # number of gaussians used
         naux = self.naux
@@ -65,19 +68,22 @@ class SingleFactorizationHelper:
         return A, B
 
     def get_eri(self, ikpts: list, check_eq=False):
-        """
-        Construct (pkp qkq| rkr sks) via \\sum_{n}L_{pkp,qkq,n}L_{sks, rkr, n}^{*}
-
+        """Construct (pkp qkq| rkr sks) via \\sum_{n}L_{pkp,qkq,n}L_{sks, rkr, n}^{*}
+        
         Note: 3-tensor L_{sks, rkr} = L_{rkr, sks}^{*}
 
-        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
-        :param check_eq: optional value to confirm a symmetry in the Cholesky vectors.
+        Args:
+          ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+            check_eq: optional value to confirm a symmetry in the Cholesky vectors. (Default value = False)
+
+        Returns:
+            eri: ([pkp][qkq]|[rkr][sks])
         """
         ikp, ikq, ikr, iks = ikpts
         n = self.naux
         naux_pq = self.chol[ikp, ikq].shape[0]
         if n > naux_pq:
-            print("WARNING: specified naux ({}) is too large!".format(n))
+            print(f"WARNING: specified naux ({n}) is too large!")
             n = naux_pq
         if check_eq:
             assert np.allclose(
