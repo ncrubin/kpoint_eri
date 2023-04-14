@@ -1,4 +1,6 @@
 import numpy as np
+import numpy.typing as npt
+from typing import Tuple
 
 from kpoint_eri.resource_estimates.thc.integral_helper import (
     KPTHCHelperDoubleTranslation,
@@ -6,15 +8,25 @@ from kpoint_eri.resource_estimates.thc.integral_helper import (
 
 
 def compute_lambda_real(
-    h1: np.ndarray,
-    etaPp: np.ndarray,
-    MPQ: np.ndarray,
-    chol: np.ndarray,
-):
-    """
-    Compute lambda thc assuming real THC factors (molecular way) but without
+    h1: npt.NDArray,
+    etaPp: npt.NDArray,
+    MPQ: npt.NDArray,
+    chol: npt.NDArray,
+) -> Tuple[float, float, float]:
+    """Compute lambda thc assuming real THC factors (molecular way) but without
     needing a molecular object as in openfermion. Just pared down function from
     openfermion.
+
+    Arguments:
+        h1: one-body hamiltonian 
+        etaPp: THC leaf tensor 
+        MPQ: THC central tensor. 
+        chol: Cholesky factors. 
+
+    Returns:
+        lambda_tot: Total lambda
+        lambda_one_body: One-body lambda 
+        lambda_two_body: Two-body lambda 
     """
     nthc = etaPp.shape[0]
 
@@ -48,15 +60,21 @@ def compute_lambda_real(
     return lambda_tot, lambda_T, lambda_z
 
 
-def compute_lambda(hcore: np.ndarray, thc_obj: KPTHCHelperDoubleTranslation):
-    """
-    Compute one-body and two-body lambda for qubitization of
-    tensor hypercontraction LUC
-
+def compute_lambda(hcore: npt.NDArray, thc_obj: KPTHCHelperDoubleTranslation) -> Tuple[float, float, float]:
+    """Compute one-body and two-body lambda for qubitization of
+    tensor hypercontraction LCU.
+    
     one-body term h_pq(k) = hcore_{pq}(k)
                             - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk)
-    :param hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
-    :param thc_obj: Object of KPTHCHelperDoubleTranslation
+
+    Args:
+      hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
+      thc_obj: Object of KPTHCHelperDoubleTranslation
+
+    Returns:
+        lambda_tot: Total lambda
+        lambda_one_body: One-body lambda 
+        lambda_two_body: Two-body lambda 
     """
     kpts = thc_obj.kmf.kpts
     nkpts = len(kpts)

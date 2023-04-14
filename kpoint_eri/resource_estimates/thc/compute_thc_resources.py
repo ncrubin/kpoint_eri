@@ -43,28 +43,28 @@ def compute_cost(
 ) -> Tuple[int, int, int]:
     """Determine fault-tolerant costs using THC decomposition in quantum chem
 
-    Args:
-        n (int) - the number of spin-orbitals
-        lam (float) - the lambda-value for the Hamiltonian
-        dE (float) - allowable error in phase estimation
-        chi (int) - equivalent to aleph in the document, the number of bits for
+    Arguments:
+        n: the number of spin-orbitals
+        lam: the lambda-value for the Hamiltonian
+        dE: allowable error in phase estimation
+        chi: equivalent to aleph in the document, the number of bits for
             the representation of the coefficients
-        beta (int) - equivalent to beth in the document, the number of bits for
+        beta: equivalent to beth in the document, the number of bits for
             the rotations
-        M (int) - the dimension for the THC decomposition
-        Nkx (int) - This is the number of values of k for the k - point sampling,
-                     with each component
-        Nky (int) - This is the number of values of k for the k - point sampling,
-                     with each component
-        Nkz (int) - This is the number of values of k for the k - point sampling,
-                     with each component
-        stps (int) - an approximate number of steps to choose the precision of
+        M: the dimension for the THC decomposition
+        Nkx: This is the number of values of k for the k - point sampling,
+                with each component
+        Nky: This is the number of values of k for the k - point sampling,
+                with each component
+        Nkz: This is the number of values of k for the k - point sampling,
+                with each component
+        stps: an approximate number of steps to choose the precision of
             single qubit rotations in preparation of the equal superpositn state
 
     Returns:
-        step_cost (int) - Toffolis per step
-        total_cost (int) - Total number of Toffolis
-        ancilla_cost (int) - Total ancilla cost
+        step_cost: Toffolis per step
+        total_cost: Total number of Toffolis
+        ancilla_cost: Total ancilla cost
     """
     nk = (
         max(np.ceil(np.log2(Nkx)), 1)
@@ -277,4 +277,3 @@ def compute_cost(
 
     # step-cost, Toffoli count, logical qubits
     return step_cost, total_cost, ancilla_cost
-

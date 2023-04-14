@@ -64,6 +64,24 @@ def generate_costing_table(
     adagrad_maxiter: int = 3000,
     fft_df_mesh: Union[None, list] = None,
 ) -> pd.DataFrame:
+    """Generate resource estimate costing table given a set of cutoffs for
+        THC Hamiltonian.
+
+    Arguments:
+        pyscf_mf: k-point pyscf mean-field object
+        cutoffs: Array of (integer) auxiliary index cutoff values
+        name: Optional descriptive name for simulation.
+        chi: the number of bits for the representation of the coefficients
+        beta: the number of bits for rotations.
+        dE_for_qpe: Phase estimation epsilon.
+        reoptimize: Whether or not to perform regularized reoptimization of THC
+            factors.
+        bfgs_maxiter: Max number of BFGS steps.
+        adagrad_maxiter: Max number of AdaGrad steps.
+        fft_df_mesh: FFTDF mesh for ISDF.
+    Returns
+        resources: Table of resource estimates.
+    """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
     cc_inst = cc.KRCCSD(pyscf_mf)
     cc_inst.verbose = 0

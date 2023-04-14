@@ -63,12 +63,15 @@ class KPTHCHelperDoubleTranslation:
         self.chol = chol
 
     def get_eri(self, ikpts):
-        """
-        Construct (pkp qkq| rkr sks) via \\sum_{mu nu} zeta[iq, dG, dG', mu, nu]
+        """Construct (pkp qkq| rkr sks) via \\sum_{mu nu} zeta[iq, dG, dG', mu, nu]
             chi[kp,p,mu]* chi[kq,q,mu] chi[kp,p,nu]* chi[ks,s,nu]
 
-        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
-        :param check_eq: optional value to confirm a symmetry in the Cholesky vectors.
+        Args:
+          ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+          check_eq: optional value to confirm a symmetry in the Cholesky vectors.
+
+        Returns:
+
         """
         ikp, ikq, ikr, iks = ikpts
         q_indx = self.reverse_k_transfer_map[ikp, ikq]
@@ -77,11 +80,14 @@ class KPTHCHelperDoubleTranslation:
         )
 
     def get_eri_exact(self, kpts):
-        """
-        Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
+        """Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
         needed for the one-body component lambda
 
-        :param kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        Args:
+          kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+
+        Returns:
+
         """
         ikp, ikq, ikr, iks = kpts
         if self.chol is not None:
@@ -140,12 +146,15 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         self.momentum_transfers = transfers[unique_indx]
 
     def get_eri(self, ikpts):
-        """
-        Construct (pkp qkq| rkr sks) via \\sum_{mu nu} zeta[iq, dG, mu, nu]
+        """Construct (pkp qkq| rkr sks) via \\sum_{mu nu} zeta[iq, dG, mu, nu]
             chi[kp,p,mu]* chi[kq,q,mu] chi[kp,p,nu]* chi[ks,s,nu]
 
-        :param ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
-        :param check_eq: optional value to confirm a symmetry in the Cholesky vectors.
+        Args:
+          ikpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+          check_eq: optional value to confirm a symmetry in the Cholesky vectors.
+
+        Returns:
+
         """
         ikp, ikq, ikr, iks = ikpts
         mom_transfer = self.kpts[ikp] - self.kpts[ikq]
@@ -155,11 +164,14 @@ class KPTHCHelperSingleTranslation(KPTHCHelperDoubleTranslation):
         )
 
     def get_eri_exact(self, kpts):
-        """
-        Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
+        """Construct (pkp qkq| rkr sks) exactly from mean-field object.  This is for constructing the J and K like terms
         needed for the one-body component lambda
 
-        :param kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+        Args:
+          kpts: list of four integers representing the index of the kpoint in self.kmf.kpts
+
+        Returns:
+
         """
         ikp, ikq, ikr, iks = kpts
         if self.chol is not None:
