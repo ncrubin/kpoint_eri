@@ -132,12 +132,9 @@ def test_cc_helper_rhf():
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.init_guess = "chkfile"
-    mf.with_df._cderi_to_save = mf.chkfile
     mf.with_df.mesh = cell.mesh
     mf.kernel()
 
-    mf.with_df._cderi = mf.chkfile
     # Only ROHF integrals are supported for resource estimates but only UCCSD
     # available, so convert MOs to UHF format first.
     mymp = mp.KMP2(mf)
