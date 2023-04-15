@@ -1,10 +1,14 @@
 # coverage:ignore
 """ Determine costs for THC decomposition in QC """
-from typing import Tuple
+from typing import Tuple, Union
 import numpy as np
 from numpy.lib.scimath import arccos, arcsin  # has analytc continuatn to cplx
 from sympy import factorint
 from openfermion.resource_estimates.utils import QI
+
+from kpoint_eri.resource_estimates.utils.misc_utils import (
+    ResourceEstimates,
+)
 
 
 def QR_ncr(L, M1):
@@ -28,7 +32,53 @@ def QR_ncr(L, M1):
     return int(k_opt), int(val_opt)
 
 
-def compute_cost(
+def cost_thc(
+    num_spin_orbs: int,
+    lambda_tot: float,
+    thc_dim: int,
+    kmesh: list[int],
+    dE_for_qpe: float = 0.0016,
+    chi: int = 10,
+    beta: Union[int, None] = None,
+) -> ResourceEstimates:
+    """Determine fault-tolerant costs using THC factorization representaion of symmetry
+        adapted integrals.
+
+    Light wrapper around _cost_thc.
+
+    Arguments:
+        num_spin_orbs: the number of spin-orbitals
+        lambda_tot: the lambda-value for the Hamiltonian
+        kmesh: kpoint mesh.
+        thc_dim: THC dimension (M).
+        dE_for_qpe: allowable error in phase estimation
+        chi: the number of bits for the representation of the coefficients
+        beta: the number of bits for controlled rotations
+    Returns:
+        resources: THC factorized resource estimates
+    """
+    # run once to determine stps parameter
+    thc_costs = _cost_thc(
+        n=num_spin_orbs,
+        lam=lambda_tot,
+        dE=dE_for_qpe,
+        chi=chi,
+        beta=beta,
+        M=thc_dim,
+        Nkx=kmesh[0],
+        Nky=kmesh[1],
+        Nkz=kmesh[2],
+        stps=20_000,  # not used
+    )
+    resources = ResourceEstimates(
+        toffolis_per_step=thc_costs[0],
+        total_toffolis=thc_costs[1],
+        logical_qubits=thc_costs[2],
+    )
+    return resources
+
+
+def _cost_thc(
     n: int,
     lam: float,
     dE: float,

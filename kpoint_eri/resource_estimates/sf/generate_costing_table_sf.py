@@ -63,7 +63,6 @@ def generate_costing_table(
         chi=chi,
         exact_energy=reference_energy,
     )
-    naux = Luv[0, 0].shape[0]
     approx_eris = exact_eris
     for cutoff in naux_cutoffs:
         sf_helper = SingleFactorizationHelper(
@@ -89,6 +88,4 @@ def generate_costing_table(
             approx_energy=approx_energy,
         )
 
-    df = pd.DataFrame(sf_resource_obj.dict())
-
-    return df
+    return sf_resource_obj

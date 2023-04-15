@@ -1,64 +1,39 @@
 from dataclasses import dataclass, field
 from functools import reduce
+from typing import Union
 
 import pandas as pd
 import numpy as np
 
-from pyscf.pbc import scf, mp, cc
-from pyscf.pbc.mp.kmp2 import _add_padding
+from pyscf.pbc import scf, cc
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 from kpoint_eri.resource_estimates.df.integral_helper_df import DFABKpointIntegrals
+from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.df.compute_lambda_df import compute_lambda
 from kpoint_eri.resource_estimates.df.compute_df_resources import (
-    compute_cost,
+    cost_double_factorization,
 )
+from kpoint_eri.resource_estimates.utils.misc_utils import compute_beta_for_resources
 
 
 @dataclass
 class DFResources(PBCResources):
+    num_aux: int = -1
     beta: int = 20
-    num_aux: list = field(default_factory=list)
-    num_eig: list = field(default_factory=list)
-
-    def add_resources(
-        self,
-        lambda_tot: float,
-        lambda_one_body: float,
-        lambda_two_body: float,
-        toffolis_per_step: float,
-        total_toffolis: float,
-        logical_qubits: float,
-        cutoff: float,
-        mp2_energy: float,
-        num_aux: int,
-        num_eig: int,
-    ) -> None:
-        super().add_resources(
-            lambda_tot,
-            lambda_one_body,
-            lambda_two_body,
-            toffolis_per_step,
-            total_toffolis,
-            logical_qubits,
-            cutoff,
-            mp2_energy,
-        )
-        self.num_aux.append(num_aux)
-        self.num_eig.append(num_eig)
 
 
 def generate_costing_table(
     pyscf_mf: scf.HF,
     cutoffs: np.ndarray,
-    name="pbc",
+    name: str = "pbc",
     chi: int = 10,
-    beta: int = 20,
-    dE_for_qpe: float=0.0016,
-) -> pd.DataFrame:
+    beta: Union[int, None] = None,
+    dE_for_qpe: float = 0.0016,
+    energy_method: str = "MP2",
+) -> DFResources:
     """Generate resource estimate costing table given a set of cutoffs for
         double-factorized Hamiltonian.
 
@@ -67,35 +42,39 @@ def generate_costing_table(
         cutoffs: Array of (integer) auxiliary index cutoff values
         name: Optional descriptive name for simulation.
         chi: the number of bits for the representation of the coefficients
-        beta: the number of bits for rotations.
+        beta: the number of bits for controlled rotation. If None we estimate
+            the value given N and dE_for_qpe. See compute_beta_for_resources for
+            details.
         dE_for_qpe: Phase estimation epsilon.
+        energy_method: Which model chemistry to use to estimate convergence of
+            factorization with respect to threshold. values are MP2 or CCSD.
 
     Returns
         resources: Table of resource estimates.
+
+    Raises:
+        ValueError if energy_method is unknown.
     """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
-
     cc_inst = cc.KRCCSD(pyscf_mf)
     cc_inst.verbose = 0
     exact_eris = cc_inst.ao2mo()
-    exact_emp2, _, _ = cc_inst.init_amps(exact_eris)
+    if energy_method.lower() == "mp2":
+        energy_function = lambda x: cc_inst.init_amps(x)
+        reference_energy, _, _ = energy_function(exact_eris)
+    elif energy_method.lower() == "ccsd":
+        energy_function = lambda x: cc_inst.kernel(eris=x)
+        reference_energy, _, _ = energy_function(exact_eris)
+    else:
+        raise ValueError(f"Unknown value for energy_method: {energy_method}")
 
-    mp2_inst = mp.KMP2(pyscf_mf)
-    Luv = cholesky_from_df_ints(mp2_inst)  # [kpt, kpt, naux, nmo_padded, nmo_padded]
-    mo_coeff_padded = _add_padding(mp2_inst, mp2_inst.mo_coeff, mp2_inst.mo_energy)[0]
-
-    # get hcore mo
-    hcore_ao = pyscf_mf.get_hcore()
-    hcore_mo = np.asarray(
-        [
-            reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo))
-            for k, mo in enumerate(mo_coeff_padded)
-        ]
-    )
-    num_spin_orbs = 2 * hcore_mo[0].shape[-1]
-
+    hcore, chol = build_hamiltonian(pyscf_mf)
+    num_spin_orbs = 2 * hcore[0].shape[-1]
     num_kpts = np.prod(kmesh)
 
+    num_aux = chol[0, 0].shape[0]
+    # This is constant as we don't truncate first factorization for DF
+    num_aux_df = 2 * num_aux * num_kpts
     df_resource_obj = DFResources(
         system_name=name,
         num_spin_orbitals=num_spin_orbs,
@@ -103,62 +82,35 @@ def generate_costing_table(
         dE=dE_for_qpe,
         chi=chi,
         beta=beta,
-        exact_emp2=exact_emp2,
+        exact_energy=reference_energy,
+        num_aux=num_aux_df,
     )
-    naux = Luv[0, 0].shape[0]
-    # Save some space and overwrite eris object from exact CC 
+    # Save some space and overwrite eris object from exact CC
     approx_eris = exact_eris
+    if beta is None:
+        num_kpts = np.prod(kmesh)
+        beta = compute_beta_for_resources(num_spin_orbs, num_kpts, dE_for_qpe)
     for cutoff in cutoffs:
-        df_helper = DFABKpointIntegrals(cholesky_factor=Luv, kmf=pyscf_mf)
+        df_helper = DFABKpointIntegrals(cholesky_factor=chol, kmf=pyscf_mf)
         df_helper.double_factorize(thresh=cutoff)
-        (
-            df_lambda_tot,
-            df_lambda_one_body,
-            df_lambda_two_body,
-            num_eigs,
-        ) = compute_lambda(hcore_mo, df_helper)
-        L = df_helper.naux * 2 * df_helper.nk  # factor of 2 accounts for A and B terms
-        df_res_cost = compute_cost(
-            n=num_spin_orbs,
-            lam=df_lambda_tot,
-            dE=dE_for_qpe,
-            L=L,
-            Lxi=num_eigs,
-            chi=chi,
-            beta=beta,
-            Nkx=kmesh[0],
-            Nky=kmesh[1],
-            Nkz=kmesh[2],
-            stps=20_000,
-        )
-        df_res_cost = compute_cost(
-            n=num_spin_orbs,
-            lam=df_lambda_tot,
-            dE=dE_for_qpe,
-            L=L,
-            Lxi=num_eigs,
-            chi=chi,
-            beta=beta,
-            Nkx=kmesh[0],
-            Nky=kmesh[1],
-            Nkz=kmesh[2],
-            stps=df_res_cost[0],
-        )
+        df_lambda = compute_lambda(hcore, df_helper)
         approx_eris = build_approximate_eris(cc_inst, df_helper, eris=approx_eris)
-        approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
+        approx_energy, _, _ = energy_function(approx_eris)
+        df_res_cost = cost_double_factorization(
+            num_spin_orbs,
+            df_lambda.lambda_total,
+            num_aux_df,
+            df_lambda.num_eig,
+            list(kmesh),
+            chi=chi,
+            beta=beta,
+            dE_for_qpe=dE_for_qpe,
+        )
         df_resource_obj.add_resources(
-            lambda_tot=df_lambda_tot,
-            lambda_one_body=df_lambda_one_body,
-            lambda_two_body=df_lambda_two_body,
+            ham_properties=df_lambda,
+            resource_estimates=df_res_cost,
             cutoff=cutoff,
-            num_aux=naux,
-            num_eig=num_eigs,
-            toffolis_per_step=df_res_cost[0],
-            total_toffolis=df_res_cost[1],
-            logical_qubits=df_res_cost[2],
-            mp2_energy=approx_emp2,
+            approx_energy=approx_energy,
         )
 
-    df = pd.DataFrame(df_resource_obj.dict())
-
-    return df 
+    return df_resource_obj

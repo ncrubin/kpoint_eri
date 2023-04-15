@@ -93,18 +93,35 @@ def cost_single_factorization(
     """
     # run once to determine stps parameter
     init_cost = _cost_single_factorization(
-        num_spin_orbs, lambda_tot, num_aux, dE_for_qpe, chi, 20_000, kmesh[0], kmesh[1], kmesh[2]
+        num_spin_orbs,
+        lambda_tot,
+        num_aux,
+        dE_for_qpe,
+        chi,
+        20_000,
+        kmesh[0],
+        kmesh[1],
+        kmesh[2],
     )
     steps = init_cost[0]
     final_cost = _cost_single_factorization(
-        num_spin_orbs, lambda_tot, num_aux, dE_for_qpe, chi, steps, kmesh[0], kmesh[1], kmesh[2]
+        num_spin_orbs,
+        lambda_tot,
+        num_aux,
+        dE_for_qpe,
+        chi,
+        steps,
+        kmesh[0],
+        kmesh[1],
+        kmesh[2],
     )
     estimates = ResourceEstimates(
         toffolis_per_step=final_cost[0],
         total_toffolis=final_cost[1],
         logical_qubits=final_cost[2],
-        )
-    return estimates 
+    )
+    return estimates
+
 
 def _cost_single_factorization(
     n: int,

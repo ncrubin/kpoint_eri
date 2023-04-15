@@ -5,8 +5,7 @@ from typing import Union
 import pandas as pd
 import numpy as np
 
-from pyscf.pbc import scf, mp, cc
-from pyscf.pbc.mp.kmp2 import _add_padding
+from pyscf.pbc import scf, cc
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
@@ -15,41 +14,16 @@ from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
     KPTHCHelperDoubleTranslation,
 )
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian
 from kpoint_eri.resource_estimates.thc.compute_lambda_thc import compute_lambda
 from kpoint_eri.resource_estimates.thc.compute_thc_resources import (
-    compute_cost,
+    cost_thc,
 )
 
 
 @dataclass
 class THCResources(PBCResources):
     beta: int = 20
-    num_thc: list = field(default_factory=list)
-
-    def add_resources(
-        self,
-        lambda_tot: float,
-        lambda_one_body: float,
-        lambda_two_body: float,
-        toffolis_per_step: float,
-        total_toffolis: float,
-        logical_qubits: float,
-        cutoff: float,
-        mp2_energy: float,
-        num_thc: int,
-    ) -> None:
-        super().add_resources(
-            lambda_tot,
-            lambda_one_body,
-            lambda_two_body,
-            toffolis_per_step,
-            total_toffolis,
-            logical_qubits,
-            cutoff,
-            mp2_energy,
-        )
-        self.num_thc.append(num_thc)
 
 
 def generate_costing_table(
@@ -63,7 +37,8 @@ def generate_costing_table(
     bfgs_maxiter: int = 3000,
     adagrad_maxiter: int = 3000,
     fft_df_mesh: Union[None, list] = None,
-) -> pd.DataFrame:
+    energy_method: str = "MP2",
+) -> THCResources:
     """Generate resource estimate costing table given a set of cutoffs for
         THC Hamiltonian.
 
@@ -86,34 +61,28 @@ def generate_costing_table(
     cc_inst = cc.KRCCSD(pyscf_mf)
     cc_inst.verbose = 0
     exact_eris = cc_inst.ao2mo()
-    exact_emp2, _, _ = cc_inst.init_amps(exact_eris)
+    if energy_method.lower() == "mp2":
+        energy_function = lambda x: cc_inst.init_amps(x)
+        reference_energy, _, _ = energy_function(exact_eris)
+    elif energy_method.lower() == "ccsd":
+        energy_function = lambda x: cc_inst.kernel(eris=x)
+        reference_energy, _, _ = energy_function(exact_eris)
+    else:
+        raise ValueError(f"Unknown value for energy_method: {energy_method}")
 
-    mp2_inst = mp.KMP2(pyscf_mf)
-    Luv = cholesky_from_df_ints(mp2_inst)  # [kpt, kpt, naux, nmo_padded, nmo_padded]
-    mo_coeff_padded = _add_padding(mp2_inst, mp2_inst.mo_coeff, mp2_inst.mo_energy)[0]
-
-    # get hcore mo
-    hcore_ao = pyscf_mf.get_hcore()
-    hcore_mo = np.asarray(
-        [
-            reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo))
-            for k, mo in enumerate(mo_coeff_padded)
-        ]
-    )
-    num_spin_orbs = 2 * hcore_mo[0].shape[-1]
-
-    ### SPARSE RESOURCE ESTIMATE ###
+    hcore, chol = build_hamiltonian(pyscf_mf)
+    num_spin_orbs = 2 * hcore[0].shape[-1]
     num_kpts = np.prod(kmesh)
-
     thc_resource_obj = THCResources(
         system_name=name,
         num_spin_orbitals=num_spin_orbs,
-        num_kpts=int(num_kpts),
+        num_kpts=num_kpts,
         dE=dE_for_qpe,
         chi=chi,
         beta=beta,
-        exact_emp2=float(exact_emp2),
+        exact_energy=reference_energy,
     )
+
     # For the ISDF guess we need an FFTDF MF object (really just need the grids so a bit of a hack)
     # Have not checked carefully the sensitivity of ISDF to real space grid size
     # and just use that determined by pyscf, which is usually not too big. If
@@ -138,7 +107,7 @@ def generate_costing_table(
         num_thc = thc_rank * num_spin_orbs // 2
         kpt_thc, _ = kpoint_thc_via_isdf(
             mf_fftdf,
-            Luv,
+            chol,
             num_thc,
             perform_adagrad_opt=reoptimize,
             perform_bfgs_opt=reoptimize,
@@ -146,38 +115,26 @@ def generate_costing_table(
             adagrad_maxiter=adagrad_maxiter,
         )
         thc_helper = KPTHCHelperDoubleTranslation(
-            kpt_thc.chi, kpt_thc.zeta, pyscf_mf, chol=Luv
+            kpt_thc.chi, kpt_thc.zeta, pyscf_mf, chol=chol
         )
-        thc_lambda_tot, thc_lambda_one_body, thc_lambda_two_body = compute_lambda(
-            hcore_mo, thc_helper
-        )
+        thc_lambda = compute_lambda(hcore, thc_helper)
         kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
-        thc_res_cost = compute_cost(
-            n=num_spin_orbs,
-            lam=thc_lambda_tot,
-            dE=dE_for_qpe,
+        approx_eris = build_approximate_eris(cc_inst, thc_helper, eris=approx_eris)
+        approx_energy, _, _ = energy_function(approx_eris)
+        thc_res_cost = cost_thc(
+            num_spin_orbs,
+            thc_lambda.lambda_total,
+            thc_rank * num_spin_orbs // 2,
+            list(kmesh),
             chi=chi,
             beta=beta,
-            M=kpt_thc.chi.shape[-1],
-            Nkx=kmesh[0],
-            Nky=kmesh[1],
-            Nkz=kmesh[2],
-            stps=20_000,
+            dE_for_qpe=dE_for_qpe,
         )
-        approx_eris = build_approximate_eris(cc_inst, thc_helper, eris=approx_eris)
-        approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
         thc_resource_obj.add_resources(
-            lambda_tot=thc_lambda_tot,
-            lambda_one_body=thc_lambda_one_body,
-            lambda_two_body=thc_lambda_two_body,
-            cutoff=int(thc_rank),
-            toffolis_per_step=thc_res_cost[0],
-            total_toffolis=thc_res_cost[1],
-            logical_qubits=thc_res_cost[2],
-            mp2_energy=float(approx_emp2),
-            num_thc=num_thc,
+            ham_properties=thc_lambda,
+            resource_estimates=thc_res_cost,
+            cutoff=thc_rank,
+            approx_energy=approx_energy,
         )
 
-    df = pd.DataFrame(thc_resource_obj.dict())
-
-    return df
+    return thc_resource_obj

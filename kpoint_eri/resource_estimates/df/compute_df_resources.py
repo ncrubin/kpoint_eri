@@ -2,12 +2,17 @@
 
 From openfermion
 """
-from typing import Tuple
+from typing import Tuple, Union
 import numpy as np
-from numpy.lib.scimath import arccos, arcsin  # has analytc continuation to cplx
+from numpy.lib.scimath import arccos, arcsin
 from sympy import factorint
 
 from openfermion.resource_estimates.utils import QI
+
+from kpoint_eri.resource_estimates.utils.misc_utils import (
+    ResourceEstimates,
+    compute_beta_for_resources,
+)
 
 
 def QR_ncr(L, M1):
@@ -31,7 +36,72 @@ def QR_ncr(L, M1):
     return int(k_opt), int(val_opt)
 
 
-def compute_cost(
+def cost_double_factorization(
+    num_spin_orbs: int,
+    lambda_tot: float,
+    num_aux: int,
+    num_eig: int,
+    kmesh: list[int],
+    dE_for_qpe: float = 0.0016,
+    chi: int = 10,
+    beta: Union[int, None] = None,
+) -> ResourceEstimates:
+    """Determine fault-tolerant costs using single factorization representaion of symmetry
+        adapted integrals.
+
+    Light wrapper around _cost_single_factorization to automate choice of stps paramter.
+
+    Arguments:
+        num_spin_orbs: the number of spin-orbitals
+        lambda_tot: the lambda-value for the Hamiltonian
+        num_aux: number auxiliary vectors for the first factorization.
+        num_eig: number of retained eigenvalues for the second factorization.
+        dE_for_qpe: allowable error in phase estimation
+        chi: the number of bits for the representation of the coefficients
+        beta: the number of bits for controlled rotations
+    Returns:
+        resources: double factorized resource estimates
+    """
+    # run once to determine stps parameter
+    if beta is None:
+        num_kpts = np.prod(kmesh)
+        beta = compute_beta_for_resources(num_spin_orbs, num_kpts, dE_for_qpe)
+    init_cost = _cost_double_factorization(
+        n=num_spin_orbs,
+        lam=lambda_tot,
+        dE=dE_for_qpe,
+        L=num_aux,
+        Lxi=num_eig,
+        chi=chi,
+        beta=beta,
+        Nkx=kmesh[0],
+        Nky=kmesh[1],
+        Nkz=kmesh[2],
+        stps=20_000,
+    )
+    steps = init_cost[0]
+    final_cost = _cost_double_factorization(
+        n=num_spin_orbs,
+        lam=lambda_tot,
+        dE=dE_for_qpe,
+        L=num_aux,
+        Lxi=num_eig,
+        chi=chi,
+        beta=beta,
+        Nkx=kmesh[0],
+        Nky=kmesh[1],
+        Nkz=kmesh[2],
+        stps=steps,
+    )
+    estimates = ResourceEstimates(
+        toffolis_per_step=final_cost[0],
+        total_toffolis=final_cost[1],
+        logical_qubits=final_cost[2],
+    )
+    return estimates
+
+
+def _cost_double_factorization(
     n: int,
     lam: float,
     dE: float,
@@ -53,10 +123,8 @@ def compute_cost(
         dE: allowable error in phase estimation
         L: the rank of the first decomposition
         Lxi: the total number of eigenvectors
-        chi: equivalent to aleph_1 and aleph_2 in the document, the
-            number of bits for the representation of the coefficients
-        beta: equivalent to beth in the document, the number of bits
-            for the rotations
+        chi: the number of bits for the representation of the coefficients
+        beta: the number of bits for the rotations
         Nkx: Number of k-points in x-direction
         Nky: Number of k-points in y-direction
         Nkz:  Number of k-points in z-direction

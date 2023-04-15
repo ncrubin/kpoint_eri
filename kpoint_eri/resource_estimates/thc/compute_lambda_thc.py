@@ -5,6 +5,7 @@ from typing import Tuple
 from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
     KPTHCHelperDoubleTranslation,
 )
+from kpoint_eri.factorizations.hamiltonian_utils import HamiltonianProperties
 
 
 def compute_lambda_real(
@@ -18,15 +19,15 @@ def compute_lambda_real(
     openfermion.
 
     Arguments:
-        h1: one-body hamiltonian 
-        etaPp: THC leaf tensor 
-        MPQ: THC central tensor. 
-        chol: Cholesky factors. 
+        h1: one-body hamiltonian
+        etaPp: THC leaf tensor
+        MPQ: THC central tensor.
+        chol: Cholesky factors.
 
     Returns:
         lambda_tot: Total lambda
-        lambda_one_body: One-body lambda 
-        lambda_two_body: Two-body lambda 
+        lambda_one_body: One-body lambda
+        lambda_two_body: Two-body lambda
     """
     nthc = etaPp.shape[0]
 
@@ -60,10 +61,12 @@ def compute_lambda_real(
     return lambda_tot, lambda_T, lambda_z
 
 
-def compute_lambda(hcore: npt.NDArray, thc_obj: KPTHCHelperDoubleTranslation) -> Tuple[float, float, float]:
+def compute_lambda(
+    hcore: npt.NDArray, thc_obj: KPTHCHelperDoubleTranslation
+) -> HamiltonianProperties:
     """Compute one-body and two-body lambda for qubitization of
     tensor hypercontraction LCU.
-    
+
     one-body term h_pq(k) = hcore_{pq}(k)
                             - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk)
 
@@ -73,8 +76,8 @@ def compute_lambda(hcore: npt.NDArray, thc_obj: KPTHCHelperDoubleTranslation) ->
 
     Returns:
         lambda_tot: Total lambda
-        lambda_one_body: One-body lambda 
-        lambda_two_body: Two-body lambda 
+        lambda_one_body: One-body lambda
+        lambda_two_body: Two-body lambda
     """
     kpts = thc_obj.kmf.kpts
     nkpts = len(kpts)
@@ -131,4 +134,9 @@ def compute_lambda(hcore: npt.NDArray, thc_obj: KPTHCHelperDoubleTranslation) ->
     lambda_two_body *= 2
 
     lambda_tot = lambda_one_body + lambda_two_body
-    return lambda_tot, lambda_one_body, lambda_two_body
+    lambda_data = HamiltonianProperties(
+        lambda_tot=lambda_tot,
+        lambda_one_body=lambda_one_body,
+        lambda_two_body=lambda_two_body,
+    )
+    return lambda_data

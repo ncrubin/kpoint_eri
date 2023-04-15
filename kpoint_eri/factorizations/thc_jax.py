@@ -19,9 +19,10 @@ from uuid import uuid4
 import h5py
 import numpy as np
 import numpy.typing as npt
-from jax.config import config
 from pyscf.pbc import scf
 from scipy.optimize import minimize
+
+from jax.config import config
 
 config.update("jax_enable_x64", True)
 
@@ -247,7 +248,9 @@ def prepare_batched_data_indx_arrays(
 
 
 @jax.jit
-def get_batched_data_1indx(array: jnpt.ArrayLike, indx: jnpt.ArrayLike) -> jnpt.ArrayLike:
+def get_batched_data_1indx(
+    array: jnpt.ArrayLike, indx: jnpt.ArrayLike
+) -> jnpt.ArrayLike:
     """Helper function to extract entries of array given another array.
 
     Args:
