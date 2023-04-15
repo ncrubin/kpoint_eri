@@ -42,7 +42,7 @@ def test_supercell_isdf_gamma():
     cell.unit = "B"
     cell.verbose = 0
     cell.mesh = [11] * 3
-    cell.build()
+    cell.build(parse_arg=False)
     # kpts = cell.make_kpts(kmesh, scaled_center=[0.2, 0.3, 0.5])
 
     mf = scf.RHF(cell)
@@ -117,7 +117,7 @@ def test_supercell_isdf_complex():
     cell.unit = "B"
     cell.mesh = [11] * 3
     cell.verbose = 0
-    cell.build()
+    cell.build(parse_arg=False)
     # kpts = cell.make_kpts(kmesh, scaled_center=[0.2, 0.3, 0.5])
 
     mf = scf.RHF(cell, kpt=np.array([0.1, -0.001, 0.022]))

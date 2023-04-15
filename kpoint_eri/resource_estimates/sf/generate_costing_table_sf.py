@@ -1,15 +1,11 @@
-from dataclasses import dataclass, field
-from functools import reduce
-
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from pyscf.pbc import cc, mp, scf
-from pyscf.pbc.mp.kmp2 import _add_padding
+from pyscf.pbc import cc, scf
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
 from kpoint_eri.resource_estimates.sf.compute_sf_resources import (
@@ -21,48 +17,20 @@ from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
 from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 
 
-@dataclass
-class SFResources(PBCResources):
-    num_aux: list = field(default_factory=list)
-
-    def add_resources(
-        self,
-        lambda_tot: float,
-        lambda_one_body: float,
-        lambda_two_body: float,
-        toffolis_per_step: float,
-        total_toffolis: float,
-        logical_qubits: float,
-        cutoff: float,
-        mp2_energy: float,
-        num_aux: int,
-    ) -> None:
-        super().add_resources(
-            lambda_tot,
-            lambda_one_body,
-            lambda_two_body,
-            toffolis_per_step,
-            total_toffolis,
-            logical_qubits,
-            cutoff,
-            mp2_energy,
-        )
-        self.num_aux.append(num_aux)
-
-
 def generate_costing_table(
     pyscf_mf: scf.HF,
-    cutoffs: npt.NDArray[np.int32],
+    naux_cutoffs: npt.NDArray[np.int32],
     name: str = "pbc",
     chi: int = 10,
     dE_for_qpe=0.0016,
+    energy_method="MP2",
 ) -> pd.DataFrame:
     """Generate resource estimate costing table given a set of cutoffs for
         single-factorized Hamiltonian.
 
     Arguments:
         pyscf_mf: k-point pyscf mean-field object
-        cutoffs: Array of (integer) auxiliary index cutoff values
+        naux_cutoffs: Array of (integer) auxiliary index cutoff values
         name: Optional descriptive name for simulation.
         chi: the number of bits for the representation of the coefficients
         dE_for_qpe: Phase estimation epsilon.
@@ -71,86 +39,54 @@ def generate_costing_table(
         resources: Table of resource estimates.
     """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
+    cc_inst = cc.KRCCSD(pyscf_mf)
+    cc_inst.verbose = 0
+    exact_eris = cc_inst.ao2mo()
+    if energy_method == "MP2":
+        energy_function = lambda x: cc_inst.init_amps(x)
+        reference_energy, _, _ = energy_function(exact_eris)
+    elif energy_method == "CCSD":
+        energy_function = lambda x: cc_inst.kernel(eris=x)
+        reference_energy, _, _ = energy_function(exact_eris)
+    else:
+        raise ValueError(f"Unknown value for energy_method: {energy_method}")
 
-    exact_cc = cc.KRCCSD(pyscf_mf)
-    exact_cc.verbose = 0
-    eris = exact_cc.ao2mo()
-    exact_emp2, _, _ = exact_cc.init_amps(eris)
-
-    mp2_inst = mp.KMP2(pyscf_mf)
-    Luv = cholesky_from_df_ints(mp2_inst)  # [kpt, kpt, naux, nmo_padded, nmo_padded]
-    mo_coeff_padded = _add_padding(mp2_inst, mp2_inst.mo_coeff, mp2_inst.mo_energy)[0]
-
-    # get hcore mo
-    hcore_ao = pyscf_mf.get_hcore()
-    hcore_mo = np.asarray(
-        [
-            reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo))
-            for k, mo in enumerate(mo_coeff_padded)
-        ]
-    )
-    num_spin_orbs = 2 * hcore_mo[0].shape[-1]
-
-    ### SPARSE RESOURCE ESTIMATE ###
+    hcore, chol = build_hamiltonian(pyscf_mf)
+    num_spin_orbs = 2 * hcore[0].shape[-1]
     num_kpts = np.prod(kmesh)
 
-    sf_resource_obj = SFResources(
+    sf_resource_obj = PBCResources(
         system_name=name,
         num_spin_orbitals=num_spin_orbs,
         num_kpts=num_kpts,
         dE=dE_for_qpe,
         chi=chi,
-        exact_emp2=exact_emp2,
+        exact_energy=reference_energy,
     )
     naux = Luv[0, 0].shape[0]
-    for cutoff in cutoffs:
-        naux_cutoff = max(int(cutoff * naux), 1)
+    approx_eris = exact_eris
+    for cutoff in naux_cutoffs:
         sf_helper = SingleFactorizationHelper(
-            cholesky_factor=Luv, kmf=pyscf_mf, naux=naux_cutoff
+            cholesky_factor=chol, kmf=pyscf_mf, naux=cutoff
         )
+        approx_eris = build_approximate_eris(cc_inst, sf_helper, eris=approx_eris)
+        approx_energy, _, _ = energy_function(approx_eris)
 
-        sf_lambda_tot, sf_lambda_one_body, sf_lambda_two_body = compute_lambda(
-            hcore_mo, sf_helper
-        )
-
-        L = (
-            sf_helper.naux
-        )  # No factor of 2 accounting for A and B because they use the same data
-        sf_res_cost = cost_single_factorization(
-            n=num_spin_orbs,
-            lam=sf_lambda_tot,
-            M=L,
-            dE=dE_for_qpe,
+        sf_lambda = compute_lambda(hcore, sf_helper)
+        sparse_res_cost = cost_single_factorization(
+            num_spin_orbs,
+            sf_lambda.lambda_total,
+            sf_lambda.num_aux,
+            list(kmesh),
             chi=chi,
-            stps=20000,
-            Nkx=kmesh[0],
-            Nky=kmesh[0],
-            Nkz=kmesh[0],
+            dE_for_qpe=dE_for_qpe,
         )
-        sf_res_cost = cost_single_factorization(
-            n=num_spin_orbs,
-            lam=sf_lambda_tot,
-            M=L,
-            dE=dE_for_qpe,
-            chi=chi,
-            stps=sf_res_cost[0],
-            Nkx=kmesh[0],
-            Nky=kmesh[0],
-            Nkz=kmesh[0],
-        )
-        approx_eris = build_approximate_eris(exact_cc, sf_helper, eris=eris)
-        approx_emp2, _, _ = exact_cc.init_amps(approx_eris)
 
         sf_resource_obj.add_resources(
-            lambda_tot=sf_lambda_tot,
-            lambda_one_body=sf_lambda_one_body,
-            lambda_two_body=sf_lambda_two_body,
-            cutoff=cutoff,
-            num_aux=naux_cutoff,
-            toffolis_per_step=sf_res_cost[0],
-            total_toffolis=sf_res_cost[1],
-            logical_qubits=sf_res_cost[2],
-            mp2_energy=approx_emp2,
+            ham_properties=sf_lambda,
+            resource_estimates=sparse_res_cost,
+            cutoff=sf_lambda.num_aux,
+            approx_energy=approx_energy,
         )
 
     df = pd.DataFrame(sf_resource_obj.dict())

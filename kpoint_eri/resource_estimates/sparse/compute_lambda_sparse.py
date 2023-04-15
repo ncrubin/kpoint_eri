@@ -1,15 +1,21 @@
+from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 from typing import Tuple
 
+from kpoint_eri.factorizations.hamiltonian_utils import HamiltonianProperties
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
 )
 
+@dataclass
+class SparseHamiltonianProperties(HamiltonianProperties):
+    """Light container to store return values of compute_lambda function"""
+    num_sym_unique: int
 
 def compute_lambda(
     hcore: npt.NDArray, sparse_int_obj: SparseFactorizationHelper
-) -> Tuple[float, float, float, Tuple[int, int] | int]:
+) -> SparseHamiltonianProperties:
     """Compute lambda value for sparse method
 
     Arguments:
@@ -67,9 +73,10 @@ def compute_lambda(
                 )
 
     lambda_tot = lambda_one_body + lambda_two_body
-    return (
-        lambda_tot,
-        lambda_one_body,
-        lambda_two_body,
-        sparse_int_obj.get_total_unique_terms_above_thresh(),
+    sparse_data = SparseHamiltonianProperties(
+        lambda_total=lambda_tot,
+        lambda_one_body=lambda_one_body,
+        lambda_two_body=lambda_two_body,
+        num_sym_unique=sparse_int_obj.get_total_unique_terms_above_thresh(return_nk_counter=False)
     )
+    return sparse_data 

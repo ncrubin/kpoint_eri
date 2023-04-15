@@ -1,18 +1,29 @@
+from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 from typing import Tuple
+from kpoint_eri.factorizations.hamiltonian_utils import HamiltonianProperties
 
 from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
     SingleFactorizationHelper,
 )
 
 
-def compute_lambda(hcore: npt.NDArray, sf_obj: SingleFactorizationHelper) -> Tuple[float, float, float]:
+@dataclass
+class SFHamiltonianProperties(HamiltonianProperties):
+    """Light container to store return values of compute_lambda function"""
+
+    num_aux: int
+
+
+def compute_lambda(
+    hcore: npt.NDArray, sf_obj: SingleFactorizationHelper
+) -> SFHamiltonianProperties:
     """Lambda for single-factorized Hamiltonian.
-    
+
     Compute one-body and two-body lambda for qubitization of
     single-factorized Hamiltonian.
-    
+
     one-body term h_pq(k) = hcore_{pq}(k)
                             - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk)
                             + sum_{Q}sum_{r}(pkqk|rQrQ)
@@ -20,7 +31,7 @@ def compute_lambda(hcore: npt.NDArray, sf_obj: SingleFactorizationHelper) -> Tup
     second term is from rearranging two-body operator into chemist charge-charge
     type notation, and the third is from the one body term obtained when
     squaring the two-body A and B operators.
-    
+
     two-body term V = 0.5 sum_{Q}sum_{n}(A_{n}(Q)^2 +_ B_{n}(Q)^2)
     or V = 0.5 sum_{Q}sum_{n'}W_{n}(Q)^{2} where n' is twice the range of n.
     lambda is 0.5sum_{Q}sum_{n'}(sum_{p,q}^{N_{k}N/2}|Re[W_{p,q}(Q)^{n}]| + |Im[W_{pq}(Q)^{n}]|)^{2}
@@ -28,13 +39,13 @@ def compute_lambda(hcore: npt.NDArray, sf_obj: SingleFactorizationHelper) -> Tup
     Args:
       hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
       sf_obj: SingleFactorization object.
-      hcore: np.ndarray: 
-      sf_obj: SingleFactorizationHelper: 
+      hcore: np.ndarray:
+      sf_obj: SingleFactorizationHelper:
 
     Returns:
         lambda_tot: Total lambda
-        lambda_one_body: One-body lambda 
-        lambda_two_body: Two-body lambda 
+        lambda_one_body: One-body lambda
+        lambda_two_body: Two-body lambda
     """
     kpts = sf_obj.kmf.kpts
     nkpts = len(kpts)
@@ -94,4 +105,10 @@ def compute_lambda(hcore: npt.NDArray, sf_obj: SingleFactorizationHelper) -> Tup
     lambda_two_body *= 0.5
 
     lambda_tot = lambda_one_body + lambda_two_body
-    return lambda_tot, lambda_one_body, lambda_two_body
+    sf_data = SFHamiltonianProperties(
+        lambda_total=lambda_tot,
+        lambda_one_body=lambda_one_body,
+        lambda_two_body=lambda_two_body,
+        num_aux=sf_obj.naux,
+    )
+    return sf_data

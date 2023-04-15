@@ -1,50 +1,20 @@
 from dataclasses import dataclass, field
 from functools import reduce
 
-import pandas as pd
 import numpy as np
 
-from pyscf.pbc import scf, mp, cc
-from pyscf.pbc.mp.kmp2 import _add_padding
+from pyscf.pbc import scf, cc
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
 )
+from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.sparse.compute_lambda_sparse import compute_lambda
 from kpoint_eri.resource_estimates.sparse.compute_sparse_resources import cost_sparse
 
-
-@dataclass
-class SparseResources(PBCResources):
-    number_of_sym_unique_terms: list = field(default_factory=list)
-
-    def add_resources(
-        self,
-        lambda_tot: float,
-        lambda_one_body: float,
-        lambda_two_body: float,
-        toffolis_per_step: float,
-        total_toffolis: float,
-        logical_qubits: float,
-        cutoff: float,
-        mp2_energy: float,
-        num_sym_unique: int,
-    ) -> None:
-        super().add_resources(
-            lambda_tot,
-            lambda_one_body,
-            lambda_two_body,
-            toffolis_per_step,
-            total_toffolis,
-            logical_qubits,
-            cutoff,
-            mp2_energy,
-        )
-        self.number_of_sym_unique_terms.append(num_sym_unique)
 
 
 def generate_costing_table(
@@ -53,7 +23,8 @@ def generate_costing_table(
     chi: int = 10,
     thresholds: np.ndarray = np.logspace(-1, -5, 6),
     dE_for_qpe=0.0016,
-) -> pd.DataFrame:
+    energy_method="MP2",
+) -> PBCResources:
     """Generate resource estimate costing table given a set of cutoffs for
         sparse Hamiltonian.
 
@@ -68,85 +39,54 @@ def generate_costing_table(
         resources: Table of resource estimates.
     """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
-
     cc_inst = cc.KRCCSD(pyscf_mf)
     cc_inst.verbose = 0
     exact_eris = cc_inst.ao2mo()
-    exact_emp2, _, _ = cc_inst.init_amps(exact_eris)
+    if energy_method == "MP2":
+        energy_function = lambda x: cc_inst.init_amps(x)
+        reference_energy, _, _ = energy_function(exact_eris) 
+    elif energy_method == "CCSD":
+        energy_function = lambda x: cc_inst.kernel(eris=x)
+        reference_energy, _, _ = energy_function(exact_eris)
+    else:
+        raise ValueError(f"Unknown value for energy_method: {energy_method}")
 
-    mp2_inst = mp.KMP2(pyscf_mf)
-    Luv = cholesky_from_df_ints(mp2_inst)  # [kpt, kpt, naux, nmo_padded, nmo_padded]
-    mo_coeff_padded = _add_padding(mp2_inst, mp2_inst.mo_coeff, mp2_inst.mo_energy)[0]
-
-    # get hcore mo
-    hcore_ao = pyscf_mf.get_hcore()
-    hcore_mo = np.asarray(
-        [
-            reduce(np.dot, (mo.T.conj(), hcore_ao[k], mo))
-            for k, mo in enumerate(mo_coeff_padded)
-        ]
-    )
-    num_spin_orbs = 2 * hcore_mo[0].shape[-1]
+    hcore, chol = build_hamiltonian(pyscf_mf)
+    num_spin_orbs = 2 * hcore[0].shape[-1]
 
     num_kpts = np.prod(kmesh)
 
-    sparse_resource_obj = SparseResources(
+    sparse_resource_obj = PBCResources(
         system_name=name,
         num_spin_orbitals=num_spin_orbs,
         num_kpts=num_kpts,
         dE=dE_for_qpe,
         chi=chi,
-        exact_emp2=exact_emp2,
+        exact_energy=reference_energy,
     )
     approx_eris = exact_eris
     for thresh in thresholds:
         sparse_helper = SparseFactorizationHelper(
-            cholesky_factor=Luv, kmf=pyscf_mf, threshold=thresh
+            cholesky_factor=chol, kmf=pyscf_mf, threshold=thresh
         )
         approx_eris = build_approximate_eris(cc_inst, sparse_helper, eris=approx_eris)
-        approx_emp2, _, _ = cc_inst.init_amps(approx_eris)
+        approx_energy, _, _ = energy_function(approx_eris)
 
-        (
-            sparse_lambda_tot,
-            sparse_lambda_one_body,
-            sparse_lambda_two_body,
-            num_nnz,
-        ) = compute_lambda(hcore_mo, sparse_helper)
+        sparse_data = compute_lambda(hcore, sparse_helper)
 
         sparse_res_cost = cost_sparse(
-            n=num_spin_orbs,
-            lam=sparse_lambda_tot,
-            d=num_nnz,
-            dE=dE_for_qpe,
+            num_spin_orbs,
+            sparse_data.lambda_total,
+            sparse_data.num_sym_unique,
+            list(kmesh),
+            dE_for_qpe=dE_for_qpe,
             chi=chi,
-            stps=20_000,
-            Nkx=kmesh[0],
-            Nky=kmesh[1],
-            Nkz=kmesh[2],
-        )
-        sparse_res_cost = cost_sparse(
-            n=num_spin_orbs,
-            lam=sparse_lambda_tot,
-            d=num_nnz,
-            dE=dE_for_qpe,
-            chi=chi,
-            stps=sparse_res_cost[0],
-            Nkx=kmesh[0],
-            Nky=kmesh[1],
-            Nkz=kmesh[2],
         )
         sparse_resource_obj.add_resources(
-            lambda_tot=sparse_lambda_tot,
-            lambda_one_body=sparse_lambda_one_body,
-            lambda_two_body=sparse_lambda_two_body,
-            num_sym_unique=num_nnz,
-            toffolis_per_step=sparse_res_cost[0],
-            total_toffolis=sparse_res_cost[1],
-            logical_qubits=sparse_res_cost[2],
+            ham_properties=sparse_data,
+            resource_estimates=sparse_res_cost,
             cutoff=thresh,
-            mp2_energy=approx_emp2,
+            approx_energy=approx_energy,
         )
 
-    df = pd.DataFrame(sparse_resource_obj.dict())
-
-    return df 
+    return sparse_resource_obj

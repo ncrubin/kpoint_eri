@@ -11,6 +11,8 @@ from openfermion.resource_estimates.utils import QI
 from openfermion.resource_estimates.utils import QR2 as QR2_of
 from sympy import factorint
 
+from kpoint_eri.resource_estimates.utils.misc_utils import ResourceEstimates
+
 
 def QR_ncr(L, M1):
     r"""
@@ -68,6 +70,43 @@ def QI2(L1, Lv2):
 
 
 def cost_single_factorization(
+    num_spin_orbs: int,
+    lambda_tot: float,
+    num_aux: int,
+    kmesh: list[int],
+    dE_for_qpe: float = 0.0016,
+    chi: int = 10,
+) -> ResourceEstimates:
+    """Determine fault-tolerant costs using single factorization representaion of symmetry
+        adapted integrals.
+
+    Light wrapper around _cost_single_factorization to automate choice of stps paramter.
+
+    Arguments:
+        num_spin_orbs: the number of spin-orbitals
+        lambda_tot: the lambda-value for the Hamiltonian
+        num_sym_unique: number of symmetry unique terms kept in the sparse Hamiltonian
+        dE_for_qpe: allowable error in phase estimation
+        chi: the number of bits for the representation of the coefficients
+    Returns:
+        resources: sparse resources
+    """
+    # run once to determine stps parameter
+    init_cost = _cost_single_factorization(
+        num_spin_orbs, lambda_tot, num_aux, dE_for_qpe, chi, 20_000, kmesh[0], kmesh[1], kmesh[2]
+    )
+    steps = init_cost[0]
+    final_cost = _cost_single_factorization(
+        num_spin_orbs, lambda_tot, num_aux, dE_for_qpe, chi, steps, kmesh[0], kmesh[1], kmesh[2]
+    )
+    estimates = ResourceEstimates(
+        toffolis_per_step=final_cost[0],
+        total_toffolis=final_cost[1],
+        logical_qubits=final_cost[2],
+        )
+    return estimates 
+
+def _cost_single_factorization(
     n: int,
     lam: float,
     M: int,

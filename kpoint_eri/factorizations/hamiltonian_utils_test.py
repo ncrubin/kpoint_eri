@@ -4,7 +4,38 @@ import numpy as np
 from pyscf.pbc import gto, scf, mp, cc
 import pytest
 
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints 
+from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian, cholesky_from_df_ints 
+
+def test_build_hamiltonian():
+    cell = gto.Cell()
+    cell.atom = """
+    C 0.000000000000   0.000000000000   0.000000000000
+    C 1.685068664391   1.685068664391   1.685068664391
+    """
+    cell.basis = "gth-szv"
+    cell.pseudo = "gth-hf-rev"
+    cell.a = """
+    0.000000000, 3.370137329, 3.370137329
+    3.370137329, 0.000000000, 3.370137329
+    3.370137329, 3.370137329, 0.000000000"""
+    cell.unit = "B"
+    cell.verbose = 0
+    cell.build(parse_arg=False)
+
+    kmesh = [1, 1, 3]
+    kpts = cell.make_kpts(kmesh)
+    nkpts = len(kpts)
+    # use regular density fitting for compatibility with pyscf pip release
+    # uncomment for rs density fitting:
+    # mf = scf.KRHF(cell, kpts).rs_density_fit()
+    mf = scf.KRHF(cell, kpts).rs_density_fit()
+    mf.kernel()
+    nmo = mf.mo_coeff[0].shape[-1]
+    naux = 108
+    hcore, chol = build_hamiltonian(mf)
+    assert hcore.shape == (nkpts, nmo, nmo)
+    assert chol.shape == (nkpts, nkpts)
+    assert chol[0, 0].shape == (naux, nmo, nmo)
 
 @pytest.mark.slow
 def test_pyscf_chol_from_df():
@@ -20,12 +51,8 @@ def test_pyscf_chol_from_df():
     3.370137329, 0.000000000, 3.370137329
     3.370137329, 3.370137329, 0.000000000"""
     cell.unit = "B"
-    cell.verbose = 4
-    cell.build()
-
-    name_prefix = ""
-    basname = cell.basis
-    pp_name = cell.pseudo
+    cell.verbose = 0
+    cell.build(parse_arg=False)
 
     kmesh = [1, 1, 3]
     kpts = cell.make_kpts(kmesh)
@@ -34,8 +61,7 @@ def test_pyscf_chol_from_df():
     # uncomment for rs density fitting:
     # mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf = scf.KRHF(cell, kpts).rs_density_fit()
-    mf.init_guess = "chkfile"
-    Escf = mf.kernel()
+    mf.kernel()
 
     mymp = mp.KMP2(mf)
     nmo = mymp.nmo

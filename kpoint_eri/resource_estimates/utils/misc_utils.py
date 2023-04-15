@@ -1,7 +1,20 @@
 from dataclasses import dataclass, asdict, field
 import numpy as np
 from pyscf.pbc import gto
+import pandas as pd
+from pytest import approx
 
+from kpoint_eri.factorizations.hamiltonian_utils import HamiltonianProperties
+
+
+
+@dataclass(frozen=True)
+class ResourceEstimates:
+    toffolis_per_step: int 
+    total_toffolis: int 
+    logical_qubits: int 
+
+    dict = asdict
 
 @dataclass
 class PBCResources:
@@ -10,37 +23,33 @@ class PBCResources:
     num_kpts: int
     dE: float
     chi: int
-    exact_emp2: float 
+    exact_energy: float 
     cutoff: list = field(default_factory=list)
-    approx_emp2: list = field(default_factory=list)
-    lambda_tot: list = field(default_factory=list)
-    lambda_one_body: list = field(default_factory=list)
-    lambda_two_body: list = field(default_factory=list)
-    toffolis_per_step: list = field(default_factory=list)
-    total_toffolis: list = field(default_factory=list)
-    logical_qubits: list = field(default_factory=list)
+    approx_energy: list = field(default_factory=list)
+    ham_props: list = field(default_factory=list)
+    resources: list = field(default_factory=list)
 
     dict = asdict
 
+    def to_dataframe(self) -> pd.DataFrame:
+        df = pd.DataFrame(self.dict())
+        lambdas = pd.json_normalize(df.pop("ham_props"))
+        resources = pd.json_normalize(df.pop("resources"))
+        df = df.join(pd.DataFrame(lambdas))
+        df = df.join(pd.DataFrame(resources))
+        return df
+
     def add_resources(
         self,
-        lambda_tot: float,
-        lambda_one_body: float,
-        lambda_two_body: float,
-        toffolis_per_step: float,
-        total_toffolis: float,
-        logical_qubits: float,
+        ham_properties: HamiltonianProperties,
+        resource_estimates: ResourceEstimates,
         cutoff: float,
-        mp2_energy: float,
+        approx_energy: float,
     ) -> None:
-        self.lambda_tot.append(lambda_tot)
-        self.lambda_one_body.append(lambda_one_body)
-        self.lambda_two_body.append(lambda_two_body)
-        self.toffolis_per_step.append(toffolis_per_step)
-        self.total_toffolis.append(total_toffolis)
-        self.logical_qubits.append(logical_qubits)
+        self.ham_props.append(ham_properties)
+        self.resources.append(resource_estimates)
         self.cutoff.append(cutoff)
-        self.approx_emp2.append(mp2_energy)
+        self.approx_energy.append(approx_energy)
 
 def compute_beta_for_resources(num_spin_orbs, num_kpts, dE_for_qpe):
     return np.ceil(5.652 + np.log2(num_spin_orbs * num_kpts / dE_for_qpe))
