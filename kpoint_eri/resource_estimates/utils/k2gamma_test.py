@@ -26,9 +26,6 @@ def test_make_real():
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     nkpts = np.prod(kmesh)
-    mf.chkfile = f"test_make_real_{nkpts}.chk"
-    mf.with_df._cderi_to_save = mf.chkfile
-    mf.init_guess = "chkfile"
     mf.kernel()
     kminus = conj_mapping(cell, kpts)
 
