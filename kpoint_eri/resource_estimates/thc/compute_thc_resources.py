@@ -9,27 +9,7 @@ from openfermion.resource_estimates.utils import QI
 from kpoint_eri.resource_estimates.utils.misc_utils import (
     ResourceEstimates,
 )
-
-
-def QR_ncr(L, M1):
-    r"""
-    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
-    """
-    k = 0.5 * np.log2(L / M1)
-    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
-    try:
-        assert k >= 0
-    except AssertionError:
-        k_opt = 0
-        val_opt = np.ceil(value(k_opt))
-        assert val_opt.is_integer()
-        return int(k_opt), int(val_opt)
-    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
-    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
-    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
-    assert k_opt.is_integer()
-    assert val_opt.is_integer()
-    return int(k_opt), int(val_opt)
+from kpoint_eri.resource_estimates.utils.lcu_utils import QR3
 
 
 def cost_thc(
@@ -176,7 +156,7 @@ def _cost_thc(
     cp1 = 2 * (3 * nc - 3 * eta + 2 * br - 9)
 
     # This is the cost of the QROM for the state preparation in step 3 and its
-    cp3 = QR_ncr(d, m)[1] + QI(d)[1]
+    cp3 = QR3(d, m)[1] + QI(d)[1]
 
     # The cost for the inequality test in step 4 and its inverse.
     cp4 = 2 * chi
@@ -205,10 +185,10 @@ def _cost_thc(
     cs2 = 4 * n * (Nk - 1)
 
     # The QROM for the rotation angles the first time.
-    cs2a = QR_ncr(Nk * (M + n / 2), n * beta)[1] + QI(Nk * (M + n / 2))[1]
+    cs2a = QR3(Nk * (M + n / 2), n * beta)[1] + QI(Nk * (M + n / 2))[1]
 
     # The QROM for the rotation angles the second time.
-    cs2b = QR_ncr(Nk * M, n * beta)[1] + QI(Nk * M)[1]
+    cs2b = QR3(Nk * M, n * beta)[1] + QI(Nk * M)[1]
 
     # The cost of the rotations.
     cs3 = 16 * n * (beta - 2)
@@ -242,7 +222,7 @@ def _cost_thc(
     cs6 = cs6 * 4
 
     # The QROM cost once we computed the contiguous register
-    cs6 = cs6 + 2 * (QR_ncr(Nk**2 * M, nk + chi)[1] + QI(Nk**2 * M)[1])
+    cs6 = cs6 + 2 * (QR3(Nk**2 * M, nk + chi)[1] + QI(Nk**2 * M)[1])
 
     # The remaining state preparation cost with coherent alias sampling.
     cs6 = cs6 + 4 * (nk + chi)
@@ -274,7 +254,7 @@ def _cost_thc(
     ac5 = 1
 
     # kp = 2^QRa[d, m]
-    kp = np.power(2, QR_ncr(d, m)[0])
+    kp = np.power(2, QR3(d, m)[0])
 
     # First round of QROM.
     ac12 = m * kp + np.ceil(np.log2(d / kp)) - 1
@@ -300,7 +280,7 @@ def _cost_thc(
     # output for k-state
     ac12 = nk + chi
 
-    kn = np.power(2, QR_ncr(Nk**2 * M, nk + chi)[0])
+    kn = np.power(2, QR3(Nk**2 * M, nk + chi)[0])
 
     ac13 = (kn - 1) * (nk + chi) + np.ceil(np.log2(Nk**2 * M)) - 1
 
@@ -309,7 +289,7 @@ def _cost_thc(
     # The contiguous register.
     ac15 = np.ceil(np.log2(Nk * (M + n / 2)))
 
-    kr = np.power(2, QR_ncr(Nk * (M + n / 2), n * beta)[0])
+    kr = np.power(2, QR3(Nk * (M + n / 2), n * beta)[0])
 
     #
     ac16 = n * beta * kr + np.ceil(np.log2(Nk * (M + n / 2))) - 1

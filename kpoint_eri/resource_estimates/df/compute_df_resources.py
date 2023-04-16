@@ -13,27 +13,7 @@ from kpoint_eri.resource_estimates.utils.misc_utils import (
     ResourceEstimates,
     compute_beta_for_resources,
 )
-
-
-def QR_ncr(L, M1):
-    """
-    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
-    """
-    k = 0.5 * np.log2(L / M1)
-    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
-    try:
-        assert k >= 0
-    except AssertionError:
-        k_opt = 0
-        val_opt = np.ceil(value(k_opt))
-        assert val_opt.is_integer()
-        return int(k_opt), int(val_opt)
-    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
-    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
-    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
-    assert k_opt.is_integer()
-    assert val_opt.is_integer()
-    return int(k_opt), int(val_opt)
+from kpoint_eri.resource_estimates.utils.lcu_utils import QR3
 
 
 def cost_double_factorization(
@@ -203,7 +183,7 @@ def _cost_double_factorization(
 
     # The cost of the QROM for the first state preparation in step 1 (b) and
     # its inverse.
-    cost1b = QR_ncr(L + 1, bp1)[1] + QI(L + 1)[1]
+    cost1b = QR3(L + 1, bp1)[1] + QI(L + 1)[1]
 
     # The cost for the inequality test, controlled swap and their inverse in
     # steps 1 (c) and (d)
@@ -221,7 +201,7 @@ def _cost_double_factorization(
     # equal superposition on the second register. We will assume it is not
     # uncomputed, because we want to keep the offset for applying the QROM for
     # outputting the rotations.
-    cost2 = QR_ncr(L + 1, bo)[1] + QI(L + 1)[1]
+    cost2 = QR3(L + 1, bo)[1] + QI(L + 1)[1]
 
     # The number of bits for rotating the ancilla for the second preparation.
     # We are just entering this manually because it is a typical value.
@@ -240,9 +220,9 @@ def _cost_double_factorization(
     # The cost of the QROMs and inverse QROMs for the state preparation, where
     # in the first one we need + n/2 to account for the one-electron terms.
     cost3c = (
-        QR_ncr(Lxi + Nk * n // 2, bp2)[1]
+        QR3(Lxi + Nk * n // 2, bp2)[1]
         + QI(Lxi + Nk * n // 2)[1]
-        + QR_ncr(Lxi, bp2)[1]
+        + QR3(Lxi, bp2)[1]
         + QI(Lxi)[1]
     )
 
@@ -257,9 +237,9 @@ def _cost_double_factorization(
 
     # The costs of the QROMs and their inverses in steps 4 (b) and (g).
     cost4bg = (
-        QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nNk)[1]
+        QR3(Lxi + Nk * n // 2, 2 * n * beta + nNk)[1]
         + QI(Lxi + Nk * n // 2)[1]
-        + QR_ncr(Lxi, 4 * n)[1]
+        + QR3(Lxi, 4 * n)[1]
         + QI(Lxi)[1]
     )
 
@@ -304,7 +284,7 @@ def _cost_double_factorization(
 
     # Now the number of qubits from the list on page 54.
 
-    k1 = np.power(2, QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nNk)[0])
+    k1 = np.power(2, QR3(Lxi + Nk * n // 2, 2 * n * beta + nNk)[0])
 
     # The control register for phase estimation and iteration on it.
     ac1 = np.ceil(np.log2(iters + 1)) * 2 - 1

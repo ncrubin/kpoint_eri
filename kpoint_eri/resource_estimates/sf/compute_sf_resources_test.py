@@ -2,9 +2,8 @@ import numpy as np
 from kpoint_eri.resource_estimates.sf.compute_sf_resources import (
     _cost_single_factorization,
     cost_single_factorization,
-    QR2,
-    QI2,
 )
+from kpoint_eri.resource_estimates.utils.lcu_utils import QR2, QI2
 
 
 def test_qr2():
