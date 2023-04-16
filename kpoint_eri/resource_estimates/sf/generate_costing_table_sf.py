@@ -24,7 +24,7 @@ def generate_costing_table(
     chi: int = 10,
     dE_for_qpe=0.0016,
     energy_method="MP2",
-) -> pd.DataFrame:
+) -> PBCResources:
     """Generate resource estimate costing table given a set of cutoffs for
         single-factorized Hamiltonian.
 

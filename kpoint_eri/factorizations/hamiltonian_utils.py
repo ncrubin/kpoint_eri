@@ -77,10 +77,10 @@ def cholesky_from_df_ints(mp2_inst, pad_mos_with_zeros=True) -> npt.NDArray:
     nao = cell.nao_nr()
 
     mo_coeff = mp2_inst._scf.mo_coeff
+    kpts = mp2_inst.kpts
     if pad_mos_with_zeros:
         mo_coeff = _add_padding(mp2_inst, mp2_inst.mo_coeff, mp2_inst.mo_energy)[0]
         nmo = mp2_inst.nmo
-        kpts = mp2_inst.kpts
     else:
         nmo = nao
         num_mo_per_kpt = np.array([C.shape[-1] for C in mo_coeff])
