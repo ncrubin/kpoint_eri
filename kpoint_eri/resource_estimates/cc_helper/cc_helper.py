@@ -1,11 +1,18 @@
 """Utilities for overwriting CCSD pbc eris with integral factorizations."""
-import copy
-import numpy as np
 
 from pyscf.lib import logger
 from pyscf.pbc.lib.kpts_helper import loop_kkk
 from pyscf.pbc.cc.kccsd_uhf import _make_eris_incore
 from pyscf.pbc.cc.kccsd_rhf import _ERIS
+from pyscf.pbc import cc, scf
+
+def build_cc_inst(pyscf_mf):
+    if pyscf_mf.cell.spin == 0:
+        cc_inst = cc.KRCCSD(pyscf_mf)
+    else:
+        u_from_ro = scf.addons.convert_to_uhf(pyscf_mf)
+        cc_inst = cc.KUCCSD(u_from_ro)
+    return cc_inst
 
 
 def build_approximate_eris(krcc_inst, eri_helper, eris=None):

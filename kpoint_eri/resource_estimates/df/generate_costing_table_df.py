@@ -2,16 +2,19 @@ from dataclasses import dataclass, field
 from functools import reduce
 from typing import Union
 
-import pandas as pd
 import numpy as np
 
-from pyscf.pbc import scf, cc
+from pyscf.pbc import scf
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 from kpoint_eri.resource_estimates.df.integral_helper_df import DFABKpointIntegrals
 from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import (
+    build_approximate_eris,
+    build_cc_inst,
+    build_approximate_eris_rohf,
+)
 from kpoint_eri.resource_estimates.df.compute_lambda_df import compute_lambda
 from kpoint_eri.resource_estimates.df.compute_df_resources import (
     cost_double_factorization,
@@ -30,7 +33,7 @@ def generate_costing_table(
     cutoffs: np.ndarray,
     name: str = "pbc",
     chi: int = 10,
-    beta: Union[int, None] = None,
+    beta: int = 20,
     dE_for_qpe: float = 0.0016,
     energy_method: str = "MP2",
 ) -> DFResources:
@@ -56,8 +59,7 @@ def generate_costing_table(
         ValueError if energy_method is unknown.
     """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
-    cc_inst = cc.KRCCSD(pyscf_mf)
-    cc_inst.verbose = 0
+    cc_inst = build_cc_inst(pyscf_mf)
     exact_eris = cc_inst.ao2mo()
     if energy_method.lower() == "mp2":
         energy_function = lambda x: cc_inst.init_amps(x)
@@ -82,7 +84,7 @@ def generate_costing_table(
         dE=dE_for_qpe,
         chi=chi,
         beta=beta,
-        exact_energy=reference_energy,
+        exact_energy=np.real(reference_energy),
         num_aux=num_aux_df,
     )
     # Save some space and overwrite eris object from exact CC
@@ -94,7 +96,10 @@ def generate_costing_table(
         df_helper = DFABKpointIntegrals(cholesky_factor=chol, kmf=pyscf_mf)
         df_helper.double_factorize(thresh=cutoff)
         df_lambda = compute_lambda(hcore, df_helper)
-        approx_eris = build_approximate_eris(cc_inst, df_helper, eris=approx_eris)
+        if pyscf_mf.cell.spin == 0:
+            approx_eris = build_approximate_eris(cc_inst, df_helper, eris=approx_eris)
+        else:
+            approx_eris = build_approximate_eris_rohf(cc_inst, df_helper, eris=approx_eris)
         approx_energy, _, _ = energy_function(approx_eris)
         df_res_cost = cost_double_factorization(
             num_spin_orbs,
@@ -110,7 +115,7 @@ def generate_costing_table(
             ham_properties=df_lambda,
             resource_estimates=df_res_cost,
             cutoff=cutoff,
-            approx_energy=approx_energy,
+            approx_energy=np.real(approx_energy),
         )
 
     return df_resource_obj

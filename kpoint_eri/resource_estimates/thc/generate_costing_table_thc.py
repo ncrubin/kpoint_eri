@@ -1,11 +1,10 @@
-from dataclasses import dataclass, field
-from functools import reduce
+from dataclasses import dataclass
 from typing import Union
 
-import pandas as pd
 import numpy as np
+import numpy.typing as npt
 
-from pyscf.pbc import scf, cc
+from pyscf.pbc import scf
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
@@ -13,7 +12,11 @@ from kpoint_eri.resource_estimates.utils.misc_utils import PBCResources
 from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
     KPTHCHelperDoubleTranslation,
 )
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import (
+    build_approximate_eris,
+    build_cc_inst,
+    build_approximate_eris_rohf,
+)
 from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian
 from kpoint_eri.resource_estimates.thc.compute_lambda_thc import compute_lambda
 from kpoint_eri.resource_estimates.thc.compute_thc_resources import (
@@ -28,7 +31,7 @@ class THCResources(PBCResources):
 
 def generate_costing_table(
     pyscf_mf: scf.HF,
-    thc_rank_params: np.ndarray,
+    thc_rank_params: Union[list, npt.NDArray],
     name="pbc",
     chi: int = 10,
     beta: int = 20,
@@ -58,8 +61,7 @@ def generate_costing_table(
         resources: Table of resource estimates.
     """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
-    cc_inst = cc.KRCCSD(pyscf_mf)
-    cc_inst.verbose = 0
+    cc_inst = build_cc_inst(pyscf_mf)
     exact_eris = cc_inst.ao2mo()
     if energy_method.lower() == "mp2":
         energy_function = lambda x: cc_inst.init_amps(x)
@@ -80,7 +82,7 @@ def generate_costing_table(
         dE=dE_for_qpe,
         chi=chi,
         beta=beta,
-        exact_energy=reference_energy,
+        exact_energy=np.real(reference_energy),
     )
 
     # For the ISDF guess we need an FFTDF MF object (really just need the grids so a bit of a hack)
@@ -119,7 +121,10 @@ def generate_costing_table(
         )
         thc_lambda = compute_lambda(hcore, thc_helper)
         kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
-        approx_eris = build_approximate_eris(cc_inst, thc_helper, eris=approx_eris)
+        if pyscf_mf.cell.spin == 0:
+            approx_eris = build_approximate_eris(cc_inst, thc_helper, eris=approx_eris)
+        else:
+            approx_eris = build_approximate_eris_rohf(cc_inst, thc_helper, eris=approx_eris)
         approx_energy, _, _ = energy_function(approx_eris)
         thc_res_cost = cost_thc(
             num_spin_orbs,
@@ -134,7 +139,7 @@ def generate_costing_table(
             ham_properties=thc_lambda,
             resource_estimates=thc_res_cost,
             cutoff=thc_rank,
-            approx_energy=approx_energy,
+            approx_energy=np.real(approx_energy),
         )
 
     return thc_resource_obj

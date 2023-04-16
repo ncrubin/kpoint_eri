@@ -6,7 +6,11 @@ from pyscf.pbc import cc, scf
 from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 from kpoint_eri.factorizations.hamiltonian_utils import build_hamiltonian
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import (
+    build_approximate_eris,
+    build_cc_inst,
+    build_approximate_eris_rohf,
+)
 from kpoint_eri.resource_estimates.sf.compute_lambda_sf import compute_lambda
 from kpoint_eri.resource_estimates.sf.compute_sf_resources import (
     cost_single_factorization,
@@ -39,8 +43,7 @@ def generate_costing_table(
         resources: Table of resource estimates.
     """
     kmesh = kpts_to_kmesh(pyscf_mf.cell, pyscf_mf.kpts)
-    cc_inst = cc.KRCCSD(pyscf_mf)
-    cc_inst.verbose = 0
+    cc_inst = build_cc_inst(pyscf_mf)
     exact_eris = cc_inst.ao2mo()
     if energy_method == "MP2":
         energy_function = lambda x: cc_inst.init_amps(x)
@@ -61,14 +64,17 @@ def generate_costing_table(
         num_kpts=num_kpts,
         dE=dE_for_qpe,
         chi=chi,
-        exact_energy=reference_energy,
+        exact_energy=np.real(reference_energy),
     )
     approx_eris = exact_eris
     for cutoff in naux_cutoffs:
         sf_helper = SingleFactorizationHelper(
             cholesky_factor=chol, kmf=pyscf_mf, naux=cutoff
         )
-        approx_eris = build_approximate_eris(cc_inst, sf_helper, eris=approx_eris)
+        if pyscf_mf.cell.spin == 0:
+            approx_eris = build_approximate_eris(cc_inst, sf_helper, eris=approx_eris)
+        else:
+            approx_eris = build_approximate_eris_rohf(cc_inst, sf_helper, eris=approx_eris)
         approx_energy, _, _ = energy_function(approx_eris)
 
         sf_lambda = compute_lambda(hcore, sf_helper)
@@ -85,7 +91,7 @@ def generate_costing_table(
             ham_properties=sf_lambda,
             resource_estimates=sparse_res_cost,
             cutoff=sf_lambda.num_aux,
-            approx_energy=approx_energy,
+            approx_energy=np.real(approx_energy),
         )
 
     return sf_resource_obj
