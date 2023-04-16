@@ -8,28 +8,7 @@ from sympy import factorint
 from openfermion.resource_estimates.utils import QI
 
 from kpoint_eri.resource_estimates.utils.misc_utils import ResourceEstimates
-
-
-def QR_ncr(L, M1):
-    """
-    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
-    QRa = ArgMin[{L/2^k + Mm*(2^k - 1), k >= 0},   k \[Element] Integers];(*Gives the optimal k.*)
-    """
-    k = 0.5 * np.log2(L / M1)
-    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
-    try:
-        assert k >= 0
-    except AssertionError:
-        k_opt = 0
-        val_opt = np.ceil(value(k_opt))
-        assert val_opt.is_integer()
-        return int(k_opt), int(val_opt)
-    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
-    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
-    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
-    assert k_opt.is_integer()
-    assert val_opt.is_integer()
-    return int(k_opt), int(val_opt)
+from kpoint_eri.resource_estimates.utils.lcu_utils import QR3
 
 
 def cost_sparse(
@@ -154,11 +133,11 @@ def _cost_sparse(
     br = int(np.argmin(oh) + 1) + 2
 
     # Hand selecting the k expansion factor
-    k1 = QR_ncr(d, m)[0]
+    k1 = QR3(d, m)[0]
 
     # Equation (A17)
     cost = (
-        QR_ncr(d, m)[1]
+        QR3(d, m)[1]
         + QI(d)[1]
         + 6 * n * Nk
         + 8 * nN
