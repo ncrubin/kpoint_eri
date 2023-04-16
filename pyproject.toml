@@ -1,2 +1,5 @@
 [tool.pytest.ini_options]
 filterwarnings = ["ignore:::.*distutils*", "ignore:::.*h5py*", "ignore:::.*pyscf*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
