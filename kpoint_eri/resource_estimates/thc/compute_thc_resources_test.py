@@ -1,6 +1,6 @@
 import numpy as np
 
-from kpoint_eri.resource_estimates.thc.compute_thc_resources import _cost_thc
+from kpoint_eri.resource_estimates.thc.compute_thc_resources import _cost_thc, cost_thc
 
 
 def test_thc_resources():
@@ -31,3 +31,51 @@ def test_thc_resources():
     assert np.isclose(res[0], 202209)
     assert np.isclose(res[1], 97728216327)
     assert np.isclose(res[2], 77517)
+
+
+def test_thc_resources_helper():
+    lam = 307.68
+    dE = 0.001
+    n = 108
+    chi = 10
+    beta = 16
+    M = 350
+
+    res = cost_thc(
+        num_spin_orbs=n,
+        lambda_tot=lam,
+        thc_dim=M,
+        kmesh=[1, 1, 1],
+        dE_for_qpe=dE,
+        chi=chi,
+        beta=beta,
+    )
+    assert np.isclose(res.toffolis_per_step, 80098)
+    assert np.isclose(res.total_toffolis, 38711603694)
+    assert np.isclose(res.logical_qubits, 17630)
+
+    res = cost_thc(
+        num_spin_orbs=n,
+        lambda_tot=lam,
+        thc_dim=M,
+        kmesh=[3, 3, 3],
+        dE_for_qpe=dE,
+        chi=chi,
+        beta=beta,
+    )
+    assert np.isclose(res.toffolis_per_step, 270394)
+    assert np.isclose(res.total_toffolis, 130682231382)
+    assert np.isclose(res.logical_qubits, 78815)
+
+    res = cost_thc(
+        num_spin_orbs=n,
+        lambda_tot=lam,
+        thc_dim=M,
+        kmesh=[3, 5, 1],
+        dE_for_qpe=dE,
+        chi=chi,
+        beta=beta,
+    )
+    assert np.isclose(res.toffolis_per_step, 202209)
+    assert np.isclose(res.total_toffolis, 97728216327)
+    assert np.isclose(res.logical_qubits, 77517)

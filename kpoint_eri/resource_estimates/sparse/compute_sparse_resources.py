@@ -1,10 +1,8 @@
 """
 Compute resource estimates for sparse LCU of k-point Hamiltonian
 """
-from importlib.resources import Resource
 from typing import Tuple
 import numpy as np
-import numpy.typing as npt
 from numpy.lib.scimath import arccos, arcsin  # has analytc continuation to cplx
 from sympy import factorint
 from openfermion.resource_estimates.utils import QI
