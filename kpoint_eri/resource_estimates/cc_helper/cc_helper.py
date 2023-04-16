@@ -7,6 +7,16 @@ from pyscf.pbc.cc.kccsd_rhf import _ERIS
 from pyscf.pbc import cc, scf
 
 def build_cc_inst(pyscf_mf):
+    """Build PBC CC instance.
+
+    If ROHF build KUCCSD object
+
+    Args:
+        pyscf_mf: pyscf mean field object (RHF or ROHF).
+
+    Returns:
+        cc_inst: Coupled cluster instance (RHF->KRCCSD, ROHF->KUCCSD).
+    """
     if pyscf_mf.cell.spin == 0:
         cc_inst = cc.KRCCSD(pyscf_mf)
     else:
@@ -159,3 +169,19 @@ def build_approximate_eris_rohf(kucc_inst, eri_helper, eris=None):
     out_eris.LPV = None
 
     return out_eris
+
+def compute_emp2_approx(mf, intgl_helper) -> float:
+    """Compute MP2 energy given an integral helper
+
+    Args:
+        mf: pyscf MF object (RHF or ROHF).
+        ingl_helper: Integral helper (sparse, SF, DF, or THC)
+
+    Returns:
+        emp: MP2 total energy.
+    """
+    cc_inst = build_cc_inst(mf)
+    approx_eris = build_approximate_eris(cc_inst, intgl_helper)
+    emp2_approx, _, _ = cc_inst.init_amps(approx_eris)
+    emp2_approx += mf.e_tot
+    return emp2_approx
