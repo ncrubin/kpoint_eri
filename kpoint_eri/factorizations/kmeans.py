@@ -1,23 +1,29 @@
 import numpy as np
+import numpy.typing as npt
 
 
 class KMeansCVT(object):
-    def __init__(self, grid, max_iteration=100, threshold=1e-6):
+    def __init__(self, grid: npt.NDArray, max_iteration: int=100, threshold: float=1e-6):
         """Initialize k-means solver to find interpolating points for ISDF.
 
-        :param grid: Real space grid of dimension [Ng,Ndim], where Ng is the number
+        Args:
+        grid: Real space grid of dimension [Ng,Ndim], where Ng is the number
             of (dense) real space grid points and Ndim is number of spatial
             dimensions.
-        :param max_iteration: Maximum number of iterations to perform when
+        max_iteration: Maximum number of iterations to perform when
             classifying grid points. Default 100.
-        :param threshold: Threshold for exiting classification. Default 1e-6.
+        threshold: Threshold for exiting classification. Default 1e-6.
+
+        Returns:
         """
         self.grid = grid
         self.max_iteration = max_iteration
         self.threshold = threshold
 
     @staticmethod
-    def classify_grid_points(grid_points: np.ndarray, centroids: np.ndarray) -> np.ndarray:
+    def classify_grid_points(
+        grid_points: npt.NDArray, centroids: npt.NDArray
+    ) -> npt.NDArray:
         r"""Assign grid points to centroids.
 
         Find centroid closest to each given grid point.
@@ -25,37 +31,45 @@ class KMeansCVT(object):
         Note we don't use instance variable self.grid as we can abuse this
         function and use it to map grid to centroid and centroid to grid point.
 
-        :param grid_points: grid points to assign.
-        :param centroids: Centroids to which grid points should be assigned,
+        Args:
+          grid_points: grid points to assign.
+          centroids: Centroids to which grid points should be assigned,
             array of length num_interp_points.
-        :returns: 1D np.array assigning grid point to centroids
+
+        Returns:
+          1D np.array assigning grid point to centroids
         """
         # Build N_g x N_mu matrix of distances.
-        # distances = np.linalg.norm(
-            # grid_points[:, None, :] - centroids[None, :, :], axis=2
-        # )
         num_grid_points = grid_points.shape[0]
         num_interp_points = centroids.shape[0]
         distances = np.zeros((num_grid_points, num_interp_points))
         # For loop is faster than broadcasting by 2x.
         for ig in range(num_grid_points):
-            distances[ig] = np.linalg.norm(grid_points[ig]-centroids, axis=1)
+            distances[ig] = np.linalg.norm(grid_points[ig] - centroids, axis=1)
         # Find shortest distance for each grid point.
         classification = np.argmin(distances, axis=1)
         return classification
 
     def compute_new_centroids(
         self, weighting, grid_mapping, current_centroids
-    ) -> np.ndarray:
+    ) -> npt.NDArray:
         r"""
         Centroids are defined via:
 
         .. math::
 
             c(C_\mu) = \frac{\sum_{j in C(\mu)} r_j \rho(r_j)}{\sum_{j in
-            C(\mu)} \rho(r_j)},
+                C(\mu)} \rho(r_j)},
 
         where :math:`\rho(r_j)` is the weighting factor.
+
+        Args:
+            weighting: Weighting function.
+            grid_mapping: maps grid points to centroids
+            current_centroids: centroids for current iteration.
+
+        Returns:
+            new_centroids: updated centroids
         """
         num_interp_points = current_centroids.shape[0]
         new_centroids = np.zeros_like(current_centroids)
@@ -79,11 +93,21 @@ class KMeansCVT(object):
     def find_interpolating_points(
         self,
         num_interp_points: int,
-        weighting_factor: np.ndarray,
+        weighting_factor: npt.NDArray,
         centroids=None,
         verbose=True,
-    ) -> np.ndarray:
-        """
+    ) -> npt.NDArray:
+        """Find interpolating points using KMeans-CVT algorithm.
+
+        Args:
+            num_interp_points: number of points to select. 
+            weighting_factor: weighting function for K-Means procedure. 
+            centroids: initial guess at centroids, if None centroids are selected
+                randomly from the grid points. 
+            verbose: Controls if information is printed about convergence. Default value = True.
+
+        Returns:
+            interp_pts: index associated with interpolating points. 
         """
         num_grid_points = self.grid.shape[0]
         if centroids is None:

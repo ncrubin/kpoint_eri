@@ -39,7 +39,7 @@ from kpoint_eri.resource_estimates.sparse.ncr_sparse_integral_helper import (
     NCRSSparseFactorizationHelper,
 )
 from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
-from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_cc
+from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_eris
 from kpoint_eri.resource_estimates.sparse.compute_lambda_sparse import (
     compute_lambda_ncr as compute_lambda_sparse
 )

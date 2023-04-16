@@ -1,85 +1,187 @@
+"""Utilities for overwriting CCSD pbc eris with integral factorizations."""
+
+from pyscf.lib import logger
+from pyscf.pbc.lib.kpts_helper import loop_kkk
+from pyscf.pbc.cc.kccsd_uhf import _make_eris_incore
+from pyscf.pbc.cc.kccsd_rhf import _ERIS
 from pyscf.pbc import cc, scf
 
-from kpoint_eri.resource_estimates import cc_helper
-from kpoint_eri.resource_estimates import utils
+def build_cc_inst(pyscf_mf):
+    """Build PBC CC instance.
 
-def build_cc(approx_cc, helper):
-    eris = cc_helper._ERIS(
-            approx_cc,
-            approx_cc.mo_coeff,
-            eri_helper=helper,
-            method='incore')
-    def ao2mo(self, mo_coeff=None):
-        return eris
-    approx_cc.ao2mo = ao2mo
-    return approx_cc
+    If ROHF build KUCCSD object
 
-def build_krcc_sparse_eris(pyscf_mf, threshold=1e-5):
-    approx_cc = cc.KRCCSD(pyscf_mf)
-    helper = cc_helper.SparseHelper(
-            pyscf_mf.with_df,
-            pyscf_mf.mo_coeff,
-            pyscf_mf.kpts,
-            threshold=threshold
+    Args:
+        pyscf_mf: pyscf mean field object (RHF or ROHF).
+
+    Returns:
+        cc_inst: Coupled cluster instance (RHF->KRCCSD, ROHF->KUCCSD).
+    """
+    if pyscf_mf.cell.spin == 0:
+        cc_inst = cc.KRCCSD(pyscf_mf)
+    else:
+        u_from_ro = scf.addons.convert_to_uhf(pyscf_mf)
+        cc_inst = cc.KUCCSD(u_from_ro)
+    return cc_inst
+
+
+def build_approximate_eris(krcc_inst, eri_helper, eris=None):
+    """Update coupled cluster eris object with approximate integrals defined by eri_helper.
+
+    Arguments:
+        cc: pyscf PBC KRCCSD object.
+        eri_helper: Approximate ERIs helper function which defines MO integrals.
+        eris: pyscf _ERIS object. Optional, if present overwrite this eris
+            object rather than build from scratch.
+
+    Returns:
+        eris: pyscf _ERIS object updated to hold approximate eris
+            defined by eri_helper.
+    """
+    log = logger.Logger(krcc_inst.stdout, krcc_inst.verbose)
+    kconserv = krcc_inst.khelper.kconserv
+    khelper = krcc_inst.khelper
+    nocc = krcc_inst.nocc
+    nkpts = krcc_inst.nkpts
+    dtype = krcc_inst.mo_coeff[0].dtype
+    if eris is not None:
+        log.info(
+            f"Modifying coupled cluster _ERIS object inplace using {eri_helper.__class__}."
+        )
+        out_eris = eris
+    else:
+        log.info(
+            f"Rebuilding coupled cluster _ERIS object using {eri_helper.__class__}."
+        )
+        out_eris = _ERIS(krcc_inst) 
+    for ikp, ikq, ikr in khelper.symm_map.keys():
+        iks = kconserv[ikp, ikq, ikr]
+        kpts = [ikp, ikq, ikr, iks]
+        eri_kpt = eri_helper.get_eri(kpts) / nkpts
+        if dtype == float:
+            eri_kpt = eri_kpt.real
+        eri_kpt = eri_kpt
+        for kp, kq, kr in khelper.symm_map[(ikp, ikq, ikr)]:
+            eri_kpt_symm = khelper.transform_symm(eri_kpt, kp, kq, kr).transpose(
+                0, 2, 1, 3
             )
-    return build_cc(approx_cc, helper)
+            out_eris.oooo[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, :nocc, :nocc]
+            out_eris.ooov[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, :nocc, nocc:]
+            out_eris.oovv[kp, kr, kq] = eri_kpt_symm[:nocc, :nocc, nocc:, nocc:]
+            out_eris.ovov[kp, kr, kq] = eri_kpt_symm[:nocc, nocc:, :nocc, nocc:]
+            out_eris.voov[kp, kr, kq] = eri_kpt_symm[nocc:, :nocc, :nocc, nocc:]
+            out_eris.vovv[kp, kr, kq] = eri_kpt_symm[nocc:, :nocc, nocc:, nocc:]
+            out_eris.vvvv[kp, kr, kq] = eri_kpt_symm[nocc:, nocc:, nocc:, nocc:]
+    return out_eris
 
-def build_krcc_sf_eris(
-        pyscf_mf,
-        chol,
-        mom_map,
-        kpoints
-        ):
-    approx_cc = cc.KRCCSD(pyscf_mf)
-    helper = cc_helper.SingleFactorizationHelper(
-            chol,
-            mom_map,
-            kpoints
-            )
-    return build_cc(approx_cc, helper)
 
-def build_krcc_df_eris(
-        pyscf_mf,
-        chol,
-        mom_map,
-        kpoints,
-        nmo_pk,
-        df_thresh=1e-5
-        ):
-    approx_cc = cc.KRCCSD(pyscf_mf)
-    helper = cc_helper.DoubleFactorizationHelper(
-            chol,
-            mom_map,
-            kpoints,
-            nmo_pk,
-            df_thresh=df_thresh
-            )
-    return build_cc(approx_cc, helper)
+def build_approximate_eris_rohf(kucc_inst, eri_helper, eris=None):
+    """Update unrestricted coupled cluster eris object with approximate
+    integrals defined by eri_helper.
 
-# supercell case
-def build_krcc_thc_eris(
-        pyscf_mf,
-        etapP,
-        MPQ
-        ):
-    scmf = utils.k2gamma(pyscf_mf)
-    kscmf = scf.KRHF(scmf.cell)
-    kscmf.mo_coeff = [scmf.mo_coeff]
-    kscmf.mo_occ = [scmf.mo_occ]
-    kscmf.get_hcore = lambda *args: [scmf.get_hcore()]
-    kscmf.get_ovlp = lambda *args: [scmf.get_ovlp()]
-    kscmf.mo_energy = [scmf.mo_energy]
-    approx_cc = cc.KRCCSD(kscmf)
-    helper = cc_helper.THCHelper(
-            etapP,
-            MPQ
-            )
-    return build_cc(approx_cc, helper)
+    KROCCSD is run through KUCCSD object, but we expect (and build) RO integrals only.
 
-def compute_emp2_approx(mf, helper):
-    approx_cc = cc.KRCCSD(mf)
-    approx_cc = build_cc(approx_cc, helper)
-    eris = approx_cc.ao2mo(lambda x: x)
-    emp2, _, _ = approx_cc.init_amps(eris)
-    emp2 += mf.e_tot
-    return emp2
+    Arguments:
+        kucc_inst: pyscf PBC KUCCSD object. Only ROHF integrals are supported.
+        eri_helper: Approximate ERIs helper function which defines MO integrals.
+        eris: pyscf _ERIS object. Optional, if present overwrite this eris
+            object rather than build from scratch.
+
+    Returns:
+        eris: pyscf _ERIS object updated to hold approximate eris defined by
+            eri_helper.
+    """
+    log = logger.Logger(kucc_inst.stdout, kucc_inst.verbose)
+    kconserv = kucc_inst.khelper.kconserv
+    nocca, noccb = kucc_inst.nocc
+    nkpts = kucc_inst.nkpts
+    if eris is not None:
+        log.info(
+            f"Modifying coupled cluster _ERIS object inplace using {eri_helper.__class__}."
+        )
+        out_eris = eris
+    else:
+        log.info(
+            f"Rebuilding coupled cluster _ERIS object using {eri_helper.__class__}."
+        )
+        out_eris = _make_eris_incore(kucc_inst)
+    for kp, kq, kr in loop_kkk(nkpts):
+        ks = kconserv[kp, kq, kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        out_eris.oooo[kp, kq, kr] = tmp[:nocca, :nocca, :nocca, :nocca]
+        out_eris.ooov[kp, kq, kr] = tmp[:nocca, :nocca, :nocca, nocca:]
+        out_eris.oovv[kp, kq, kr] = tmp[:nocca, :nocca, nocca:, nocca:]
+        out_eris.ovov[kp, kq, kr] = tmp[:nocca, nocca:, :nocca, nocca:]
+        out_eris.voov[kq, kp, ks] = (
+            tmp[:nocca, nocca:, nocca:, :nocca].conj().transpose(1, 0, 3, 2)
+        )
+        out_eris.vovv[kq, kp, ks] = (
+            tmp[:nocca, nocca:, nocca:, nocca:].conj().transpose(1, 0, 3, 2)
+        )
+
+    for kp, kq, kr in loop_kkk(nkpts):
+        ks = kconserv[kp, kq, kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        out_eris.OOOO[kp, kq, kr] = tmp[:noccb, :noccb, :noccb, :noccb]
+        out_eris.OOOV[kp, kq, kr] = tmp[:noccb, :noccb, :noccb, noccb:]
+        out_eris.OOVV[kp, kq, kr] = tmp[:noccb, :noccb, noccb:, noccb:]
+        out_eris.OVOV[kp, kq, kr] = tmp[:noccb, noccb:, :noccb, noccb:]
+        out_eris.VOOV[kq, kp, ks] = (
+            tmp[:noccb, noccb:, noccb:, :noccb].conj().transpose(1, 0, 3, 2)
+        )
+        out_eris.VOVV[kq, kp, ks] = (
+            tmp[:noccb, noccb:, noccb:, noccb:].conj().transpose(1, 0, 3, 2)
+        )
+
+    for kp, kq, kr in loop_kkk(nkpts):
+        ks = kconserv[kp, kq, kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        out_eris.ooOO[kp, kq, kr] = tmp[:nocca, :nocca, :noccb, :noccb]
+        out_eris.ooOV[kp, kq, kr] = tmp[:nocca, :nocca, :noccb, noccb:]
+        out_eris.ooVV[kp, kq, kr] = tmp[:nocca, :nocca, noccb:, noccb:]
+        out_eris.ovOV[kp, kq, kr] = tmp[:nocca, nocca:, :noccb, noccb:]
+        out_eris.voOV[kq, kp, ks] = (
+            tmp[:nocca, nocca:, noccb:, :noccb].conj().transpose(1, 0, 3, 2)
+        )
+        out_eris.voVV[kq, kp, ks] = (
+            tmp[:nocca, nocca:, noccb:, noccb:].conj().transpose(1, 0, 3, 2)
+        )
+
+    for kp, kq, kr in loop_kkk(nkpts):
+        ks = kconserv[kp, kq, kr]
+        kpts = [kp, kq, kr, ks]
+        tmp = eri_helper.get_eri(kpts) / nkpts
+        # out_eris.OOoo[kp,kq,kr] = tmp[:noccb,:noccb,:nocca,:nocca]
+        out_eris.OOov[kp, kq, kr] = tmp[:noccb, :noccb, :nocca, nocca:]
+        out_eris.OOvv[kp, kq, kr] = tmp[:noccb, :noccb, nocca:, nocca:]
+        out_eris.OVov[kp, kq, kr] = tmp[:noccb, noccb:, :nocca, nocca:]
+        out_eris.VOov[kq, kp, ks] = (
+            tmp[:noccb, noccb:, nocca:, :nocca].conj().transpose(1, 0, 3, 2)
+        )
+        out_eris.VOvv[kq, kp, ks] = (
+            tmp[:noccb, noccb:, nocca:, nocca:].conj().transpose(1, 0, 3, 2)
+        )
+    # Force CCSD to use eri tensors.
+    out_eris.Lpv = None
+    out_eris.LPV = None
+
+    return out_eris
+
+def compute_emp2_approx(mf, intgl_helper) -> float:
+    """Compute MP2 energy given an integral helper
+
+    Args:
+        mf: pyscf MF object (RHF or ROHF).
+        ingl_helper: Integral helper (sparse, SF, DF, or THC)
+
+    Returns:
+        emp: MP2 total energy.
+    """
+    cc_inst = build_cc_inst(mf)
+    approx_eris = build_approximate_eris(cc_inst, intgl_helper)
+    emp2_approx, _, _ = cc_inst.init_amps(approx_eris)
+    emp2_approx += mf.e_tot
+    return emp2_approx

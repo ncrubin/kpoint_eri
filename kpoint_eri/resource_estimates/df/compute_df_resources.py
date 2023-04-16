@@ -2,69 +2,120 @@
 
 From openfermion
 """
-from typing import Tuple
+from typing import Tuple, Union
 import numpy as np
-from numpy.lib.scimath import arccos, arcsin  # has analytc continuation to cplx
+from numpy.lib.scimath import arccos, arcsin
 from sympy import factorint
 
-from openfermion.resource_estimates.utils import QR, QI, power_two
+from openfermion.resource_estimates.utils import QI
 
-def QR_ncr(L, M1):
+from kpoint_eri.resource_estimates.utils.misc_utils import (
+    ResourceEstimates,
+    compute_beta_for_resources,
+)
+from kpoint_eri.resource_estimates.utils.lcu_utils import QR3
+
+
+def cost_double_factorization(
+    num_spin_orbs: int,
+    lambda_tot: float,
+    num_aux: int,
+    num_eig: int,
+    kmesh: list[int],
+    dE_for_qpe: float = 0.0016,
+    chi: int = 10,
+    beta: Union[int, None] = None,
+) -> ResourceEstimates:
+    """Determine fault-tolerant costs using single factorization representaion of symmetry
+        adapted integrals.
+
+    Light wrapper around _cost_single_factorization to automate choice of stps paramter.
+
+    Arguments:
+        num_spin_orbs: the number of spin-orbitals
+        lambda_tot: the lambda-value for the Hamiltonian
+        num_aux: number auxiliary vectors for the first factorization.
+        num_eig: number of retained eigenvalues for the second factorization.
+        dE_for_qpe: allowable error in phase estimation
+        chi: the number of bits for the representation of the coefficients
+        beta: the number of bits for controlled rotations
+    Returns:
+        resources: double factorized resource estimates
     """
-    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
-    """
-    k = 0.5 * np.log2(L / M1)
-    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
-    try:
-        assert k >= 0
-    except AssertionError:
-        k_opt = 0
-        val_opt = np.ceil(value(k_opt))
-        assert val_opt.is_integer()
-        return int(k_opt), int(val_opt)
-    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
-    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
-    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
-    assert k_opt.is_integer()
-    assert val_opt.is_integer()
-    return int(k_opt), int(val_opt)
+    # run once to determine stps parameter
+    if beta is None:
+        num_kpts = np.prod(kmesh)
+        beta = compute_beta_for_resources(num_spin_orbs, num_kpts, dE_for_qpe)
+    init_cost = _cost_double_factorization(
+        n=num_spin_orbs,
+        lam=lambda_tot,
+        dE=dE_for_qpe,
+        L=num_aux,
+        Lxi=num_eig,
+        chi=chi,
+        beta=beta,
+        Nkx=kmesh[0],
+        Nky=kmesh[1],
+        Nkz=kmesh[2],
+        stps=20_000,
+    )
+    steps = init_cost[0]
+    final_cost = _cost_double_factorization(
+        n=num_spin_orbs,
+        lam=lambda_tot,
+        dE=dE_for_qpe,
+        L=num_aux,
+        Lxi=num_eig,
+        chi=chi,
+        beta=beta,
+        Nkx=kmesh[0],
+        Nky=kmesh[1],
+        Nkz=kmesh[2],
+        stps=steps,
+    )
+    estimates = ResourceEstimates(
+        toffolis_per_step=final_cost[0],
+        total_toffolis=final_cost[1],
+        logical_qubits=final_cost[2],
+    )
+    return estimates
 
 
-def compute_cost(n: int,
-                 lam: float,
-                 dE: float,
-                 L: int,
-                 Lxi: int,
-                 chi: int,
-                 beta: int,
-                 Nkx: int,
-                 Nky: int,
-                 Nkz: int,
-                 stps: int,
-                 verbose: bool = False) -> Tuple[int, int, int]:
-    """ Determine fault-tolerant costs using DF decomposition in quantum chem
+def _cost_double_factorization(
+    n: int,
+    lam: float,
+    dE: float,
+    L: int,
+    Lxi: int,
+    chi: int,
+    beta: int,
+    Nkx: int,
+    Nky: int,
+    Nkz: int,
+    stps: int,
+    verbose: bool = False,
+) -> Tuple[int, int, int]:
+    """Determine fault-tolerant costs using DF decomposition in quantum chem
 
-    Args:
-        n (int) - the number of spin-orbitals.
-        lam (float) - the lambda-value for the Hamiltonian
-        dE (float) - allowable error in phase estimation
-        L (int) - the rank of the first decomposition
-        Lxi (int) - the total number of eigenvectors
-        chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
-            number of bits for the representation of the coefficients
-        beta (int) - equivalent to beth in the document, the number of bits
-            for the rotations
-        Nkx (int) - Number of k-points in x-direction
-        Nky (int) - Number of k-points in y-direction
-        Nkz (int) - Number of k-points in z-direction
-        stps (int) - an approximate number of steps to choose the precision of
+    Arguments:
+        n: the number of spin-orbitals.
+        lam: the lambda-value for the Hamiltonian
+        dE: allowable error in phase estimation
+        L: the rank of the first decomposition
+        Lxi: the total number of eigenvectors
+        chi: the number of bits for the representation of the coefficients
+        beta: the number of bits for the rotations
+        Nkx: Number of k-points in x-direction
+        Nky: Number of k-points in y-direction
+        Nkz:  Number of k-points in z-direction
+        stps: an approximate number of steps to choose the precision of
             single qubit rotations in preparation of the equal superpositn state
-        verbose (bool) - do additional printing of intermediates?
+        verbose: do additional printing of intermediates?
 
     Returns:
-        step_cost (int) - Toffolis per step
-        total_cost (int) - Total number of Toffolis
-        ancilla_cost (int) - Total ancilla cost
+        step_cost: Toffolis per step
+        total_cost: Total number of Toffolis
+        ancilla_cost: Total ancilla cost
     """
     nNk = (
         max(np.ceil(np.log2(Nkx)), 1)
@@ -92,11 +143,30 @@ def compute_cost(n: int,
     oh = [0] * 20
     for p in range(20):
         # JJG note: arccos arg may be > 1
-        v = np.round(np.power(2,p+1) / (2 * np.pi) * arccos(np.power(2,nL) /\
-            np.sqrt((L + 1)/2**eta)/2))
-        oh[p] = np.real(stps * (1 / (np.sin(3 * arcsin(np.cos(v * 2 * np.pi / \
-            np.power(2,p+1)) * \
-            np.sqrt((L + 1)/2**eta) / np.power(2,nL)))**2) - 1) + 4 * (p + 1))
+        v = np.round(
+            np.power(2, p + 1)
+            / (2 * np.pi)
+            * arccos(np.power(2, nL) / np.sqrt((L + 1) / 2**eta) / 2)
+        )
+        oh[p] = np.real(
+            stps
+            * (
+                1
+                / (
+                    np.sin(
+                        3
+                        * arcsin(
+                            np.cos(v * 2 * np.pi / np.power(2, p + 1))
+                            * np.sqrt((L + 1) / 2**eta)
+                            / np.power(2, nL)
+                        )
+                    )
+                    ** 2
+                )
+                - 1
+            )
+            + 4 * (p + 1)
+        )
 
     # print(oh)
     # Bits of precision for rotation
@@ -113,7 +183,7 @@ def compute_cost(n: int,
 
     # The cost of the QROM for the first state preparation in step 1 (b) and
     # its inverse.
-    cost1b = QR_ncr(L + 1, bp1)[1] + QI(L + 1)[1]
+    cost1b = QR3(L + 1, bp1)[1] + QI(L + 1)[1]
 
     # The cost for the inequality test, controlled swap and their inverse in
     # steps 1 (c) and (d)
@@ -125,13 +195,13 @@ def compute_cost(n: int,
     # The output size for the QROM for the data to prepare the equal
     # superposition on the second register, as given in Eq. (C29).
     bo = nxi + nLxi + br + 1
-    bo = bo + nNk # account for k-point sampling outputting values of Q.
+    bo = bo + nNk  # account for k-point sampling outputting values of Q.
 
     # This is step 2. This is the cost of outputting the data to prepare the
     # equal superposition on the second register. We will assume it is not
     # uncomputed, because we want to keep the offset for applying the QROM for
     # outputting the rotations.
-    cost2 = QR_ncr(L + 1, bo)[1] + QI(L + 1)[1]
+    cost2 = QR3(L + 1, bo)[1] + QI(L + 1)[1]
 
     # The number of bits for rotating the ancilla for the second preparation.
     # We are just entering this manually because it is a typical value.
@@ -149,8 +219,12 @@ def compute_cost(n: int,
 
     # The cost of the QROMs and inverse QROMs for the state preparation, where
     # in the first one we need + n/2 to account for the one-electron terms.
-    cost3c = QR_ncr(Lxi + Nk * n // 2, bp2)[1] + QI(Lxi + Nk * n // 2)[1] + QR_ncr(
-        Lxi, bp2)[1] + QI(Lxi)[1]
+    cost3c = (
+        QR3(Lxi + Nk * n // 2, bp2)[1]
+        + QI(Lxi + Nk * n // 2)[1]
+        + QR3(Lxi, bp2)[1]
+        + QI(Lxi)[1]
+    )
 
     # The inequality test and state preparations.
     cost3d = 4 * (nxi + chi)
@@ -162,8 +236,12 @@ def compute_cost(n: int,
     cost4ah = 4 * (nLxi - 1)
 
     # The costs of the QROMs and their inverses in steps 4 (b) and (g).
-    cost4bg = QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nNk)[1] + QI(Lxi + Nk * n // 2)[1] + QR_ncr(
-        Lxi, 4 * n)[1] + QI(Lxi)[1]
+    cost4bg = (
+        QR3(Lxi + Nk * n // 2, 2 * n * beta + nNk)[1]
+        + QI(Lxi + Nk * n // 2)[1]
+        + QR3(Lxi, 4 * n)[1]
+        + QI(Lxi)[1]
+    )
 
     # The cost of the controlled swaps based on the spin qubit in steps 4c and f
     cost4cf = 2 * n * Nk
@@ -173,14 +251,16 @@ def compute_cost(n: int,
 
     # The controlled Z operations in the middle for step 4 (e).
     cost4e = 3
-    cost4e = cost4e + 4 * n * Nk + 12 * nNk # extra cost of swapping into working registers and computing k-Q.
+    cost4e = (
+        cost4e + 4 * n * Nk + 12 * nNk
+    )  # extra cost of swapping into working registers and computing k-Q.
 
     # (*Adjustment for modular arithmetic costs.*)
-    if Nkx == 2**np.ceil(np.log2(Nkx)):
-        cost4e = cost4e - 2 * np.ceil(np.log2(Nkx)) 
-    if Nky == 2**np.ceil(np.log2(Nky)):
-        cost4e = cost4e - 2 * np.ceil(np.log2(Nky)) 
-    if Nkz == 2**np.ceil(np.log2(Nkz)):
+    if Nkx == 2 ** np.ceil(np.log2(Nkx)):
+        cost4e = cost4e - 2 * np.ceil(np.log2(Nkx))
+    if Nky == 2 ** np.ceil(np.log2(Nky)):
+        cost4e = cost4e - 2 * np.ceil(np.log2(Nky))
+    if Nkz == 2 ** np.ceil(np.log2(Nkz)):
         cost4e = cost4e - 2 * np.ceil(np.log2(Nkz))
 
     # This is the cost of the controlled rotations for step 4.
@@ -204,7 +284,7 @@ def compute_cost(n: int,
 
     # Now the number of qubits from the list on page 54.
 
-    k1 = np.power(2, QR_ncr(Lxi + Nk * n // 2, 2 * n * beta + nNk)[0])
+    k1 = np.power(2, QR3(Lxi + Nk * n // 2, 2 * n * beta + nNk)[0])
 
     # The control register for phase estimation and iteration on it.
     ac1 = np.ceil(np.log2(iters + 1)) * 2 - 1
@@ -243,7 +323,7 @@ def compute_cost(n: int,
     ac13 = 1
 
     # extra for kpoint
-    ac14 = nNk + 2 * n 
+    ac14 = nNk + 2 * n
 
     if verbose:
         print("[*] Top of routine")
@@ -256,8 +336,9 @@ def compute_cost(n: int,
         print("  [+] cost = ", cost)
         print("  [+] iters = ", iters)
 
-    ancilla_cost = ac1 + ac2 + ac3 + ac4 + ac5 + ac6 + ac8 + ac9 + ac10 + ac11\
-                 + ac12 + ac13 + ac14
+    ancilla_cost = (
+        ac1 + ac2 + ac3 + ac4 + ac5 + ac6 + ac8 + ac9 + ac10 + ac11 + ac12 + ac13 + ac14
+    )
 
     # Sanity checks before returning as int
     assert cost.is_integer()
@@ -269,45 +350,3 @@ def compute_cost(n: int,
     ancilla_cost = int(ancilla_cost)
 
     return step_cost, total_cost, ancilla_cost
-
-if __name__ == "__main__":
-    nRe = 108
-    lamRe = 294.8
-    dE = 0.001
-    LRe = 360
-    LxiRe = 13031
-    chi = 10
-    betaRe = 16
-
-    #(*The Li et al orbitals.*)
-    nLi = 152
-    lamLi = 1171.2
-    LLi = 394
-    LxiLi = 20115
-    betaLi = 20
-
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 2, 2, 2, 20_000) 
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 2, 2, 2, res[0]) 
-    # 48250, 22343175750, 8174
-    assert np.isclose(res[0], 48250)
-    assert np.isclose(res[1], 22343175750)
-    assert np.isclose(res[2], 8174)
-
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 3, 5, 1, 20_000) 
-    res = compute_cost(nRe, lamRe, dE, LRe, LxiRe, chi, betaRe, 3, 5, 1, res[0]) 
-    # 53146, 24610371366, 8945
-    assert np.isclose(res[0], 53146)
-    assert np.isclose(res[1], 24610371366)
-    assert np.isclose(res[2], 8945)
-
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 2, 2, 2, 20_000) 
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 2, 2, 2, res[0]) 
-    # print(res) # 79212, 145727663004, 13873
-    assert np.isclose(res[0], 79212)
-    assert np.isclose(res[1], 145727663004)
-    assert np.isclose(res[2], 13873)
-    res = compute_cost(nLi, lamLi, dE, LLi, LxiLi, chi, betaLi, 3, 5, 1, res[0])
-    # print(res) # 86042, 158292930114, 14952
-    assert np.isclose(res[0], 86042)
-    assert np.isclose(res[1], 158292930114)
-    assert np.isclose(res[2], 14952)

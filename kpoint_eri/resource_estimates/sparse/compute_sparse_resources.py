@@ -5,52 +5,80 @@ from typing import Tuple
 import numpy as np
 from numpy.lib.scimath import arccos, arcsin  # has analytc continuation to cplx
 from sympy import factorint
-from openfermion.resource_estimates.utils import QI, power_two
+from openfermion.resource_estimates.utils import QI
+
+from kpoint_eri.resource_estimates.utils.misc_utils import ResourceEstimates
+from kpoint_eri.resource_estimates.utils.lcu_utils import QR3
 
 
-def QR_ncr(L, M1):
+def cost_sparse(
+    num_spin_orbs: int,
+    lambda_tot: float,
+    num_sym_unique: int,
+    kmesh: list[int],
+    dE_for_qpe: float = 0.0016,
+    chi: int = 10,
+) -> ResourceEstimates:
+    """Determine fault-tolerant costs using sparse representaion of symmetry
+        adapted integrals.
+
+    Light wrapper around _cost_sparse to automate choice of stps paramter.
+
+    Arguments:
+        num_spin_orbs: the number of spin-orbitals
+        lambda_tot: the lambda-value for the Hamiltonian
+        num_sym_unique: number of symmetry unique terms kept in the sparse Hamiltonian
+        dE_for_qpe: allowable error in phase estimation
+        chi: the number of bits for the representation of the coefficients
+    Returns:
+        resources: sparse resources
     """
-    QR[Ll_, m_] := Ceiling[MinValue[{Ll/2^k + m*(2^k - 1), k >= 0}, k \[Element] Integers]];
-    QRa = ArgMin[{L/2^k + Mm*(2^k - 1), k >= 0},   k \[Element] Integers];(*Gives the optimal k.*)
-    """
-    k = 0.5 * np.log2(L / M1)
-    value = lambda k: L / np.power(2, k) + M1 * (np.power(2, k) - 1)
-    try:
-        assert k >= 0
-    except AssertionError:
-        k_opt = 0
-        val_opt = np.ceil(value(k_opt))
-        assert val_opt.is_integer()
-        return int(k_opt), int(val_opt)
-    k_int = [np.floor(k), np.ceil(k)]  # restrict optimal k to integers
-    k_opt = k_int[np.argmin(value(k_int))]  # obtain optimal k
-    val_opt = np.ceil(value(k_opt))  # obtain ceiling of optimal value given k
-    assert k_opt.is_integer()
-    assert val_opt.is_integer()
-    return int(k_opt), int(val_opt)
+    # run once to determine stps parameter
+    init_cost = _cost_sparse(
+        num_spin_orbs, lambda_tot, num_sym_unique, dE_for_qpe, chi, 20_000, *kmesh
+    )
+    steps = init_cost[0]
+    final_cost = _cost_sparse(
+        num_spin_orbs, lambda_tot, num_sym_unique, dE_for_qpe, chi, steps, *kmesh
+    )
+    estimates = ResourceEstimates(
+        toffolis_per_step=final_cost[0],
+        total_toffolis=final_cost[1],
+        logical_qubits=final_cost[2],
+        )
+    return estimates 
 
 
-def cost_sparse(n: int, lam: float, d: int, dE: float, chi: int,
-                stps: int, Nkx: int, Nky: int, Nkz: int) -> Tuple[int, int, int]:
-    """ Determine fault-tolerant costs using sparse decomposition in quantum
-        chemistry
-    Args:
-        n (int) - the number of spin-orbitals
-        lam (float) - the lambda-value for the Hamiltonian
-        d (int) - number of symmetry unique terms kept in the sparse Hamiltonian
-        dE (float) - allowable error in phase estimation
-        chi (int) - equivalent to aleph_1 and aleph_2 in the document, the
-            number of bits for the representation of the coefficients
-        stps (int) - an approximate number of steps to choose the precision
+def _cost_sparse(
+    n: int,
+    lam: float,
+    d: int,
+    dE: float,
+    chi: int,
+    stps: int,
+    Nkx: int,
+    Nky: int,
+    Nkz: int,
+) -> Tuple[int, int, int]:
+    """Determine fault-tolerant costs using sparse representaion of symmetry
+        adapted integrals.
+
+    Arguments:
+        n: the number of spin-orbitals
+        lam: the lambda-value for the Hamiltonian
+        d: number of symmetry unique terms kept in the sparse Hamiltonian
+        dE: allowable error in phase estimation
+        chi: the number of bits for the representation of the coefficients
+        stps: an approximate number of steps to choose the precision
             of single qubit rotations in preparation of the equal superposition
             state
-        Nkx (int) - number of k-points in x-direction
-        Nky (int) - number of k-points in y-direction
-        Nkz (int) - number of k-points in z-direction
+        Nkx: number of k-points in x-direction
+        Nky: number of k-points in y-direction
+        Nkz: number of k-points in z-direction
     Returns:
-        step_cost (int) - Toffolis per step
-        total_cost (int) - Total number of Toffolis
-        ancilla_cost (int) - Total ancilla cost
+        step_cost: Toffolis per step
+        total_cost: Total number of Toffolis
+        ancilla_cost: Total ancilla cost
     """
     if n % 2 != 0:
         raise ValueError("The number of spin orbitals is always even!")
@@ -76,28 +104,57 @@ def cost_sparse(n: int, lam: float, d: int, dE: float, chi: int,
 
     for p in range(2, 22):
         # JJG note: arccos arg may be > 1
-        v = np.round(np.power(2,p+1) / (2 * np.pi) * arccos(np.power(2,nM) /\
-            np.sqrt(d/2**eta)/2))
-        oh[p-2] = np.real(stps * (1 / (np.sin(3 * arcsin(np.cos(v * 2 * np.pi /\
-            np.power(2,p+1)) * \
-            np.sqrt(d/2**eta) / np.power(2,nM)))**2) - 1) + 4 * (p + 1))
+        v = np.round(
+            np.power(2, p + 1)
+            / (2 * np.pi)
+            * arccos(np.power(2, nM) / np.sqrt(d / 2**eta) / 2)
+        )
+        oh[p - 2] = np.real(
+            stps
+            * (
+                1
+                / (
+                    np.sin(
+                        3
+                        * arcsin(
+                            np.cos(v * 2 * np.pi / np.power(2, p + 1))
+                            * np.sqrt(d / 2**eta)
+                            / np.power(2, nM)
+                        )
+                    )
+                    ** 2
+                )
+                - 1
+            )
+            + 4 * (p + 1)
+        )
 
     # Bits of precision for rotation
     br = int(np.argmin(oh) + 1) + 2
 
     # Hand selecting the k expansion factor
-    k1 = QR_ncr(d, m)[0]
+    k1 = QR3(d, m)[0]
 
     # Equation (A17)
-    cost = QR_ncr(d, m)[1] + QI(d)[1] + 6 * n * Nk + 8 * nN + 12 * nNk + 2 * chi + \
-        7 * np.ceil(np.log2(d)) - 6 * eta + 4 * br - 8
-    
+    cost = (
+        QR3(d, m)[1]
+        + QI(d)[1]
+        + 6 * n * Nk
+        + 8 * nN
+        + 12 * nNk
+        + 2 * chi
+        + 7 * np.ceil(np.log2(d))
+        - 6 * eta
+        + 4 * br
+        - 8
+    )
+
     # The following are adjustments if we don't need to do explicit arithmetic to make subtraction modular
-    if Nkx == 2**np.ceil(np.log2(Nkx)):
+    if Nkx == 2 ** np.ceil(np.log2(Nkx)):
         cost = cost - 2 * np.ceil(np.log2(Nkx))
-    if Nky == 2**np.ceil(np.log2(Nky)):
+    if Nky == 2 ** np.ceil(np.log2(Nky)):
         cost = cost - 2 * np.ceil(np.log2(Nky))
-    if Nkz == 2**np.ceil(np.log2(Nkz)):
+    if Nkz == 2 ** np.ceil(np.log2(Nkz)):
         cost = cost - 2 * np.ceil(np.log2(Nkz))
 
     # Number of iterations needed for the phase estimation.
@@ -109,7 +166,7 @@ def cost_sparse(n: int, lam: float, d: int, dE: float, chi: int,
     ac1 = 2 * np.ceil(np.log2(iters)) - 1
 
     # System qubits
-    ac2 = n * Nk # shoulding this be Nk * n
+    ac2 = n * Nk  # shoulding this be Nk * n
 
     # The register used for the QROM
     ac3 = np.ceil(np.log2(d))

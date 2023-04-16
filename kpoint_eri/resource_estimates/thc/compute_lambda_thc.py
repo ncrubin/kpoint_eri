@@ -1,17 +1,33 @@
 import numpy as np
-from itertools import product
+import numpy.typing as npt
+from typing import Tuple
 
-from kpoint_eri.resource_estimates import sf
-from kpoint_eri.resource_estimates.thc.integral_helper import (
+from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
     KPTHCHelperDoubleTranslation,
 )
+from kpoint_eri.factorizations.hamiltonian_utils import HamiltonianProperties
 
 
-def compute_lambda_real(h1, etaPp, MPQ, chol):
-    """
-    Compute lambda thc assuming real THC factors (molecular way) but without
+def compute_lambda_real(
+    h1: npt.NDArray,
+    etaPp: npt.NDArray,
+    MPQ: npt.NDArray,
+    chol: npt.NDArray,
+) -> Tuple[float, float, float]:
+    """Compute lambda assuming real THC factors (molecular way) but without
     needing a molecular object as in openfermion. Just pared down function from
     openfermion.
+
+    Arguments:
+        h1: one-body hamiltonian
+        etaPp: THC leaf tensor
+        MPQ: THC central tensor.
+        chol: Cholesky factors.
+
+    Returns:
+        lambda_tot: Total lambda
+        lambda_one_body: One-body lambda
+        lambda_two_body: Two-body lambda
     """
     nthc = etaPp.shape[0]
 
@@ -45,15 +61,23 @@ def compute_lambda_real(h1, etaPp, MPQ, chol):
     return lambda_tot, lambda_T, lambda_z
 
 
-def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
-    """
-    Compute one-body and two-body lambda for qubitization of
-    tensor hypercontraction LUC
+def compute_lambda(
+    hcore: npt.NDArray, thc_obj: KPTHCHelperDoubleTranslation
+) -> HamiltonianProperties:
+    """Compute one-body and two-body lambda for qubitization of
+    tensor hypercontraction LCU.
 
     one-body term h_pq(k) = hcore_{pq}(k)
                             - 0.5 * sum_{Q}sum_{r}(pkrQ|rQqk)
-    :param hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
-    :param thc_obj: Object of KPTHCHelperDoubleTranslation
+
+    Args:
+      hcore: List len(kpts) long of nmo x nmo complex hermitian arrays
+      thc_obj: Object of KPTHCHelperDoubleTranslation
+
+    Returns:
+        lambda_tot: Total lambda
+        lambda_one_body: One-body lambda
+        lambda_two_body: Two-body lambda
     """
     kpts = thc_obj.kmf.kpts
     nkpts = len(kpts)
@@ -96,8 +120,13 @@ def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
                 norm_left = norm_kP[ik] * norm_kP[ik_minus_q]
                 norm_right = norm_kP[ik_prime_minus_q] * norm_kP[ik_prime]
                 MPQ_normalized = (
-                    np.einsum("P,PQ,Q->PQ", norm_left, zeta_Q[Gpq, Gsr],
-                              norm_right, optimize=True)
+                    np.einsum(
+                        "P,PQ,Q->PQ",
+                        norm_left,
+                        zeta_Q[Gpq, Gsr],
+                        norm_right,
+                        optimize=True,
+                    )
                     / nkpts
                 )
                 lambda_two_body += np.sum(np.abs(MPQ_normalized.real))
@@ -105,4 +134,9 @@ def compute_lambda_ncr_v2(hcore, thc_obj: KPTHCHelperDoubleTranslation):
     lambda_two_body *= 2
 
     lambda_tot = lambda_one_body + lambda_two_body
-    return lambda_tot, lambda_one_body, lambda_two_body
+    lambda_data = HamiltonianProperties(
+        lambda_total=lambda_tot,
+        lambda_one_body=lambda_one_body,
+        lambda_two_body=lambda_two_body,
+    )
+    return lambda_data

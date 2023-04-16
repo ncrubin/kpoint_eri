@@ -44,55 +44,12 @@ def test_kmeans():
 
     weight = gen_gaussian(xx, yy, grid)
     kmeans = KMeansCVT(grid)
-    interp_points = kmeans.find_interpolating_points(num_interp_points, weight,
-                                                     verbose=False)
+    interp_points = kmeans.find_interpolating_points(
+        num_interp_points, weight, verbose=False
+    )
     interp_points_ref = [32, 81, 77, 62, 28, 22, 76, 24, 27, 73]
     assert np.allclose(interp_points, interp_points_ref)
-    # print(interp_points)
 
-
-    # import matplotlib.pyplot as plt
-    # fig, ax = plt.subplots(1, 2)
-    # from scipy.spatial import Voronoi, voronoi_plot_2d
-    # vor = Voronoi(centroids)
-    # voronoi_plot_2d(
-        # vor,
-        # show_vertices=False,
-        # line_colors="blue",
-        # line_width=2,
-        # line_alpha=0.6,
-        # point_size=2,
-        # ax=ax[0],
-    # )
-
-    # CS = ax[0].contour(xx, yy, weight.reshape((num_grid_x, num_grid_x)))
-    # ax[0].clabel(CS, inline=1, fontsize=10)
-    # ax[0].plot(
-        # centroids[:, 0], centroids[:, 1], linewidth=0, marker="o", color="orange"
-    # )
-
-    # interp_grid = grid[interp_points].copy()
-    # vor_interp = Voronoi(interp_grid)
-    # voronoi_plot_2d(
-        # vor_interp,
-        # show_vertices=False,
-        # line_colors="blue",
-        # line_width=2,
-        # line_alpha=0.6,
-        # point_size=0,
-        # ax=ax[1],
-    # )
-    # CS = ax[1].contour(xx, yy, weight.reshape((num_grid_x, num_grid_x)))
-    # ax[1].plot(
-        # interp_grid[:, 0],
-        # interp_grid[:, 1],
-        # linewidth=0,
-        # marker="o",
-        # color="orange",
-    # )
-    # ax[1].clabel(CS, inline=1, fontsize=10)
-    # plt.savefig("kmeans.png")
-    # plt.show()
 
 if __name__ == "__main__":
     test_kmeans()
