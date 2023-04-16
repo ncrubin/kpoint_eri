@@ -24,7 +24,7 @@ from pyscf.pbc.dft.gen_grid import UniformGrids
 from pyscf.pbc.lib.kpts_helper import conj_mapping, get_kconserv, unique
 
 from kpoint_eri.factorizations.kmeans import KMeansCVT
-from kpoint_eri.resource_estimates.utils.misc_utils import (
+from kpoint_eri.factorizations.hamiltonian_utils import (
     build_momentum_transfer_mapping,
 )
 

@@ -7,7 +7,7 @@ import pytest
 from kpoint_eri.resource_estimates.sparse.integral_helper_sparse import (
     SparseFactorizationHelper,
 )
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.factorizations.hamiltonian_utils import cholesky_from_df_ints
 
 from kpoint_eri.resource_estimates.sparse.compute_lambda_sparse import compute_lambda
 
@@ -47,9 +47,7 @@ def test_lambda_sparse():
         ]
     )
 
-    lambda_tot, lambda_one_body, lambda_two_body, num_unique = compute_lambda(
-        hcore_mo, helper
-    )
+    lambda_data = compute_lambda(hcore_mo, helper)
 
     from kpoint_eri.resource_estimates.utils.k2gamma import k2gamma, get_phase
 
@@ -84,29 +82,7 @@ def test_lambda_sparse():
         ]
     )
 
-    (
-        sc_lambda_tot,
-        sc_lambda_one_body,
-        sc_lambda_two_body,
-        sc_num_unique,
-    ) = compute_lambda(supercell_hcore_mo, supercell_helper)
-    print(sc_lambda_one_body)
-    print(lambda_one_body)
-    print(
-        np.sum(np.abs(supercell_hcore_mo.real))
-        + np.sum(np.abs(supercell_hcore_mo.imag))
-    )
-    print(
-        np.sum(
-            [
-                np.abs(hcore_mo[kk].real) + np.abs(hcore_mo[kk].imag)
-                for kk in range(len(kpts))
-            ]
-        )
-    )
-    print(np.linalg.norm(supercell_hcore_mo))
-    print(np.linalg.norm(np.array(hcore_mo).ravel()))
-
+    sc_lambda_data = compute_lambda(supercell_hcore_mo, supercell_helper)
     # Sanity check Tpq by itself without any eri contribution
     norm_uc_T = sum(np.sum(np.abs(hk.real) + np.abs(hk.imag)) for hk in hcore_mo)
     norm_sc_T = sum(
@@ -133,10 +109,10 @@ def test_lambda_sparse():
     assert np.isclose(norm_uc, norm_sc)
     # Test the triple loop
     direct_uc = np.sum(np.abs(eris_uc.real) + np.abs(eris_uc.imag))
-    assert np.isclose(direct_uc, lambda_two_body)
+    assert np.isclose(direct_uc, lambda_data.lambda_two_body)
 
-    assert np.isclose(sc_lambda_one_body, lambda_one_body)
-    assert np.isclose(sc_lambda_two_body, lambda_two_body)
+    assert np.isclose(sc_lambda_data.lambda_one_body, lambda_data.lambda_one_body)
+    assert np.isclose(sc_lambda_data.lambda_two_body, lambda_data.lambda_two_body)
 
 
 if __name__ == "__main__":

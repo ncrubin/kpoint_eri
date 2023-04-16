@@ -4,12 +4,15 @@ import numpy as np
 import pytest
 from pyscf.pbc import gto, mp, scf
 
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.factorizations.hamiltonian_utils import cholesky_from_df_ints
 from kpoint_eri.factorizations.thc_jax import kpoint_thc_via_isdf
 from kpoint_eri.resource_estimates.thc.compute_lambda_thc import (
-    compute_lambda, compute_lambda_real)
-from kpoint_eri.resource_estimates.thc.integral_helper_thc import \
-    KPTHCHelperDoubleTranslation
+    compute_lambda,
+    compute_lambda_real,
+)
+from kpoint_eri.resource_estimates.thc.integral_helper_thc import (
+    KPTHCHelperDoubleTranslation,
+)
 
 
 @pytest.mark.slow
@@ -55,7 +58,7 @@ def test_kpoint_thc_lambda():
         perform_adagrad_opt=False,
         perform_bfgs_opt=True,
         bfgs_maxiter=10,
-        verbose=False
+        verbose=False,
     )
     hcore_ao = mf.get_hcore()
     hcore_mo = np.asarray(
@@ -65,11 +68,10 @@ def test_kpoint_thc_lambda():
         ]
     )
     helper = KPTHCHelperDoubleTranslation(kpt_thc.chi, kpt_thc.zeta, mf)
-    lambda_tot_kp, lambda_one_body_kp, lambda_two_body_kp = compute_lambda(
+    lambda_data = compute_lambda(
         hcore_mo,
         helper,
     )
-    print(lambda_tot_kp, lambda_one_body_kp, lambda_two_body_kp)
     #
     #
     # Build "molecular" eris from supercell THC
@@ -105,14 +107,6 @@ def test_kpoint_thc_lambda():
     )
     lambda_tot, lambda_one_body, lambda_two_body = compute_lambda_real(
         hcore_mo, chi_mol, zeta_mol, Luv_sc[0, 0].real
-    )
-    print(
-        lambda_tot,
-        lambda_tot_kp,
-        lambda_one_body,
-        lambda_one_body_kp,
-        lambda_two_body,
-        lambda_two_body_kp,
     )
 
 

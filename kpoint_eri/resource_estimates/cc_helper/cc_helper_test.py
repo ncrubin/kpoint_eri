@@ -3,6 +3,7 @@ from pyscf.pbc.cc import KRCCSD
 import pytest
 import numpy as np
 
+from kpoint_eri.factorizations.hamiltonian_utils import cholesky_from_df_ints
 from kpoint_eri.resource_estimates.cc_helper.cc_helper import (
     build_approximate_eris_rohf,
     build_approximate_eris,
@@ -39,8 +40,6 @@ def test_cc_helper_rohf():
     # available, so convert MOs to UHF format first.
     u_from_ro = scf.addons.convert_to_uhf(mf)
     mymp = mp.KMP2(mf)
-
-    from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
     Luv = cholesky_from_df_ints(mymp)  # [kpt, kpt, naux, nao, nao]
     from pyscf.pbc.cc.kccsd_uhf import _make_df_eris
@@ -141,8 +140,6 @@ def test_cc_helper_rhf():
     # Only ROHF integrals are supported for resource estimates but only UCCSD
     # available, so convert MOs to UHF format first.
     mymp = mp.KMP2(mf)
-
-    from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
     Luv = cholesky_from_df_ints(mymp)  # [kpt, kpt, naux, nao, nao]
 

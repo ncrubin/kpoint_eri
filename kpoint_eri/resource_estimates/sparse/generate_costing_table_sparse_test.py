@@ -35,5 +35,5 @@ def test_generate_costing_table_sparse():
     assert np.allclose(table.dE, 1e-3)
     assert np.allclose(table.chi, 17)
     assert np.allclose(table.cutoff, thresh)
-    assert np.isclose(table.approx_emp2.values[2], table.exact_emp2.values[0])
-    assert not np.isclose(table.approx_emp2.values[0], table.exact_emp2.values[0])
+    assert np.isclose(table.approx_energy.values[2], table.exact_energy.values[0])
+    assert not np.isclose(table.approx_energy.values[0], table.exact_energy.values[0])

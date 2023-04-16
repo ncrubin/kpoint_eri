@@ -1,5 +1,5 @@
 import numpy as np
-import pandas as pd 
+import pandas as pd
 
 from pyscf.pbc import gto, scf
 import pytest
@@ -30,10 +30,10 @@ def test_generate_costing_table_sf():
     kpts = cell.make_kpts(kmesh)
     mf = scf.KRHF(cell, kpts=kpts, exxdiv=None).rs_density_fit()
     mf.kernel()
+    thresh = [10, 54, 108]
     thresh = np.array([0.1, 0.5, 1.0])  # Fraction of naux
-    table = generate_costing_table(mf, cutoffs=thresh, chi=17, dE_for_qpe=1e-3)
+    table = generate_costing_table(mf, naux_cutoffs=thresh, chi=17, dE_for_qpe=1e-3)
     assert np.allclose(table.dE, 1e-3)
     assert np.allclose(table.chi, 17)
-    assert np.allclose(table.cutoff, thresh)
     assert np.allclose(table.num_aux, [10, 54, 108])
     assert np.isclose(table.approx_emp2.values[2], table.exact_emp2.values[0])

@@ -135,7 +135,7 @@ def compute_lambda(
 
     lambda_tot = lambda_one_body + lambda_two_body
     lambda_data = HamiltonianProperties(
-        lambda_tot=lambda_tot,
+        lambda_total=lambda_tot,
         lambda_one_body=lambda_one_body,
         lambda_two_body=lambda_two_body,
     )

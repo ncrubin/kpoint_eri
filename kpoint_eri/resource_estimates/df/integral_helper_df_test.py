@@ -6,6 +6,7 @@ import numpy as np
 from pyscf.pbc import gto, scf, mp
 
 from kpoint_eri.resource_estimates.df.integral_helper_df import DFABKpointIntegrals
+from kpoint_eri.factorizations.hamiltonian_utils import cholesky_from_df_ints
 
 
 def test_df_amat_bmat():
@@ -30,8 +31,6 @@ def test_df_amat_bmat():
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.with_df.mesh = cell.mesh
     mf.kernel()
-
-    from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
     mymp = mp.KMP2(mf)
     nmo = mymp.nmo
@@ -111,8 +110,6 @@ def test_supercell_df_amat_bmat():
     mf = scf.KRHF(cell, kpts).rs_density_fit()
     mf.with_df.mesh = cell.mesh
     mf.kernel()
-
-    from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
 
     mymp = mp.KMP2(mf)
     Luv = cholesky_from_df_ints(mymp)

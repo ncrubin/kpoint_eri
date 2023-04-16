@@ -6,7 +6,7 @@ from kpoint_eri.resource_estimates.cc_helper.cc_helper import build_approximate_
 from kpoint_eri.resource_estimates.sf.integral_helper_sf import (
     SingleFactorizationHelper,
 )
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.factorizations.hamiltonian_utils import cholesky_from_df_ints
 
 
 @pytest.mark.slow

@@ -33,7 +33,7 @@ from openfermion.resource_estimates.thc.utils import adagrad
 from openfermion.resource_estimates.thc.utils.thc_factorization import CallBackStore
 
 from kpoint_eri.factorizations.isdf import KPointTHC, solve_kmeans_kpisdf
-from kpoint_eri.resource_estimates.utils.misc_utils import (
+from kpoint_eri.factorizations.hamiltonian_utils import (
     build_momentum_transfer_mapping,
 )
 

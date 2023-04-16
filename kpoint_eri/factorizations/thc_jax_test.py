@@ -11,7 +11,7 @@ from openfermion.resource_estimates.thc.utils.thc_factorization import (
 from pyscf.pbc import gto, mp, scf
 
 from kpoint_eri.factorizations.isdf import solve_kmeans_kpisdf
-from kpoint_eri.factorizations.pyscf_chol_from_df import cholesky_from_df_ints
+from kpoint_eri.factorizations.hamiltonian_utils import cholesky_from_df_ints
 from kpoint_eri.factorizations.thc_jax import (
     adagrad_opt_kpthc_batched,
     get_zeta_size,

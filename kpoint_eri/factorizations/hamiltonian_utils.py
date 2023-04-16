@@ -12,6 +12,7 @@ from pyscf.pbc.lib.kpts_helper import gamma_point
 from pyscf.pbc.mp.kmp2 import _add_padding
 from pyscf.pbc import mp, scf, gto
 
+
 @dataclass
 class HamiltonianProperties:
     lambda_total: float
@@ -19,6 +20,7 @@ class HamiltonianProperties:
     lambda_two_body: float
 
     dict = asdict
+
 
 def build_hamiltonian(mf: "scf.KRHF") -> Tuple[npt.NDArray, npt.NDArray]:
     """Utility function to build one- and two-electron matrix elements from mean
@@ -35,12 +37,14 @@ def build_hamiltonian(mf: "scf.KRHF") -> Tuple[npt.NDArray, npt.NDArray]:
     # field solution yields different number of MOs per k-point.
     tmp_mp2 = mp.KMP2(mf)
     mo_coeff_padded = _add_padding(tmp_mp2, tmp_mp2.mo_coeff, tmp_mp2.mo_energy)[0]
-    hcore_mo = np.asarray([C.conj().T @ hk @ C for (C, hk) in zip(mo_coeff_padded, mf.get_hcore())])
+    hcore_mo = np.asarray(
+        [C.conj().T @ hk @ C for (C, hk) in zip(mo_coeff_padded, mf.get_hcore())]
+    )
     chol = cholesky_from_df_ints(tmp_mp2)
     return hcore_mo, chol
 
 
-def cholesky_from_df_ints(mp2_inst) -> npt.NDArray:
+def cholesky_from_df_ints(mp2_inst, pad_mos_with_zeros=True) -> npt.NDArray:
     """Compute 3-center electron repulsion integrals, i.e. (L|ov),
     where `L` denotes DF auxiliary basis functions and `o` and `v` occupied and virtual
     canonical crystalline orbitals. Note that `o` and `v` contain kpt indices `ko` and `kv`,
@@ -50,7 +54,7 @@ def cholesky_from_df_ints(mp2_inst) -> npt.NDArray:
     will pad MOs with zeros to ensure contiguity.
 
     Args:
-        mp2_inst: pyscf KMP2 instance. 
+        mp2_inst: pyscf KMP2 instance.
 
     Returns:
         Lchol: 3-center DF ints, with shape (nkpts, nkpts, naux, nmo, nmo)
@@ -73,13 +77,17 @@ def cholesky_from_df_ints(mp2_inst) -> npt.NDArray:
     nao = cell.nao_nr()
 
     mo_coeff = mp2_inst._scf.mo_coeff
-    nmo = nao
-    num_mo_per_kpt = np.array([C.shape[-1] for C in mo_coeff])
-    if not (num_mo_per_kpt == nmo).all():
-        log.info("Number of MOs differs at each k-point or is not the same as the number of AOs.")
-    mo_coeff = _add_padding(mp2_inst, mp2_inst.mo_coeff, mp2_inst.mo_energy)[0]
-    nmo = mp2_inst.nmo
-    kpts = mp2_inst.kpts
+    if pad_mos_with_zeros:
+        mo_coeff = _add_padding(mp2_inst, mp2_inst.mo_coeff, mp2_inst.mo_energy)[0]
+        nmo = mp2_inst.nmo
+        kpts = mp2_inst.kpts
+    else:
+        nmo = nao
+        num_mo_per_kpt = np.array([C.shape[-1] for C in mo_coeff])
+        if not (num_mo_per_kpt == nmo).all():
+            log.info(
+                "Number of MOs differs at each k-point or is not the same as the number of AOs."
+            )
     nkpts = len(kpts)
     if gamma_point(kpts):
         dtype = np.double
